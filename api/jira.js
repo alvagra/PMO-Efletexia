@@ -39,52 +39,45 @@ module.exports = async function handler(req, res) {
   }
 
   const auth = Buffer.from(`${JIRA_EMAIL}:${JIRA_TOKEN}`).toString('base64');
-  const { jql, fields, maxResults = 100, startAt = 0 } = req.body || {};
-
+  const { jql, fields } = req.body || {};
   const fieldsStr = Array.isArray(fields) ? fields.join(',') : (fields || '');
+  const jqlStr = jql || 'project = PTS AND issuetype = Epic ORDER BY created ASC';
 
   try {
-    // First request to get total count
-    const params = new URLSearchParams({
-      jql: jql || 'project = PTS AND issuetype = Epic ORDER BY created ASC',
-      fields: fieldsStr,
-      maxResults: maxResults,
-      startAt: startAt,
-    });
+    // Load all pages — fetch page by page until isLast = true
+    let allIssues = [];
+    let startAt = 0;
+    let isLast = false;
 
-    const result = await jiraGet(auth, JIRA_CLOUD, `/rest/api/3/search/jql?${params.toString()}`);
-
-    if (result.status !== 200) {
-      return res.status(result.status).json(result.body);
-    }
-
-    const data = result.body;
-    const total = data.total || 0;
-    let allIssues = data.issues || [];
-
-    // If there are more pages and client requested all (startAt=0, maxResults>=100)
-    if (startAt === 0 && total > allIssues.length) {
-      const promises = [];
-      for (let s = allIssues.length; s < total; s += 100) {
-        const p = new URLSearchParams({
-          jql: jql || 'project = PTS AND issuetype = Epic ORDER BY created ASC',
-          fields: fieldsStr,
-          maxResults: 100,
-          startAt: s,
-        });
-        promises.push(jiraGet(auth, JIRA_CLOUD, `/rest/api/3/search/jql?${p.toString()}`));
-      }
-      const pages = await Promise.all(promises);
-      pages.forEach(page => {
-        if (page.status === 200 && page.body.issues) {
-          allIssues = allIssues.concat(page.body.issues);
-        }
+    while (!isLast) {
+      const params = new URLSearchParams({
+        jql: jqlStr,
+        fields: fieldsStr,
+        maxResults: 100,
+        startAt: startAt,
       });
+
+      const result = await jiraGet(auth, JIRA_CLOUD, `/rest/api/3/search/jql?${params.toString()}`);
+
+      if (result.status !== 200) {
+        return res.status(result.status).json(result.body);
+      }
+
+      const page = result.body;
+      const pageIssues = page.issues || [];
+      allIssues = allIssues.concat(pageIssues);
+
+      // Check if there are more pages
+      isLast = page.isLast === true || pageIssues.length < 100;
+      startAt += pageIssues.length;
+
+      // Safety limit
+      if (startAt >= 1000) break;
     }
 
     return res.status(200).json({
       issues: allIssues,
-      total: total,
+      total: allIssues.length,
       isLast: true,
     });
 
