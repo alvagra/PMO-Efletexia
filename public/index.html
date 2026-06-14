@@ -176,6 +176,73 @@ a.jlink:hover{text-decoration:underline}
 .refresh-btn.spinning svg{animation:spin .8s linear infinite}
 .last-update{font-size:10px;color:var(--text-dim);margin-left:4px}
 
+
+/* ── RECURSOS ── */
+.rec-kpis{display:grid;grid-template-columns:repeat(6,1fr);background:var(--border);gap:1px;border-bottom:1px solid var(--border)}
+.rec-filters{background:var(--bg-surface);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.rec-search{background:var(--bg-base);border:1px solid var(--border);border-radius:20px;padding:5px 12px 5px 32px;font-size:12px;color:var(--text-primary);height:30px;outline:none;font-family:var(--font);min-width:160px;position:relative}
+.rec-search-wrap{position:relative;display:flex;align-items:center}
+.rec-search-icon{position:absolute;left:10px;color:var(--text-muted);pointer-events:none}
+.rec-search-input{background:var(--bg-base);border:1px solid var(--border);border-radius:20px;padding:5px 12px 5px 32px;font-size:12px;color:var(--text-primary);height:30px;outline:none;font-family:var(--font);min-width:160px}
+.rec-search-input:focus{border-color:var(--blue)}
+.rec-area-btns{display:flex;gap:6px;flex-wrap:wrap}
+.rec-area-btn{background:var(--bg-elevated);border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-size:11px;color:var(--text-muted);cursor:pointer;font-family:var(--font);transition:all .15s;white-space:nowrap}
+.rec-area-btn:hover{background:var(--border);color:var(--text-primary)}
+.rec-area-btn.active{background:var(--blue-bg);border-color:var(--blue);color:#fff}
+.rec-pais-sel{background:var(--bg-base);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:11px;color:var(--text-primary);height:30px;outline:none;font-family:var(--font);cursor:pointer}
+.rec-sort-btn{background:none;border:none;color:var(--text-muted);font-size:11px;cursor:pointer;font-family:var(--font);display:flex;align-items:center;gap:4px;margin-left:auto}
+.rec-sort-btn:hover{color:var(--text-primary)}
+.rec-limpiar{background:var(--bg-elevated);border:1px solid var(--border);border-radius:5px;padding:4px 12px;font-size:11px;color:var(--blue);cursor:pointer;font-family:var(--font);display:flex;align-items:center;gap:4px}
+.rec-limpiar:hover{background:var(--border)}
+.rec-corte{background:var(--bg-surface);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;gap:10px}
+.rec-corte-label{font-size:10px;color:var(--blue);text-transform:uppercase;letter-spacing:.5px;font-weight:600;display:flex;align-items:center;gap:6px}
+.rec-corte-label svg{width:14px;height:14px}
+.rec-date-input{background:var(--bg-elevated);border:1px solid var(--blue);border-radius:5px;padding:4px 10px;font-size:12px;color:var(--blue);font-family:var(--font);outline:none;cursor:pointer;height:30px}
+.rec-table-wrap{overflow-x:auto}
+.rec-table{width:100%;border-collapse:collapse;font-size:12px}
+.rec-table thead tr{background:var(--bg-surface);border-bottom:2px solid var(--border);position:sticky;top:0;z-index:10}
+.rec-table thead th{padding:9px 12px;text-align:left;color:var(--text-muted);font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;border-right:1px solid var(--border-light);cursor:pointer;user-select:none}
+.rec-table thead th:last-child{border-right:none}
+.rec-table thead th:hover{color:var(--text-primary)}
+.rec-table tbody tr{border-bottom:1px solid var(--border-light);transition:background .1s}
+.rec-table tbody tr:hover{background:var(--bg-surface)}
+.rec-table tbody td{padding:10px 12px;color:var(--text-primary);vertical-align:middle;border-right:1px solid var(--border-light);white-space:nowrap}
+.rec-table tbody td:last-child{border-right:none}
+.rec-name{font-weight:600;font-size:13px}
+.rec-area-badge{display:inline-block;padding:2px 10px;border-radius:4px;font-size:10px;font-weight:600;text-transform:uppercase}
+.rec-area-desarrollo{background:#2d1800;color:#f0883e}
+.rec-area-data{background:#0d2a3d;color:#39c5f0}
+.rec-area-pmo{background:var(--purple-bg);color:var(--purple)}
+.rec-area-pm{background:#1a2d3d;color:#58c8ff}
+.rec-area-torre{background:var(--green-bg);color:var(--green)}
+.rec-area-soporte{background:#2a2020;color:#a05050}
+.rec-area-operacion{background:#2d1f0a;color:#f0883e}
+.rec-area-default{background:var(--bg-elevated);color:var(--text-muted)}
+.rec-hours-high{color:var(--red);font-weight:700}
+.rec-hours-med{color:var(--yellow);font-weight:600}
+.rec-hours-low{color:var(--green);font-weight:600}
+.rec-hours-zero{color:var(--text-muted)}
+.rec-entregas-high{color:var(--red);font-weight:700}
+.rec-entregas-low{color:var(--green)}
+.rec-dist-cell{min-width:220px}
+.rec-dist-bar-wrap{position:relative;height:14px;background:var(--bg-elevated);border-radius:3px;overflow:hidden;display:flex}
+.rec-dist-cerr{height:100%;background:var(--green);border-radius:3px 0 0 3px}
+.rec-dist-pend{height:100%;background:var(--yellow)}
+.rec-dist-libre{height:100%;background:var(--bg-elevated);flex:1}
+.rec-dist-pct{position:absolute;right:4px;top:0;bottom:0;display:flex;align-items:center;font-size:10px;font-weight:700}
+.rec-dist-pct.over{color:var(--red)}
+.rec-dist-pct.ok{color:var(--green)}
+.rec-dist-labels{display:flex;gap:8px;margin-top:3px;font-size:10px;color:var(--text-muted)}
+.rec-dist-lbl{display:flex;align-items:center;gap:3px}
+.rec-dist-dot{width:6px;height:6px;border-radius:1px;flex-shrink:0}
+.rec-bloq{display:flex;align-items:center;gap:4px;font-size:12px}
+.rec-bloq-ok{color:var(--green)}
+.rec-bloq-warn{color:var(--yellow);font-weight:600}
+.rec-ver-btn{background:var(--blue-bg);border:none;border-radius:4px;padding:4px 10px;font-size:11px;color:#fff;cursor:pointer;font-family:var(--font);white-space:nowrap}
+.rec-ver-btn:hover{opacity:.85}
+.rec-table-info{padding:8px 20px;font-size:11px;color:var(--text-muted);background:var(--bg-base);border-bottom:1px solid var(--border-light)}
+.rec-empty{text-align:center;padding:60px;color:var(--text-dim);font-size:13px}
+
 </style>
 </head>
 <body>
@@ -324,9 +391,86 @@ a.jlink:hover{text-decoration:underline}
 </div>
 
 <div class="tab-panel" id="panel-recursos">
-  <div class="tab-panel-ph">
-    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="margin-bottom:12px;opacity:.3;display:block;margin-left:auto;margin-right:auto"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4.418 3.582-8 8-8s8 3.582 8 8"/></svg>
-    <div>Panel de Recursos</div><div style="font-size:11px;margin-top:4px">Conecta tu fuente de datos para visualizar la carga por recurso</div>
+
+  <!-- KPIs Recursos -->
+  <div class="rec-kpis" id="rec-kpis">
+    <div class="kpi"><div class="kpi-label">Recursos</div><div class="kpi-value c-white" id="rec-kpi-total">—</div></div>
+    <div class="kpi"><div class="kpi-label">Alta Carga</div><div class="kpi-value c-red" id="rec-kpi-alta">—</div><div class="kpi-sub">≥40h pend.</div></div>
+    <div class="kpi"><div class="kpi-label">Media Carga</div><div class="kpi-value c-yellow" id="rec-kpi-media">—</div><div class="kpi-sub">20–39h</div></div>
+    <div class="kpi"><div class="kpi-label">Baja Carga</div><div class="kpi-value c-green" id="rec-kpi-baja">—</div><div class="kpi-sub">&lt;20h</div></div>
+    <div class="kpi"><div class="kpi-label">Horas Pend. Total</div><div class="kpi-value c-cyan" id="rec-kpi-horas">—</div></div>
+    <div class="kpi"><div class="kpi-label">Entregas Pend.</div><div class="kpi-value c-yellow" id="rec-kpi-entregas">—</div></div>
+  </div>
+
+  <!-- Filtros -->
+  <div class="rec-filters">
+    <div class="rec-search-wrap">
+      <svg class="rec-search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <input id="rec-search" class="rec-search-input" placeholder="Buscar recurso o proyecto..." autocomplete="off"/>
+    </div>
+    <div class="rec-area-btns" id="rec-area-btns">
+      <button class="rec-area-btn active" data-area="">Todas</button>
+      <button class="rec-area-btn" data-area="Desarrollo">Desarrollo</button>
+      <button class="rec-area-btn" data-area="Soporte TI">Soporte TI</button>
+      <button class="rec-area-btn" data-area="PMO">PMO</button>
+      <button class="rec-area-btn" data-area="PM">PM</button>
+      <button class="rec-area-btn" data-area="Torre de Control">Torre de Control</button>
+      <button class="rec-area-btn" data-area="Data">Data</button>
+      <button class="rec-area-btn" data-area="Operacion">Operacion</button>
+    </div>
+    <select id="rec-pais" class="rec-pais-sel">
+      <option value="">Todos los países</option>
+      <option>Perú</option>
+      <option>Colombia</option>
+      <option>México</option>
+      <option>Guatemala</option>
+      <option>Regional</option>
+    </select>
+    <button class="rec-sort-btn" id="rec-sort-btn">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M7 12h10M11 18h2"/></svg>
+      Ordenar por columna
+    </button>
+    <button class="rec-limpiar" id="rec-limpiar">
+      <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l10 10M13 3L3 13"/></svg>
+      Limpiar
+    </button>
+  </div>
+
+  <!-- Fecha de corte -->
+  <div class="rec-corte">
+    <div class="rec-corte-label">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+      FECHA DE CORTE
+    </div>
+    <input type="date" id="rec-fecha-corte" class="rec-date-input"/>
+  </div>
+
+  <!-- Tabla -->
+  <div class="rec-table-info" id="rec-table-info">Sin datos cargados</div>
+  <div class="rec-table-wrap">
+    <table class="rec-table">
+      <thead>
+        <tr>
+          <th>Recurso ↕</th>
+          <th>Área ↕</th>
+          <th>Proyectos ↕</th>
+          <th>Horas Pend. ↕</th>
+          <th>Horas Total ↕</th>
+          <th>Entregas Pend. ↕</th>
+          <th>Distribución Carga Mensual</th>
+          <th>Bloqueantes ↕</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="rec-table-body">
+        <tr>
+          <td colspan="9" class="rec-empty">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="margin-bottom:10px;opacity:.3;display:block;margin-left:auto;margin-right:auto"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4.418 3.582-8 8-8s8 3.582 8 8"/></svg>
+            Los datos de recursos se cargarán cuando estén disponibles en Jira
+          </td>
+        </tr>
+      </tbody>
+    </table>
   </div>
 </div>
 <div class="tab-panel" id="panel-capacidad">
