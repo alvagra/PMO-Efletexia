@@ -508,7 +508,7 @@ function priClass(p){return p==="1"?"high":p==="3"?"low":p==="2"?"med":""}
 (function(){
   // Render KPI shell with stable IDs (values set by updateKpis)
   document.getElementById('kpis-section').innerHTML=`
-    <div class="kpi"><div class="kpi-label">Total épicas</div><div class="kpi-value c-white" id="kpi-total"></div></div>
+    <div class="kpi"><div class="kpi-label">Total</div><div class="kpi-value c-white" id="kpi-total"></div></div>
     <div class="kpi"><div class="kpi-label">Críticos</div><div class="kpi-value c-red" id="kpi-crit"></div><div class="kpi-sub">Desv &gt;17%</div></div>
     <div class="kpi"><div class="kpi-label">Tolerancia</div><div class="kpi-value c-yellow" id="kpi-tol"></div><div class="kpi-sub">Desv 5–17%</div></div>
     <div class="kpi"><div class="kpi-label">On Track</div><div class="kpi-value c-blue" id="kpi-ont"></div><div class="kpi-sub">Desv &lt;5%</div></div>
