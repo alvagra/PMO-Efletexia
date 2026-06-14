@@ -247,7 +247,7 @@ a.jlink:hover{text-decoration:underline}
 /* ── RECURSO DETAIL MODAL ── */
 .rec-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:300;align-items:flex-start;justify-content:flex-end}
 .rec-modal-overlay.open{display:flex}
-.rec-modal-panel{background:var(--bg-surface);border-left:1px solid var(--border);width:min(94vw,620px);height:100vh;overflow-y:auto;display:flex;flex-direction:column}
+.rec-modal-panel{background:var(--bg-surface);border-left:1px solid var(--border);width:min(94vw,620px);height:100vh;overflow-y:auto;display:flex;flex-direction:column;flex-shrink:0}
 .rec-modal-hdr{padding:20px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;flex-shrink:0}
 .rec-modal-hdr-info{flex:1}
 .rec-modal-name{font-size:18px;font-weight:700;color:var(--text-primary);margin-bottom:2px}
@@ -288,9 +288,10 @@ a.jlink:hover{text-decoration:underline}
 .rec-venta-val{font-size:12px;color:var(--text-primary)}
 
 /* ── DETALLE DE PROYECTO (segundo modal anidado) ── */
-.det-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:400;align-items:flex-start;justify-content:flex-end}
+.det-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:400;align-items:flex-start;justify-content:flex-end}
 .det-overlay.open{display:flex}
-.det-panel{background:var(--bg-surface);border-left:1px solid var(--border);width:min(94vw,560px);height:100vh;overflow-y:auto;display:flex;flex-direction:column}
+.det-panel{display:none;background:var(--bg-surface);border-left:1px solid var(--border);border-right:1px solid var(--border);width:min(50vw,560px);height:100vh;overflow-y:auto;flex-direction:column;flex-shrink:0}
+.det-panel.open{display:flex}
 .det-hdr{padding:16px 20px;border-bottom:1px solid var(--border);flex-shrink:0}
 .det-hdr-sup{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-muted);margin-bottom:4px}
 .det-hdr-title{font-size:17px;font-weight:700;color:var(--text-primary);line-height:1.25}
@@ -567,31 +568,27 @@ a.jlink:hover{text-decoration:underline}
   </div>
 </div>
 
-<!-- RECURSO DETAIL MODAL -->
+<!-- RECURSO DETAIL MODAL + DETALLE DE PROYECTO (paneles lado a lado) -->
 <div class="rec-modal-overlay" id="rec-modal-overlay">
-  <div class="rec-modal-panel">
-    <div class="rec-modal-hdr">
-      <div class="rec-modal-hdr-info">
-        <div class="rec-modal-name" id="rec-modal-name">—</div>
-        <div class="rec-modal-area" id="rec-modal-area">—</div>
-      </div>
-      <button class="rec-modal-close" id="rec-modal-close">✕</button>
-    </div>
-    <div class="rec-modal-body" id="rec-modal-body"></div>
-  </div>
-</div>
-
-<!-- DETALLE DE PROYECTO MODAL (anidado sobre rec-modal) -->
-<div class="det-overlay" id="det-overlay">
-  <div class="det-panel">
+  <div class="det-panel" id="det-panel">
     <div class="det-hdr">
       <div class="det-hdr-sup">Detalle de proyecto</div>
       <div class="det-hdr-row">
         <div class="det-hdr-title" id="det-title">—</div>
-        <button class="det-close" id="det-close" type="button" aria-label="Cerrar detalle">✕</button>
+        <button class="det-close" id="det-close" type="button" aria-label="Cerrar detalle">&#x2715;</button>
       </div>
     </div>
     <div class="det-body" id="det-body"></div>
+  </div>
+  <div class="rec-modal-panel">
+    <div class="rec-modal-hdr">
+      <div class="rec-modal-hdr-info">
+        <div class="rec-modal-name" id="rec-modal-name">&#x2014;</div>
+        <div class="rec-modal-area" id="rec-modal-area">&#x2014;</div>
+      </div>
+      <button class="rec-modal-close" id="rec-modal-close">&#x2715;</button>
+    </div>
+    <div class="rec-modal-body" id="rec-modal-body"></div>
   </div>
 </div>
 
