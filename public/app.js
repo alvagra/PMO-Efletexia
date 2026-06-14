@@ -1,4 +1,5 @@
 
+
 function sbClass(s){
   return({"Backlog":"backlog","Análisis":"analisis","Desarrollo":"desarrollo","Pruebas":"pruebas","Producción":"produccion","Planificado":"planificado","Stand by":"standby","Desestimado":"desestimado","En curso":"en-curso"}[s]||"backlog");
 }
@@ -26,20 +27,6 @@ function pill(v){return v?`<span class="pill">${v}</span>`:'<span class="dval m"
 function esc(s){if(!s)return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 function priClass(p){return p==="1"?"high":p==="3"?"low":p==="2"?"med":""}
 
-// ── KPIs ──
-(function(){
-  // Render KPI shell with stable IDs (values set by updateKpis)
-  document.getElementById('kpis-section').innerHTML=`
-    <div class="kpi"><div class="kpi-label">Total épicas</div><div class="kpi-value c-white" id="kpi-total"></div></div>
-    <div class="kpi"><div class="kpi-label">Críticos</div><div class="kpi-value c-red" id="kpi-crit"></div><div class="kpi-sub">Desv &gt;17%</div></div>
-    <div class="kpi"><div class="kpi-label">Tolerancia</div><div class="kpi-value c-yellow" id="kpi-tol"></div><div class="kpi-sub">Desv 5–17%</div></div>
-    <div class="kpi"><div class="kpi-label">On Track</div><div class="kpi-value c-blue" id="kpi-ont"></div><div class="kpi-sub">Desv &lt;5%</div></div>
-    <div class="kpi"><div class="kpi-label">Avance prom.</div><div class="kpi-value c-cyan" id="kpi-avg"></div></div>
-    <div class="kpi"><div class="kpi-label">Cierre junio</div><div class="kpi-value c-green" id="kpi-cj"></div></div>
-  `;
-  updateKpis(epics);
-  // Areas ya pobladas en el HTML desde Jira
-})();
 
 // ── KPIs DINÁMICOS ──
 function updateKpis(data){
