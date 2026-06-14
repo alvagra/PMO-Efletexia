@@ -74,22 +74,24 @@ function renderTable(data){
   updateKpis(data);
   document.getElementById('table-info').textContent=`Mostrando ${data.length} de ${epics.length} épicas`;
   const tb=document.getElementById('table-body');
-  if(!data.length){tb.innerHTML='<tr><td colspan="15" style="text-align:center;padding:40px;color:var(--text-muted)">Sin resultados</td></tr>';return}
+  if(!data.length){tb.innerHTML='<tr><td colspan="17" style="text-align:center;padding:40px;color:var(--text-muted)">Sin resultados</td></tr>';return}
   tb.innerHTML=data.map(e=>`
     <tr data-key="${e.key}">
-      <td><span class="priority-badge ${priClass(e.prioridad)}" title="Prioridad ${e.prioridad||'—'}"></span></td>
+      <td style="color:var(--text-muted)">—</td>
       <td class="code"><a class="jlink" href="${JIRA_BASE}${e.key}" target="_blank" title="Abrir en Jira" onclick="event.stopPropagation()">${esc(e.codigo||e.key)}</a></td>
       <td class="proj" title="${esc(e.summary)}">${esc(e.summary)}</td>
       <td class="cat">${esc(e.categoria)||'<span style="color:var(--text-muted)">—</span>'}</td>
       <td class="muted">${e.area?`<span class="pill">${esc(e.area)}</span>`:'—'}</td>
       <td><span class="badge badge-${sbClass(e.status)}">${e.status}</span></td>
-      <td class="muted">${e.planPct!==null?Math.round(e.planPct*100)+'%':'—'}</td>
-      <td class="muted">${e.realPct!==null?Math.round(e.realPct*100)+'%':'—'}</td>
+      <td>${progCell(e.pctDesarrollo)}</td>
       <td class="muted" style="color:${e.desvioPct!==null?(Math.abs(e.desvioPct)>0.17?'var(--red)':Math.abs(e.desvioPct)>=0.05?'var(--yellow)':'var(--green)'):'var(--text-muted)'}">${e.desvioPct!==null?Math.round(e.desvioPct*100)+'%':'—'}</td>
+      <td class="muted">${e.pctDesarrollo!==null?Math.round(e.pctDesarrollo*100)+'% / '+(e.pctPruebas!==null?Math.round(e.pctPruebas*100)+'%':'—'):'—'}</td>
       <td class="muted">${fmtD(e.fechaInicio)||'—'}</td>
       <td class="muted">${fmtD(e.duedate)||'—'}</td>
-      <td class="muted">${e.docFuncional?`<span class="pill">${esc(e.docFuncional)}</span>`:'—'}</td>
+      <td class="muted">${esc(e.asignado)||'—'}</td>
       <td class="muted">${e.conformidad?`<span class="pill">${esc(e.conformidad)}</span>`:'—'}</td>
+      <td class="muted">${e.planPct!==null?Math.round(e.planPct*100)+'% / '+(e.realPct!==null?Math.round(e.realPct*100)+'%':'—'):'—'}</td>
+      <td class="muted">${e.docFuncional?`<span style="color:${e.docFuncional==='Si'?'var(--green)':'var(--red)'}">✕</span>`:'—'}</td>
       <td class="muted">${esc(e.sponsor)||'—'}</td>
       <td><button class="btn-action" type="button" title="Cronograma y detalles" onclick="openModal('${e.key}');event.stopPropagation()">···</button></td>
     </tr>
@@ -559,22 +561,24 @@ function renderTable(data){
   updateKpis(data);
   document.getElementById('table-info').textContent=`Mostrando ${data.length} de ${epics.length} épicas`;
   const tb=document.getElementById('table-body');
-  if(!data.length){tb.innerHTML='<tr><td colspan="15" style="text-align:center;padding:40px;color:var(--text-muted)">Sin resultados</td></tr>';return}
+  if(!data.length){tb.innerHTML='<tr><td colspan="17" style="text-align:center;padding:40px;color:var(--text-muted)">Sin resultados</td></tr>';return}
   tb.innerHTML=data.map(e=>`
     <tr data-key="${e.key}">
-      <td><span class="priority-badge ${priClass(e.prioridad)}" title="Prioridad ${e.prioridad||'—'}"></span></td>
+      <td style="color:var(--text-muted)">—</td>
       <td class="code"><a class="jlink" href="${JIRA_BASE}${e.key}" target="_blank" title="Abrir en Jira" onclick="event.stopPropagation()">${esc(e.codigo||e.key)}</a></td>
       <td class="proj" title="${esc(e.summary)}">${esc(e.summary)}</td>
       <td class="cat">${esc(e.categoria)||'<span style="color:var(--text-muted)">—</span>'}</td>
       <td class="muted">${e.area?`<span class="pill">${esc(e.area)}</span>`:'—'}</td>
       <td><span class="badge badge-${sbClass(e.status)}">${e.status}</span></td>
-      <td class="muted">${e.planPct!==null?Math.round(e.planPct*100)+'%':'—'}</td>
-      <td class="muted">${e.realPct!==null?Math.round(e.realPct*100)+'%':'—'}</td>
+      <td>${progCell(e.pctDesarrollo)}</td>
       <td class="muted" style="color:${e.desvioPct!==null?(Math.abs(e.desvioPct)>0.17?'var(--red)':Math.abs(e.desvioPct)>=0.05?'var(--yellow)':'var(--green)'):'var(--text-muted)'}">${e.desvioPct!==null?Math.round(e.desvioPct*100)+'%':'—'}</td>
+      <td class="muted">${e.pctDesarrollo!==null?Math.round(e.pctDesarrollo*100)+'% / '+(e.pctPruebas!==null?Math.round(e.pctPruebas*100)+'%':'—'):'—'}</td>
       <td class="muted">${fmtD(e.fechaInicio)||'—'}</td>
       <td class="muted">${fmtD(e.duedate)||'—'}</td>
-      <td class="muted">${e.docFuncional?`<span class="pill">${esc(e.docFuncional)}</span>`:'—'}</td>
+      <td class="muted">${esc(e.asignado)||'—'}</td>
       <td class="muted">${e.conformidad?`<span class="pill">${esc(e.conformidad)}</span>`:'—'}</td>
+      <td class="muted">${e.planPct!==null?Math.round(e.planPct*100)+'% / '+(e.realPct!==null?Math.round(e.realPct*100)+'%':'—'):'—'}</td>
+      <td class="muted">${e.docFuncional?`<span style="color:${e.docFuncional==='Si'?'var(--green)':'var(--red)'}">✕</span>`:'—'}</td>
       <td class="muted">${esc(e.sponsor)||'—'}</td>
       <td><button class="btn-action" type="button" title="Cronograma y detalles" onclick="openModal('${e.key}');event.stopPropagation()">···</button></td>
     </tr>
