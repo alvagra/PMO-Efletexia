@@ -473,14 +473,18 @@ async function loadRecursos() {
   if(info) info.textContent = 'Cargando recursos desde Jira...';
 
   try {
-    const resp = await fetch('/api/jira', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ type: 'recursos' })
-    });
-    if(!resp.ok) throw new Error('Error ' + resp.status);
-    const data = await resp.json();
-    const historias = data.issues || [];
+    // Carga Historias y Ventas en paralelo
+    const [respRec, respVent] = await Promise.all([
+      fetch('/api/jira', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ type:'recursos' }) }),
+      fetch('/api/jira', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ type:'ventas' }) }),
+    ]);
+    if(!respRec.ok)  throw new Error('Error recursos ' + respRec.status);
+    if(!respVent.ok) throw new Error('Error ventas '   + respVent.status);
+
+    const dataRec  = await respRec.json();
+    const dataVent = await respVent.json();
+    const historias = dataRec.issues  || [];
+    const ventas    = dataVent.issues || [];
 
     // Capacity: 168h/month standard
     const CAPACITY = 168;
@@ -544,13 +548,66 @@ async function loadRecursos() {
       // Épica tracking
       if(epicaKey){
         if(!p.epicasMap[epicaKey]){
-          p.epicasMap[epicaKey] = { key:epicaKey, nombre:epicaNom, horasEst:0, horasPend:0, actividades:0, pendientes:0 };
+          p.epicasMap[epicaKey] = { key:epicaKey, nombre:epicaNom, horasEst:0, horasPend:0, actividades:0, pendientes:0, tareas:[] };
         }
         p.epicasMap[epicaKey].horasEst   += horasEst;
         p.epicasMap[epicaKey].horasPend  += horasPend;
         p.epicasMap[epicaKey].actividades++;
         if(!isDone) p.epicasMap[epicaKey].pendientes++;
+        p.epicasMap[epicaKey].tareas.push({
+          key:      h.key,
+          nombre:   f.summary || h.key,
+          status,
+          isDone,
+          horasEst,
+          horasPend,
+          fecha:    f.customfield_10015 || f.duedate || f.created || null,
+        });
       }
+    });
+
+    // ── PROCESAR VENTAS por persona ──
+    const byPersonVentas = {};
+    ventas.forEach(v => {
+      const f = v.fields;
+      const nombre    = f.assignee ? f.assignee.displayName : 'Sin asignar';
+      const horasEst  = f.customfield_11136 || 0;
+      const horasPend = f.customfield_11137 || 0;
+      const status    = f.status ? f.status.name : '';
+      const isDone    = ['Finalizada','Producción','En producción'].includes(status);
+      const area      = f.customfield_10930 ? f.customfield_10930.value : null;
+      const sponsor   = f.customfield_10931 ? f.customfield_10931.value : null;
+      const pctPlan   = f.customfield_10725 != null ? f.customfield_10725 : null;
+      const pctReal   = f.customfield_10726 != null ? f.customfield_10726 : null;
+      const desvioPct = f.customfield_10759 != null ? f.customfield_10759 : null;
+      const pctAnal   = f.customfield_10895 != null ? f.customfield_10895 : null;
+      const pctDesarr = f.customfield_10928 != null ? f.customfield_10928 : null;
+      const pctPrueb  = f.customfield_10969 != null ? f.customfield_10969 : null;
+      const fechaFin  = f.duedate || null;
+      const fechaIni  = f.customfield_10015 || null;
+
+      if(!byPersonVentas[nombre]){
+        byPersonVentas[nombre] = { nombre, horasEst:0, horasPend:0, total:0, pendientes:0, ventasMap:{} };
+      }
+      const pv = byPersonVentas[nombre];
+      pv.horasEst   += horasEst;
+      pv.horasPend  += horasPend;
+      pv.total++;
+      if(!isDone) pv.pendientes++;
+
+      // Una entrada por venta
+      pv.ventasMap[v.key] = {
+        key: v.key,
+        nombre:    f.summary || v.key,
+        status,
+        area,
+        sponsor,
+        pctPlan, pctReal, desvioPct,
+        pctAnal, pctDesarr, pctPrueb,
+        fechaFin, fechaIni,
+        horasEst, horasPend,
+        isDone,
+      };
     });
 
     // Build recursos array sorted by horasPend desc
@@ -572,7 +629,16 @@ async function loadRecursos() {
         horasPend:  e.horasPend,
         actividades:e.actividades,
         pendientes: e.pendientes,
+        tareas:     e.tareas || [],
       })).sort((a,b) => b.horasTotal - a.horasTotal),
+      // Ventas de esta persona
+      ventasDetalle: byPersonVentas[p.nombre]
+        ? Object.values(byPersonVentas[p.nombre].ventasMap).sort((a,b) => (b.horasEst||0)-(a.horasEst||0))
+        : [],
+      ventasTotal:    byPersonVentas[p.nombre] ? byPersonVentas[p.nombre].total     : 0,
+      ventasPend:     byPersonVentas[p.nombre] ? byPersonVentas[p.nombre].pendientes : 0,
+      ventasHorasEst: byPersonVentas[p.nombre] ? byPersonVentas[p.nombre].horasEst  : 0,
+      ventasHorasPend:byPersonVentas[p.nombre] ? byPersonVentas[p.nombre].horasPend : 0,
     })).filter(r => r.nombre !== 'Sin asignar')
       .sort((a,b) => b.horasPend - a.horasPend);
 
@@ -771,19 +837,69 @@ function verRecurso(nombre) {
   if(proyectos.length) {
     projCards = proyectos.map(p => {
       const hasPend = p.pendientes > 0;
+      const recursoNombre = encodeURIComponent(r.nombre);
       return `<div class="rec-proj-card">
         <div class="rec-proj-card-left">
           <div class="rec-proj-card-name">${p.nombre}</div>
           <div class="rec-proj-card-meta">${p.actividades} act · ${p.horasTotal}h · ${p.horasPend}h pend.</div>
         </div>
         <span class="rec-proj-pend-badge ${hasPend?'has-pend':'no-pend'}">${p.pendientes} pend.</span>
-        <button class="rec-proj-link" title="Abrir en Jira" onclick="window.open('${JIRA_BASE}${p.key||''}','_blank')">
+        <button class="rec-proj-link" title="Ver detalle" onclick="verProyecto('${recursoNombre}','${p.key}');event.stopPropagation()">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
         </button>
       </div>`;
     }).join('');
   } else {
     projCards = '<div style="color:var(--text-dim);font-size:12px">Sin proyectos registrados</div>';
+  }
+
+  // ── VENTAS · Métricas + Detalle ──
+  const ventas = r.ventasDetalle || [];
+  const ventasStats = `
+    <div class="rec-modal-stats" style="margin-bottom:16px">
+      <div class="rec-modal-stat">
+        <div class="rec-modal-stat-val" style="color:var(--purple,#a78bfa)">${r.ventasTotal||0}</div>
+        <div class="rec-modal-stat-lbl">Actividades</div>
+      </div>
+      <div class="rec-modal-stat">
+        <div class="rec-modal-stat-val" style="color:${(r.ventasHorasPend||0)>=40?'var(--red)':(r.ventasHorasPend||0)>=20?'var(--yellow)':'var(--green)'}">${r.ventasHorasPend||0}h</div>
+        <div class="rec-modal-stat-lbl">Horas Pend.</div>
+      </div>
+      <div class="rec-modal-stat">
+        <div class="rec-modal-stat-val" style="color:var(--blue)">${r.ventasHorasEst||0}h</div>
+        <div class="rec-modal-stat-lbl">Horas Total</div>
+      </div>
+    </div>`;
+
+  let ventaCards = '';
+  if(ventas.length) {
+    ventaCards = ventas.map(v => {
+      const pReal  = v.pctReal   != null ? Math.round(v.pctReal*100)   : null;
+      const pPlan  = v.pctPlan   != null ? Math.round(v.pctPlan*100)   : null;
+      const pDesv  = v.desvioPct != null ? Math.round(v.desvioPct*100) : null;
+      const pDesarr= v.pctDesarr != null ? Math.round(v.pctDesarr*100) : null;
+      const desvColor = pDesv===null?'var(--text-muted)':Math.abs(pDesv)>17?'var(--red)':Math.abs(pDesv)>=5?'var(--yellow)':'var(--green)';
+      const avance = pReal!=null&&pPlan!=null?`${pReal}% / Plan ${pPlan}%`:pReal!=null?`${pReal}%`:'—';
+      const statusCls = {'Backlog':'backlog','Análisis':'analisis','Desarrollo':'desarrollo','Pruebas':'pruebas','Producción':'produccion','Planificado':'planificado','Stand by':'standby','Desestimado':'desestimado','En curso':'en-curso'}[v.status]||'backlog';
+      return `<div class="rec-venta-card">
+        <div class="rec-venta-card-header">
+          <span class="rec-venta-nombre" title="${esc(v.nombre)}">${esc(v.nombre)}</span>
+          <span class="badge badge-${statusCls}">${esc(v.status)}</span>
+          <button class="rec-proj-link" title="Abrir en Jira" onclick="window.open('${JIRA_BASE}${v.key}','_blank')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          </button>
+        </div>
+        <div class="rec-venta-card-fields">
+          <div class="rec-venta-field"><span class="rec-venta-lbl">Área</span><span class="rec-venta-val">${esc(v.area)||'—'}</span></div>
+          <div class="rec-venta-field"><span class="rec-venta-lbl">Sponsor</span><span class="rec-venta-val">${esc(v.sponsor)||'—'}</span></div>
+          <div class="rec-venta-field"><span class="rec-venta-lbl">Avance</span><span class="rec-venta-val">${avance}</span></div>
+          <div class="rec-venta-field"><span class="rec-venta-lbl">Fin</span><span class="rec-venta-val">${fmtD(v.fechaFin)||'—'}</span></div>
+          <div class="rec-venta-field"><span class="rec-venta-lbl">Desvío</span><span class="rec-venta-val" style="color:${desvColor}">${pDesv!==null?pDesv+'%':'—'}</span></div>
+        </div>
+      </div>`;
+    }).join('');
+  } else {
+    ventaCards = '<div style="color:var(--text-dim);font-size:12px">Sin ventas registradas</div>';
   }
 
   document.getElementById('rec-modal-body').innerHTML = `
@@ -795,17 +911,110 @@ function verRecurso(nombre) {
       </div>
       ${partRows}
     </div>
-    <div>
+    <div style="margin-bottom:20px">
       <div class="rec-section-title">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
         Proyectos · Actividades
       </div>
       ${projCards}
     </div>
+    <div>
+      <div class="rec-section-title" style="color:var(--purple,#a78bfa)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Ventas
+      </div>
+      ${ventasStats}
+      ${ventaCards}
+    </div>
   `;
 
   document.getElementById('rec-modal-overlay').classList.add('open');
 }
+
+// ── DETALLE DE PROYECTO (segundo modal anidado) ──
+function verProyecto(recursoEncoded, epicaKey) {
+  const recursoNombre = decodeURIComponent(recursoEncoded);
+  const r = recursos.find(x => x.nombre === recursoNombre);
+  if(!r) return;
+  const p = (r.proyectosDetalle || []).find(x => x.key === epicaKey);
+  if(!p) return;
+
+  document.getElementById('det-title').textContent = p.nombre;
+
+  // Obtener datos de la épica del portafolio global si existe
+  const epicaGlobal = epics.find(e => e.key === epicaKey);
+  const estado   = epicaGlobal ? epicaGlobal.status    : '—';
+  const area     = epicaGlobal ? epicaGlobal.area      : (r.area || '—');
+  const sponsor  = epicaGlobal ? epicaGlobal.sponsor   : '—';
+  const avance   = epicaGlobal ? (epicaGlobal.planPct!=null&&epicaGlobal.realPct!=null
+    ? Math.round(epicaGlobal.realPct*100)+'% / Plan '+Math.round(epicaGlobal.planPct*100)+'%'
+    : epicaGlobal.pctDesarrollo!=null ? Math.round(epicaGlobal.pctDesarrollo*100)+'%' : '—') : '—';
+  const fin      = epicaGlobal ? fmtD(epicaGlobal.duedate) : (p.tareas&&p.tareas.length?null:'—');
+  const desvioPct= epicaGlobal && epicaGlobal.desvioPct!=null ? Math.round(epicaGlobal.desvioPct*100) : null;
+  const desvColor= desvioPct===null?'var(--text-muted)':Math.abs(desvioPct)>17?'var(--red)':Math.abs(desvioPct)>=5?'var(--yellow)':'var(--green)';
+  const sbCls    = {'Backlog':'backlog','Análisis':'analisis','Desarrollo':'desarrollo','Pruebas':'pruebas','Producción':'produccion','Planificado':'planificado','Stand by':'standby','Desestimado':'desestimado','En curso':'en-curso'}[estado]||'backlog';
+
+  // Sección PROYECTO
+  const proyectoHtml = `
+    <div class="det-sec">
+      <div class="det-sec-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+        Proyecto
+      </div>
+      <div class="det-field"><span class="det-lbl">Estado</span><span class="det-val"><span class="badge badge-${sbCls}">${esc(estado)}</span></span></div>
+      <div class="det-field"><span class="det-lbl">Área</span><span class="det-val">${esc(area)||'—'}</span></div>
+      <div class="det-field"><span class="det-lbl">Sponsor</span><span class="det-val">${esc(sponsor)||'—'}</span></div>
+      <div class="det-field"><span class="det-lbl">Avance</span><span class="det-val">${avance}</span></div>
+      <div class="det-field"><span class="det-lbl">Fin</span><span class="det-val">${fin||'—'}</span></div>
+      <div class="det-field"><span class="det-lbl">Desvío</span><span class="det-val" style="color:${desvColor};font-weight:600">${desvioPct!==null?desvioPct+'%':'—'}</span></div>
+    </div>`;
+
+  // Sección ACTIVIDADES
+  const tareas = p.tareas || [];
+  let tareasHtml = '';
+  if(tareas.length) {
+    tareasHtml = tareas.map(t => {
+      const doneCls = t.isDone ? 'done' : 'open';
+      const doneLabel = t.isDone ? 'Cerrado' : 'En proceso';
+      return `<div class="det-task-row">
+        <span class="det-task-date">${t.fecha ? fmtD(t.fecha) : '—'}</span>
+        <span class="det-task-name" title="${esc(t.nombre)}">${esc(t.nombre)}</span>
+        <span class="det-task-hrs">${t.horasEst}h</span>
+        <span class="det-task-status"><span class="det-badge ${doneCls}">${doneLabel}</span></span>
+      </div>`;
+    }).join('');
+  } else {
+    tareasHtml = '<div style="color:var(--text-muted);font-size:12px;padding:8px 0">Sin actividades registradas</div>';
+  }
+
+  document.getElementById('det-body').innerHTML = `
+    <div class="det-stats">
+      <div class="det-stat"><div class="det-stat-val" style="color:var(--blue)">${p.actividades}</div><div class="det-stat-lbl">Actividades</div></div>
+      <div class="det-stat"><div class="det-stat-val" style="color:${p.horasPend>=40?'var(--red)':p.horasPend>=20?'var(--yellow)':'var(--green)'}">${p.horasPend}h</div><div class="det-stat-lbl">Horas Pend.</div></div>
+      <div class="det-stat"><div class="det-stat-val" style="color:var(--blue)">${p.horasTotal}h</div><div class="det-stat-lbl">Horas Total</div></div>
+    </div>
+    ${proyectoHtml}
+    <div class="det-sec">
+      <div class="det-sec-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        Actividades de ${esc(recursoNombre)}
+      </div>
+      ${tareasHtml}
+    </div>`;
+
+  document.getElementById('det-overlay').classList.add('open');
+}
+
+function closeDetModal(){
+  const ov = document.getElementById('det-overlay');
+  if(ov) ov.classList.remove('open');
+}
+(function(){
+  const ov  = document.getElementById('det-overlay');
+  const btn = document.getElementById('det-close');
+  if(btn) btn.addEventListener('click', function(ev){ ev.stopPropagation(); closeDetModal(); });
+  if(ov)  ov.addEventListener('click',  function(ev){ if(ev.target === ov) closeDetModal(); });
+})();
 
 // Close recurso modal
 function closeRecModal(){
@@ -819,9 +1028,11 @@ function closeRecModal(){
   if(btn) btn.addEventListener('click', function(ev){ ev.stopPropagation(); closeRecModal(); });
   if(ov)  ov.addEventListener('click',  function(ev){ if(ev.target === ov) closeRecModal(); });
 })();
-// Cerrar modales con Escape
+// Cerrar modales con Escape (en cascada: det → rec → portfolio)
 document.addEventListener('keydown', function(ev){
   if(ev.key === 'Escape'){
+    const detOv = document.getElementById('det-overlay');
+    if(detOv && detOv.classList.contains('open')){ closeDetModal(); return; }
     const recOv = document.getElementById('rec-modal-overlay');
     if(recOv && recOv.classList.contains('open')){ closeRecModal(); return; }
     const mo = document.getElementById('modal-overlay');
