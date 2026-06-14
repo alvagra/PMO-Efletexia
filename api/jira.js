@@ -96,7 +96,7 @@ module.exports = async function handler(req, res) {
       const HISTORIA_FIELDS = ['summary', 'parent'];
 
       const [tareas, historiasList] = await Promise.all([
-        fetchAllPages(auth, JIRA_CLOUD, 'project = PTS AND issuetype = Tarea AND cf[11136] > 0 ORDER BY assignee ASC', TAREA_FIELDS),
+        fetchAllPages(auth, JIRA_CLOUD, 'project = PTS AND issuetype = Tarea ORDER BY assignee ASC', TAREA_FIELDS),
         fetchAllPages(auth, JIRA_CLOUD, 'project = PTS AND issuetype = Historia ORDER BY created ASC', HISTORIA_FIELDS),
       ]);
 
