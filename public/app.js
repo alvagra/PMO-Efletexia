@@ -1,3 +1,7 @@
+const JIRA_BASE = "https://efletexia.atlassian.net/browse/";
+const TODAY = new Date(); TODAY.setHours(0,0,0,0);
+let epics = [];
+
 
 
 function sbClass(s){
@@ -261,7 +265,6 @@ document.getElementById('btn-limpiar').addEventListener('click',()=>{
   document.getElementById('s-search').value='';
   ['s-sponsor','s-pais','s-cat','s-area'].forEach(id=>document.getElementById(id).value='');
   document.querySelectorAll('.estados-grid input').forEach(cb=>cb.checked=false);
-  renderTable(epics);
 });
 document.querySelectorAll('.tabs .tab').forEach(tab=>{
   tab.addEventListener('click',()=>{
@@ -328,15 +331,9 @@ document.getElementById('btn-limpiar').addEventListener('click',()=>{
     t.classList.remove('sort-asc','sort-desc');
     const si=t.querySelector('.sort-icon'); if(si) si.textContent='';
   });
-  renderTable(epics);
 });
 
-renderTable(epics);
 
-
-const JIRA_BASE = "https://efletexia.atlassian.net/browse/";
-const TODAY = new Date(); TODAY.setHours(0,0,0,0);
-let epics = [];
 
 // ── ADF parser ──
 function adfToText(node){
