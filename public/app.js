@@ -807,12 +807,26 @@ function verRecurso(nombre) {
   document.getElementById('rec-modal-overlay').classList.add('open');
 }
 
-// Close modal
-document.getElementById('rec-modal-close')?.addEventListener('click', () => {
-  document.getElementById('rec-modal-overlay').classList.remove('open');
-});
-document.getElementById('rec-modal-overlay')?.addEventListener('click', function(ev) {
-  if(ev.target === this) this.classList.remove('open');
+// Close recurso modal
+function closeRecModal(){
+  const ov = document.getElementById('rec-modal-overlay');
+  if(ov) ov.classList.remove('open');
+}
+// Bind close button and overlay backdrop directly (elementos ya presentes en DOM)
+(function(){
+  const ov  = document.getElementById('rec-modal-overlay');
+  const btn = document.getElementById('rec-modal-close');
+  if(btn) btn.addEventListener('click', function(ev){ ev.stopPropagation(); closeRecModal(); });
+  if(ov)  ov.addEventListener('click',  function(ev){ if(ev.target === ov) closeRecModal(); });
+})();
+// Cerrar modales con Escape
+document.addEventListener('keydown', function(ev){
+  if(ev.key === 'Escape'){
+    const recOv = document.getElementById('rec-modal-overlay');
+    if(recOv && recOv.classList.contains('open')){ closeRecModal(); return; }
+    const mo = document.getElementById('modal-overlay');
+    if(mo && mo.classList.contains('open')) mo.classList.remove('open');
+  }
 });
 
 // Remove Capacidad tab logic (if any remains)
