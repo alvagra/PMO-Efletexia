@@ -278,6 +278,47 @@ a.jlink:hover{text-decoration:underline}
 .rec-proj-link{background:var(--blue-bg);border:none;border-radius:4px;padding:5px 8px;cursor:pointer;color:#fff;display:flex;align-items:center;flex-shrink:0}
 .rec-proj-link:hover{opacity:.85}
 
+/* ── VENTAS en rec-modal ── */
+.rec-venta-card{background:var(--bg-elevated);border:1px solid var(--border);border-radius:6px;padding:12px 14px;margin-bottom:8px}
+.rec-venta-card-header{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.rec-venta-nombre{flex:1;font-size:13px;font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.rec-venta-card-fields{display:grid;grid-template-columns:1fr 1fr;gap:4px 16px}
+.rec-venta-field{display:flex;align-items:baseline;gap:6px}
+.rec-venta-lbl{font-size:11px;color:var(--text-muted);min-width:52px;flex-shrink:0}
+.rec-venta-val{font-size:12px;color:var(--text-primary)}
+
+/* ── DETALLE DE PROYECTO (segundo modal anidado) ── */
+.det-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:400;align-items:flex-start;justify-content:flex-end}
+.det-overlay.open{display:flex}
+.det-panel{background:var(--bg-surface);border-left:1px solid var(--border);width:min(94vw,560px);height:100vh;overflow-y:auto;display:flex;flex-direction:column}
+.det-hdr{padding:16px 20px;border-bottom:1px solid var(--border);flex-shrink:0}
+.det-hdr-sup{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-muted);margin-bottom:4px}
+.det-hdr-title{font-size:17px;font-weight:700;color:var(--text-primary);line-height:1.25}
+.det-hdr-row{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.det-close{background:none;border:none;color:var(--text-muted);font-size:20px;cursor:pointer;line-height:1;padding:0 4px;flex-shrink:0;margin-top:2px}
+.det-close:hover{color:var(--text-primary)}
+.det-body{padding:20px;flex:1}
+.det-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:24px}
+.det-stat{background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;padding:14px;text-align:center}
+.det-stat-val{font-size:26px;font-weight:700;line-height:1;margin-bottom:4px}
+.det-stat-lbl{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px}
+.det-sec{margin-bottom:24px}
+.det-sec-title{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-muted);margin-bottom:10px;padding-bottom:7px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:7px}
+.det-sec-title svg{width:13px;height:13px;flex-shrink:0}
+.det-field{display:flex;align-items:center;padding:6px 0;border-bottom:1px solid var(--border-light,rgba(255,255,255,.04))}
+.det-field:last-child{border-bottom:none}
+.det-lbl{font-size:12px;color:var(--text-muted);min-width:90px}
+.det-val{font-size:13px;color:var(--text-primary);flex:1}
+.det-task-row{display:grid;grid-template-columns:80px 1fr 36px 90px;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border-light,rgba(255,255,255,.04));font-size:12px}
+.det-task-row:last-child{border-bottom:none}
+.det-task-date{color:var(--text-muted);font-size:11px;white-space:nowrap}
+.det-task-name{color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.det-task-hrs{color:var(--blue);font-weight:600;text-align:right;white-space:nowrap}
+.det-task-status{text-align:right}
+.det-badge{display:inline-block;padding:2px 7px;border-radius:3px;font-size:10px;font-weight:600;white-space:nowrap}
+.det-badge.open{background:rgba(59,130,246,.15);color:#60a5fa}
+.det-badge.done{background:var(--green-bg,rgba(34,197,94,.1));color:var(--green,#4ade80)}
+
 </style>
 </head>
 <body>
@@ -537,6 +578,20 @@ a.jlink:hover{text-decoration:underline}
       <button class="rec-modal-close" id="rec-modal-close">✕</button>
     </div>
     <div class="rec-modal-body" id="rec-modal-body"></div>
+  </div>
+</div>
+
+<!-- DETALLE DE PROYECTO MODAL (anidado sobre rec-modal) -->
+<div class="det-overlay" id="det-overlay">
+  <div class="det-panel">
+    <div class="det-hdr">
+      <div class="det-hdr-sup">Detalle de proyecto</div>
+      <div class="det-hdr-row">
+        <div class="det-hdr-title" id="det-title">—</div>
+        <button class="det-close" id="det-close" type="button" aria-label="Cerrar detalle">✕</button>
+      </div>
+    </div>
+    <div class="det-body" id="det-body"></div>
   </div>
 </div>
 
