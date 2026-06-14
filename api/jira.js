@@ -56,10 +56,37 @@ module.exports = async function handler(req, res) {
   const { type } = req.body || {};
 
   try {
-    if (type === 'recursos') {
+    if (type === 'ventas') {
+      // Fetch all Ventas issues (mismos campos custom que Épicas)
+      const VENTA_FIELDS = [
+        'summary', 'status', 'assignee', 'duedate', 'parent',
+        'customfield_10015', // Fecha inicio
+        'customfield_10930', // Área
+        'customfield_10592', // País
+        'customfield_10931', // Sponsor
+        'customfield_10929', // Categoría
+        'customfield_10725', // % Plan
+        'customfield_10726', // % Real
+        'customfield_10759', // Desvío %
+        'customfield_10895', // % Análisis
+        'customfield_10928', // % Desarrollo
+        'customfield_10969', // % Pruebas
+        'customfield_11003', // Bloqueante
+        'customfield_11136', // Horas Estimadas
+        'customfield_11137', // Horas Pendientes
+      ];
+      const issues = await fetchAllPages(
+        auth, JIRA_CLOUD,
+        'project = PTS AND issuetype = Venta ORDER BY assignee ASC',
+        VENTA_FIELDS
+      );
+      return res.status(200).json({ issues, total: issues.length, type: 'ventas' });
+
+    } else if (type === 'recursos') {
       // Fetch all Historias with hours fields
       const HISTORIA_FIELDS = [
-        'summary', 'status', 'assignee', 'parent', 'duedate',
+        'summary', 'status', 'assignee', 'parent', 'duedate', 'created',
+        'customfield_10015', // Fecha inicio
         'customfield_10930', // Área
         'customfield_10592', // País
         'customfield_11003', // Bloqueante
