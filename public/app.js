@@ -74,11 +74,12 @@ function renderTable(data){
   updateKpis(data);
   document.getElementById('table-info').textContent=`Mostrando ${data.length} de ${epics.length} épicas`;
   const tb=document.getElementById('table-body');
-  if(!data.length){tb.innerHTML='<tr><td colspan="14" style="text-align:center;padding:40px;color:var(--text-muted)">Sin resultados</td></tr>';return}
+  if(!data.length){tb.innerHTML='<tr><td colspan="15" style="text-align:center;padding:40px;color:var(--text-muted)">Sin resultados</td></tr>';return}
   tb.innerHTML=data.map(e=>`
     <tr data-key="${e.key}">
       <td><span class="priority-badge ${priClass(e.prioridad)}" title="Prioridad ${e.prioridad||'—'}"></span></td>
-      <td class="proj" title="${esc(e.summary)}">${e.codigo?`<span style="font-family:var(--font-mono);font-size:10px;color:var(--blue);display:block;margin-bottom:2px">${esc(e.codigo)}</span>`:''}${esc(e.summary)}</td>
+      <td class="code"><a class="jlink" href="${JIRA_BASE}${e.key}" target="_blank" title="Abrir en Jira" onclick="event.stopPropagation()">${esc(e.codigo||e.key)}</a></td>
+      <td class="proj" title="${esc(e.summary)}">${esc(e.summary)}</td>
       <td class="cat">${esc(e.categoria)||'<span style="color:var(--text-muted)">—</span>'}</td>
       <td class="muted">${e.area?`<span class="pill">${esc(e.area)}</span>`:'—'}</td>
       <td><span class="badge badge-${sbClass(e.status)}">${e.status}</span></td>
@@ -558,11 +559,12 @@ function renderTable(data){
   updateKpis(data);
   document.getElementById('table-info').textContent=`Mostrando ${data.length} de ${epics.length} épicas`;
   const tb=document.getElementById('table-body');
-  if(!data.length){tb.innerHTML='<tr><td colspan="14" style="text-align:center;padding:40px;color:var(--text-muted)">Sin resultados</td></tr>';return}
+  if(!data.length){tb.innerHTML='<tr><td colspan="15" style="text-align:center;padding:40px;color:var(--text-muted)">Sin resultados</td></tr>';return}
   tb.innerHTML=data.map(e=>`
     <tr data-key="${e.key}">
       <td><span class="priority-badge ${priClass(e.prioridad)}" title="Prioridad ${e.prioridad||'—'}"></span></td>
-      <td class="proj" title="${esc(e.summary)}">${e.codigo?`<span style="font-family:var(--font-mono);font-size:10px;color:var(--blue);display:block;margin-bottom:2px">${esc(e.codigo)}</span>`:''}${esc(e.summary)}</td>
+      <td class="code"><a class="jlink" href="${JIRA_BASE}${e.key}" target="_blank" title="Abrir en Jira" onclick="event.stopPropagation()">${esc(e.codigo||e.key)}</a></td>
+      <td class="proj" title="${esc(e.summary)}">${esc(e.summary)}</td>
       <td class="cat">${esc(e.categoria)||'<span style="color:var(--text-muted)">—</span>'}</td>
       <td class="muted">${e.area?`<span class="pill">${esc(e.area)}</span>`:'—'}</td>
       <td><span class="badge badge-${sbClass(e.status)}">${e.status}</span></td>
