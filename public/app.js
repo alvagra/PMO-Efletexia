@@ -217,6 +217,129 @@ function buildDetail(e){
 }
 
 
+const JIRA_FIELDS = [
+  "summary","status","assignee","reporter","labels","duedate",
+  "customfield_10015","customfield_10592","customfield_10659",
+  "customfield_10725","customfield_10726","customfield_10759",
+  "customfield_10895","customfield_10928","customfield_10929",
+  "customfield_10930","customfield_10931","customfield_10934",
+  "customfield_10829","customfield_10862","customfield_10969",
+  "customfield_10970","customfield_11003","customfield_11004",
+  "customfield_11037","customfield_11070"
+];
+
+function adfToText(node){
+  if(!node)return'';
+  if(typeof node==='string')return node;
+  const t=node.type||'',c=node.content||[];
+  if(t==='text')return node.text||'';
+  if(t==='hardBreak')return'\n';
+  if(t==='paragraph')return c.map(adfToText).join('')+'\n';
+  if(t==='bulletList'||t==='orderedList')
+    return c.map((item,i)=>(t==='orderedList'?(i+1)+'. ':'• ')+adfToText(item).trim()).join('\n')+'\n';
+  if(t==='listItem')return c.map(adfToText).join('');
+  return c.map(adfToText).join('');
+}
+
+function parseIssue(i){
+  const f=i.fields,rep=f.reporter;
+  const initials=rep?rep.displayName.split(' ').slice(0,2).map(x=>x[0]).join('').toUpperCase():'?';
+  let bit=f.customfield_10829,prox=f.customfield_10862;
+  if(bit&&typeof bit==='object')bit=adfToText(bit).trim();
+  if(prox&&typeof prox==='object')prox=adfToText(prox).trim();
+  return{
+    key:i.key,
+    codigo:f.customfield_10934||null,
+    summary:f.summary,
+    status:f.status.name,
+    assignee:f.assignee?f.assignee.displayName:null,
+    asignado:f.customfield_10970||null,
+    responsableDF:f.customfield_10969||null,
+    reporter:rep?rep.displayName:null,
+    reporterInitials:initials,
+    labels:f.labels||[],
+    duedate:f.duedate||null,
+    fechaInicio:f.customfield_10015||null,
+    pais:f.customfield_10592?f.customfield_10592.value:null,
+    area:f.customfield_10930?f.customfield_10930.value:null,
+    categoria:f.customfield_10659?f.customfield_10659.value:null,
+    planPct:f.customfield_10725!==undefined?f.customfield_10725:null,
+    realPct:f.customfield_10726!==undefined?f.customfield_10726:null,
+    desvioPct:f.customfield_10759!==undefined?f.customfield_10759:null,
+    pctAnalisis:f.customfield_10895!==undefined?f.customfield_10895:null,
+    pctDesarrollo:f.customfield_10928!==undefined?f.customfield_10928:null,
+    pctPruebas:f.customfield_10929!==undefined?f.customfield_10929:null,
+    docFuncional:f.customfield_10931?f.customfield_10931.value:null,
+    bloqueante:f.customfield_11003?f.customfield_11003.value:null,
+    conformidad:f.customfield_11004?f.customfield_11004.value:null,
+    prioridad:f.customfield_11037?f.customfield_11037.value:null,
+    sponsor:f.customfield_11070?f.customfield_11070.value:null,
+    bitacora:bit||null,
+    proximosPasos:prox||null,
+  };
+}
+
+async function fetchAllEpics(){
+  const resp=await fetch('/api/jira',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      jql:'project = PTS AND issuetype = Epic ORDER BY created ASC',
+      fields:JIRA_FIELDS,
+      maxResults:100,
+      startAt:0,
+    })
+  });
+  if(!resp.ok){const err=await resp.text();throw new Error(`Jira ${resp.status}: ${err}`);}
+  return resp.json();
+}
+
+async function loadData(manual=false){
+  const loading=document.getElementById('loading-screen');
+  const errorScr=document.getElementById('error-screen');
+  const refreshBtn=document.getElementById('refresh-btn');
+  if(manual){refreshBtn.classList.add('spinning');}
+  else{loading.classList.remove('hidden');errorScr.classList.add('hidden');}
+  document.getElementById('loading-text').textContent='Cargando épicas desde Jira...';
+  try{
+    const data=await fetchAllEpics();
+    const issues=data.issues||[];
+    document.getElementById('loading-text').textContent=`Procesando ${issues.length} épicas...`;
+    epics=issues.map(parseIssue);
+
+    function populateSelect(id,values,allLabel){
+      const sel=document.getElementById(id);if(!sel)return;
+      const cur=sel.value;
+      sel.innerHTML=`<option value="">${allLabel}</option>`+
+        [...new Set(values)].sort().map(v=>`<option${v===cur?' selected':''}>${v}</option>`).join('');
+    }
+    populateSelect('s-sponsor',epics.map(e=>e.sponsor).filter(Boolean),'Todos');
+    populateSelect('s-pais',epics.map(e=>e.pais).filter(Boolean),'Todos');
+    populateSelect('s-cat',epics.map(e=>e.categoria).filter(Boolean),'Todas');
+    populateSelect('s-area',epics.map(e=>e.area).filter(Boolean),'Todas');
+
+    const now=new Date();
+    document.getElementById('last-update').textContent='Actualizado '+now.toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'});
+    loading.classList.add('hidden');
+    errorScr.classList.add('hidden');
+    refreshBtn.classList.remove('spinning');
+    sortCol=null;sortDir=1;
+    renderTable(epics);
+    updateKpis(epics);
+  }catch(err){
+    console.error(err);
+    loading.classList.add('hidden');
+    refreshBtn.classList.remove('spinning');
+    if(!manual){
+      errorScr.classList.remove('hidden');
+      document.getElementById('error-msg').textContent=err.message;
+    }else{
+      document.getElementById('last-update').textContent='⚠ Error al actualizar';
+    }
+  }
+}
+
+
 loadData();
 
 
