@@ -74,24 +74,21 @@ function renderTable(data){
   updateKpis(data);
   document.getElementById('table-info').textContent=`Mostrando ${data.length} de ${epics.length} épicas`;
   const tb=document.getElementById('table-body');
-  if(!data.length){tb.innerHTML='<tr><td colspan="17" style="text-align:center;padding:40px;color:var(--text-muted)">Sin resultados</td></tr>';return}
+  if(!data.length){tb.innerHTML='<tr><td colspan="14" style="text-align:center;padding:40px;color:var(--text-muted)">Sin resultados</td></tr>';return}
   tb.innerHTML=data.map(e=>`
     <tr data-key="${e.key}">
       <td><span class="priority-badge ${priClass(e.prioridad)}" title="Prioridad ${e.prioridad||'—'}"></span></td>
-      <td class="code"><a class="jlink" href="${JIRA_BASE}${e.key}" target="_blank" title="Abrir ${e.key} en Jira" onclick="event.stopPropagation()">${esc(e.codigo||e.key)}</a></td>
-      <td class="proj" title="${esc(e.summary)}">${esc(e.summary)}</td>
+      <td class="proj" title="${esc(e.summary)}">${e.codigo?`<span style="font-family:var(--font-mono);font-size:10px;color:var(--blue);display:block;margin-bottom:2px">${esc(e.codigo)}</span>`:''}${esc(e.summary)}</td>
       <td class="cat">${esc(e.categoria)||'<span style="color:var(--text-muted)">—</span>'}</td>
+      <td class="muted">${e.area?`<span class="pill">${esc(e.area)}</span>`:'—'}</td>
       <td><span class="badge badge-${sbClass(e.status)}">${e.status}</span></td>
-      <td>${progCell(e.pctAnalisis)}</td>
-      <td>${progCell(e.pctDesarrollo)}</td>
-      <td>${progCell(e.pctPruebas)}</td>
-      <td class="muted">${fmtD(e.fechaInicio)||'—'}</td>
-      <td class="muted">${fmtD(e.duedate)||'—'}</td>
       <td class="muted">${e.planPct!==null?Math.round(e.planPct*100)+'%':'—'}</td>
       <td class="muted">${e.realPct!==null?Math.round(e.realPct*100)+'%':'—'}</td>
-      <td class="muted">${e.desvioPct!==null?Math.round(e.desvioPct*100)+'%':'—'}</td>
-      <td class="muted">${esc(e.pais)||'—'}</td>
-      <td class="muted">${esc(e.area)||'—'}</td>
+      <td class="muted" style="color:${e.desvioPct!==null?(Math.abs(e.desvioPct)>0.17?'var(--red)':Math.abs(e.desvioPct)>=0.05?'var(--yellow)':'var(--green)'):'var(--text-muted)'}">${e.desvioPct!==null?Math.round(e.desvioPct*100)+'%':'—'}</td>
+      <td class="muted">${fmtD(e.fechaInicio)||'—'}</td>
+      <td class="muted">${fmtD(e.duedate)||'—'}</td>
+      <td class="muted">${e.docFuncional?`<span class="pill">${esc(e.docFuncional)}</span>`:'—'}</td>
+      <td class="muted">${e.conformidad?`<span class="pill">${esc(e.conformidad)}</span>`:'—'}</td>
       <td class="muted">${esc(e.sponsor)||'—'}</td>
       <td><button class="btn-action" type="button" title="Cronograma y detalles" onclick="openModal('${e.key}');event.stopPropagation()">···</button></td>
     </tr>
@@ -381,25 +378,26 @@ function parseIssue(i){
 }
 
 // ── Fetch one page via Vercel proxy ──
-async function fetchPage(startAt=0){
-  const FIELDS = [
-    "summary","status","assignee","reporter","labels","duedate",
-    "customfield_10015","customfield_10592","customfield_10659",
-    "customfield_10725","customfield_10726","customfield_10759",
-    "customfield_10895","customfield_10928","customfield_10929",
-    "customfield_10930","customfield_10931","customfield_10934",
-    "customfield_10829","customfield_10862","customfield_10969",
-    "customfield_10970","customfield_11003","customfield_11004",
-    "customfield_11037","customfield_11070"
-  ];
+const JIRA_FIELDS = [
+  "summary","status","assignee","reporter","labels","duedate",
+  "customfield_10015","customfield_10592","customfield_10659",
+  "customfield_10725","customfield_10726","customfield_10759",
+  "customfield_10895","customfield_10928","customfield_10929",
+  "customfield_10930","customfield_10931","customfield_10934",
+  "customfield_10829","customfield_10862","customfield_10969",
+  "customfield_10970","customfield_11003","customfield_11004",
+  "customfield_11037","customfield_11070"
+];
+
+async function fetchAllEpics(){
   const resp = await fetch('/api/jira', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       jql: 'project = PTS AND issuetype = Epic ORDER BY created ASC',
-      fields: FIELDS,
+      fields: JIRA_FIELDS,
       maxResults: 100,
-      startAt,
+      startAt: 0,
     })
   });
   if(!resp.ok){
@@ -424,20 +422,13 @@ async function loadData(manual=false){
   document.getElementById('loading-text').textContent = 'Cargando épicas desde Jira...';
 
   try{
-    // First page
-    const page1 = await fetchPage(0);
-    const total  = page1.total || 0;
-    let issues   = page1.issues || [];
+    // Single call — server handles all pages internally
+    const data   = await fetchAllEpics();
+    const total  = data.total || 0;
+    const issues = data.issues || [];
 
-    // Fetch remaining pages in parallel if needed
-    if(total > 100){
-      const starts = [];
-      for(let s=100; s<total; s+=100) starts.push(s);
-      document.getElementById('loading-text').textContent =
-        `Cargando ${total} épicas (${starts.length+1} páginas)...`;
-      const rest = await Promise.all(starts.map(s=>fetchPage(s)));
-      rest.forEach(p=>{ issues = issues.concat(p.issues||[]); });
-    }
+    document.getElementById('loading-text').textContent =
+      `Procesando ${issues.length} de ${total} épicas...`;
 
     epics = issues.map(parseIssue);
 
@@ -567,24 +558,21 @@ function renderTable(data){
   updateKpis(data);
   document.getElementById('table-info').textContent=`Mostrando ${data.length} de ${epics.length} épicas`;
   const tb=document.getElementById('table-body');
-  if(!data.length){tb.innerHTML='<tr><td colspan="17" style="text-align:center;padding:40px;color:var(--text-muted)">Sin resultados</td></tr>';return}
+  if(!data.length){tb.innerHTML='<tr><td colspan="14" style="text-align:center;padding:40px;color:var(--text-muted)">Sin resultados</td></tr>';return}
   tb.innerHTML=data.map(e=>`
     <tr data-key="${e.key}">
       <td><span class="priority-badge ${priClass(e.prioridad)}" title="Prioridad ${e.prioridad||'—'}"></span></td>
-      <td class="code"><a class="jlink" href="${JIRA_BASE}${e.key}" target="_blank" title="Abrir ${e.key} en Jira" onclick="event.stopPropagation()">${esc(e.codigo||e.key)}</a></td>
-      <td class="proj" title="${esc(e.summary)}">${esc(e.summary)}</td>
+      <td class="proj" title="${esc(e.summary)}">${e.codigo?`<span style="font-family:var(--font-mono);font-size:10px;color:var(--blue);display:block;margin-bottom:2px">${esc(e.codigo)}</span>`:''}${esc(e.summary)}</td>
       <td class="cat">${esc(e.categoria)||'<span style="color:var(--text-muted)">—</span>'}</td>
+      <td class="muted">${e.area?`<span class="pill">${esc(e.area)}</span>`:'—'}</td>
       <td><span class="badge badge-${sbClass(e.status)}">${e.status}</span></td>
-      <td>${progCell(e.pctAnalisis)}</td>
-      <td>${progCell(e.pctDesarrollo)}</td>
-      <td>${progCell(e.pctPruebas)}</td>
-      <td class="muted">${fmtD(e.fechaInicio)||'—'}</td>
-      <td class="muted">${fmtD(e.duedate)||'—'}</td>
       <td class="muted">${e.planPct!==null?Math.round(e.planPct*100)+'%':'—'}</td>
       <td class="muted">${e.realPct!==null?Math.round(e.realPct*100)+'%':'—'}</td>
-      <td class="muted">${e.desvioPct!==null?Math.round(e.desvioPct*100)+'%':'—'}</td>
-      <td class="muted">${esc(e.pais)||'—'}</td>
-      <td class="muted">${esc(e.area)||'—'}</td>
+      <td class="muted" style="color:${e.desvioPct!==null?(Math.abs(e.desvioPct)>0.17?'var(--red)':Math.abs(e.desvioPct)>=0.05?'var(--yellow)':'var(--green)'):'var(--text-muted)'}">${e.desvioPct!==null?Math.round(e.desvioPct*100)+'%':'—'}</td>
+      <td class="muted">${fmtD(e.fechaInicio)||'—'}</td>
+      <td class="muted">${fmtD(e.duedate)||'—'}</td>
+      <td class="muted">${e.docFuncional?`<span class="pill">${esc(e.docFuncional)}</span>`:'—'}</td>
+      <td class="muted">${e.conformidad?`<span class="pill">${esc(e.conformidad)}</span>`:'—'}</td>
       <td class="muted">${esc(e.sponsor)||'—'}</td>
       <td><button class="btn-action" type="button" title="Cronograma y detalles" onclick="openModal('${e.key}');event.stopPropagation()">···</button></td>
     </tr>
