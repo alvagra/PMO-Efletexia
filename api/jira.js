@@ -83,7 +83,7 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ issues, total: issues.length, type: 'ventas' });
 
     } else if (type === 'recursos') {
-      // Fetch Tareas (donde se registran horas) + Historias (para resolver épica abuelo)
+      // Tareas tienen como parent directo una Épica
       const TAREA_FIELDS = [
         'summary', 'status', 'assignee', 'parent', 'duedate', 'created',
         'customfield_10015', // Fecha inicio
@@ -93,22 +93,12 @@ module.exports = async function handler(req, res) {
         'customfield_11136', // Horas Estimadas
         'customfield_11137', // Horas Pendientes
       ];
-      const HISTORIA_FIELDS = ['summary', 'parent'];
-
-      const [tareas, historiasList] = await Promise.all([
-        fetchAllPages(auth, JIRA_CLOUD, 'project = PTS AND issuetype = Tarea ORDER BY assignee ASC', TAREA_FIELDS),
-        fetchAllPages(auth, JIRA_CLOUD, 'project = PTS AND issuetype = Historia ORDER BY created ASC', HISTORIA_FIELDS),
-      ]);
-
-      // Mapa Historia.key → Epica.key + Epica.summary
-      const historiaToEpica = {};
-      historiasList.forEach(h => {
-        if(h.fields.parent) {
-          historiaToEpica[h.key] = { key: h.fields.parent.key, nombre: h.fields.parent.fields ? h.fields.parent.fields.summary : h.fields.parent.key };
-        }
-      });
-
-      return res.status(200).json({ issues: tareas, historiaToEpica, total: tareas.length, type: 'recursos' });
+      const issues = await fetchAllPages(
+        auth, JIRA_CLOUD,
+        'project = PTS AND issuetype = Tarea ORDER BY assignee ASC',
+        TAREA_FIELDS
+      );
+      return res.status(200).json({ issues, total: issues.length, type: 'recursos' });
 
     } else {
       // Default: fetch Epics
