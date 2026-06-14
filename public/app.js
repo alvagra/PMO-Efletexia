@@ -719,3 +719,144 @@ function buildDetail(e){
 
 
 loadData();
+
+
+// ── RECURSOS ──
+(function initRecursos(){
+  // Set default fecha corte = today
+  const today = new Date().toISOString().split('T')[0];
+  const fechaInput = document.getElementById('rec-fecha-corte');
+  if(fechaInput) fechaInput.value = today;
+
+  // Area buttons
+  document.querySelectorAll('.rec-area-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.rec-area-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderRecursos();
+    });
+  });
+
+  // Search + pais
+  ['rec-search','rec-pais'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.addEventListener('input', renderRecursos);
+  });
+
+  // Limpiar
+  const limpiar = document.getElementById('rec-limpiar');
+  if(limpiar) limpiar.addEventListener('click', () => {
+    document.getElementById('rec-search').value = '';
+    document.getElementById('rec-pais').value = '';
+    document.querySelectorAll('.rec-area-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector('.rec-area-btn[data-area=""]').classList.add('active');
+    renderRecursos();
+  });
+})();
+
+// Datos de recursos — se poblarán desde Jira cuando estén disponibles
+let recursos = [];
+
+function getAreaClass(area) {
+  const m = {
+    'Desarrollo':'rec-area-desarrollo','Data':'rec-area-data',
+    'PMO':'rec-area-pmo','PM':'rec-area-pm',
+    'Torre de Control':'rec-area-torre','Soporte TI':'rec-area-soporte',
+    'Operacion':'rec-area-operacion'
+  };
+  return m[area] || 'rec-area-default';
+}
+
+function renderRecursos() {
+  const search = (document.getElementById('rec-search')?.value||'').toLowerCase();
+  const area   = document.querySelector('.rec-area-btn.active')?.dataset.area || '';
+  const pais   = document.getElementById('rec-pais')?.value || '';
+
+  let filtered = recursos.filter(r => {
+    if(search && !r.nombre.toLowerCase().includes(search)) return false;
+    if(area && r.area !== area) return false;
+    if(pais && r.pais !== pais) return false;
+    return true;
+  });
+
+  // Update KPIs
+  const total    = filtered.length;
+  const alta     = filtered.filter(r => r.horasPend >= 40).length;
+  const media    = filtered.filter(r => r.horasPend >= 20 && r.horasPend < 40).length;
+  const baja     = filtered.filter(r => r.horasPend < 20).length;
+  const totalH   = filtered.reduce((a,r) => a + r.horasPend, 0);
+  const totalE   = filtered.reduce((a,r) => a + r.entregasPend, 0);
+
+  const setKpi = (id, val) => { const el=document.getElementById(id); if(el) el.textContent=val; };
+  setKpi('rec-kpi-total', total||'—');
+  setKpi('rec-kpi-alta',  alta||'0');
+  setKpi('rec-kpi-media', media||'0');
+  setKpi('rec-kpi-baja',  baja||'0');
+  setKpi('rec-kpi-horas', totalH ? totalH.toFixed(2)+'h' : '—');
+  setKpi('rec-kpi-entregas', totalE||'—');
+
+  const info = document.getElementById('rec-table-info');
+  if(info) info.textContent = `Mostrando ${filtered.length} de ${recursos.length} recursos`;
+
+  const tbody = document.getElementById('rec-table-body');
+  if(!tbody) return;
+
+  if(!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="9" class="rec-empty">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="margin-bottom:10px;opacity:.3;display:block;margin-left:auto;margin-right:auto"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4.418 3.582-8 8-8s8 3.582 8 8"/></svg>
+      ${recursos.length === 0 ? 'Los datos de recursos se cargarán cuando estén disponibles en Jira' : 'Sin resultados para los filtros aplicados'}
+    </td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(r => {
+    // Horas color
+    const hClass = r.horasPend >= 40 ? 'rec-hours-high' : r.horasPend >= 20 ? 'rec-hours-med' : r.horasPend > 0 ? 'rec-hours-low' : 'rec-hours-zero';
+    const eClass = r.entregasPend > 10 ? 'rec-entregas-high' : 'rec-entregas-low';
+
+    // Distribución carga mensual
+    const totalH2 = r.horasCerr + r.horasPend + r.horasLibre;
+    const pCerr  = totalH2 > 0 ? (r.horasCerr / totalH2 * 100).toFixed(1) : 0;
+    const pPend  = totalH2 > 0 ? (r.horasPend / totalH2 * 100).toFixed(1) : 0;
+    const ocupPct = totalH2 > 0 ? Math.round((r.horasCerr + r.horasPend) / totalH2 * 100) : 0;
+    const ocupColor = ocupPct >= 90 ? 'over' : ocupPct >= 70 ? '' : 'ok';
+
+    const distBar = `
+      <div class="rec-dist-cell">
+        <div style="position:relative">
+          <div class="rec-dist-bar-wrap">
+            <div class="rec-dist-cerr" style="width:${pCerr}%"></div>
+            <div class="rec-dist-pend" style="width:${pPend}%"></div>
+          </div>
+          <div class="rec-dist-pct ${ocupColor}" style="position:absolute;right:4px;top:-1px;font-size:10px;font-weight:700;color:${ocupPct>=90?'var(--red)':ocupPct>=70?'var(--yellow)':'var(--green)'}">${ocupPct}%</div>
+        </div>
+        <div class="rec-dist-labels">
+          <span class="rec-dist-lbl"><span class="rec-dist-dot" style="background:var(--green)"></span>${r.horasCerr}h cerr.</span>
+          <span class="rec-dist-lbl"><span class="rec-dist-dot" style="background:var(--yellow)"></span>${r.horasPend}h pend.</span>
+          <span class="rec-dist-lbl"><span class="rec-dist-dot" style="background:var(--bg-elevated);border:1px solid var(--border)"></span>${r.horasLibre}h libre</span>
+        </div>
+      </div>`;
+
+    // Bloqueantes
+    const bloqHtml = r.bloqueantes > 0
+      ? `<span class="rec-bloq rec-bloq-warn">⚠ ${r.bloqueantes}</span>`
+      : `<span class="rec-bloq rec-bloq-ok">✓</span>`;
+
+    return `<tr>
+      <td><span class="rec-name">${r.nombre}</span></td>
+      <td><span class="rec-area-badge ${getAreaClass(r.area)}">${r.area||'—'}</span></td>
+      <td style="text-align:center">${r.proyectos}</td>
+      <td><span class="${hClass}">${r.horasPend}h</span></td>
+      <td style="color:var(--text-muted)">${r.horasTotal}h</td>
+      <td><span class="${eClass}">${r.entregasPend}</span></td>
+      <td>${distBar}</td>
+      <td>${bloqHtml}</td>
+      <td><button class="rec-ver-btn" onclick="verRecurso('${r.nombre}')">Ver →</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function verRecurso(nombre) {
+  // Placeholder — se expandirá cuando haya datos reales
+  console.log('Ver recurso:', nombre);
+}
