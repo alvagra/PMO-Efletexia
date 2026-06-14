@@ -604,30 +604,9 @@ async function loadRecursos() {
     fechaInput.addEventListener('change', ()=>{ if(recursos.length>0) renderRecursos(); });
   }
 
-  // Area buttons
-  document.querySelectorAll('.rec-area-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.rec-area-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      renderRecursos();
-    });
-  });
-
-  // Search + pais
-  ['rec-search','rec-pais'].forEach(id => {
-    const el = document.getElementById(id);
-    if(el) el.addEventListener('input', renderRecursos);
-  });
-
-  // Limpiar
-  const limpiar = document.getElementById('rec-limpiar');
-  if(limpiar) limpiar.addEventListener('click', () => {
-    document.getElementById('rec-search').value = '';
-    document.getElementById('rec-pais').value = '';
-    document.querySelectorAll('.rec-area-btn').forEach(b => b.classList.remove('active'));
-    document.querySelector('.rec-area-btn[data-area=""]').classList.add('active');
-    renderRecursos();
-  });
+  // Search only
+  const recSearch = document.getElementById('rec-search');
+  if(recSearch) recSearch.addEventListener('input', renderRecursos);
 })();
 
 // Datos de recursos — se poblarán desde Jira cuando estén disponibles
@@ -645,8 +624,8 @@ function getAreaClass(area) {
 
 function renderRecursos() {
   const search = (document.getElementById('rec-search')?.value||'').toLowerCase();
-  const area   = document.querySelector('.rec-area-btn.active')?.dataset.area || '';
-  const pais   = document.getElementById('rec-pais')?.value || '';
+  const area   = '';
+  const pais   = '';
 
   let filtered = recursos.filter(r => {
     if(search && !r.nombre.toLowerCase().includes(search)) return false;
