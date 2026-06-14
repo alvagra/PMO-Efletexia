@@ -22,7 +22,7 @@ module.exports = async function handler(req, res) {
 
   const options = {
     hostname: `${JIRA_CLOUD}.atlassian.net`,
-    path: '/rest/api/3/search',
+    path: '/rest/api/3/search/jql',
     method: 'POST',
     headers: {
       'Authorization': `Basic ${auth}`,
@@ -54,3 +54,4 @@ module.exports = async function handler(req, res) {
     request.end();
   });
 };
+"Commit changes" → espera redespliegue → Ctrl+Shift+R. 👆Claude Fable 5 is currently unavailable.
