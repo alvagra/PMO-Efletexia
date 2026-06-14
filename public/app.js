@@ -351,6 +351,42 @@ async function loadData(manual=false){
 
 loadData();
 
+// ── MODAL ──
+let activeEpic=null, activeTab='gantt';
+
+function renderModalBody(){
+  document.getElementById('modal-body').innerHTML =
+    activeTab==='gantt' ? buildGantt(activeEpic) : buildDetail(activeEpic);
+}
+
+function openModal(key){
+  activeEpic = epics.find(e=>e.key===key);
+  if(!activeEpic) return;
+  activeTab = 'gantt';
+  document.getElementById('modal-key').textContent  = activeEpic.codigo || activeEpic.key;
+  document.getElementById('modal-title').textContent = activeEpic.summary;
+  document.getElementById('modal-panel').className  = 'modal-panel w-gantt';
+  document.querySelectorAll('.modal-tab').forEach(t=>t.classList.toggle('active', t.dataset.mtab==='gantt'));
+  renderModalBody();
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+document.querySelectorAll('.modal-tab').forEach(t=>{
+  t.addEventListener('click',()=>{
+    activeTab = t.dataset.mtab;
+    document.querySelectorAll('.modal-tab').forEach(x=>x.classList.toggle('active', x===t));
+    document.getElementById('modal-panel').className = 'modal-panel ' + (activeTab==='gantt' ? 'w-gantt' : 'w-detail');
+    renderModalBody();
+  });
+});
+
+document.getElementById('modal-close').addEventListener('click', ()=>{
+  document.getElementById('modal-overlay').classList.remove('open');
+});
+document.getElementById('modal-overlay').addEventListener('click', function(ev){
+  if(ev.target===this) this.classList.remove('open');
+});
+
 
 // ── RECURSOS ──
 (function initRecursos(){
