@@ -151,7 +151,7 @@ function buildGantt(e){
     </div>
     <div style="overflow-x:auto"><div class="gc">
       <div class="g-hdr"><div class="g-lc"></div><div class="g-months">${months.map(m=>`<div class="g-month" style="left:${m.lp.toFixed(2)}%;width:${m.wp.toFixed(2)}%">${m.label}</div>`).join('')}</div></div>
-      <div class="grow"><div class="grow-lbl main">${label}</div><div class="grow-track">${grid}${tl}<div class="g-bar ${bc}" style="left:${bL.toFixed(2)}%;width:${bW.toFixed(2)}%"></div></div></div>
+      <div class="grow"><div class="grow-lbl main"></div><div class="grow-track">${grid}${tl}<div class="g-bar ${bc}" style="left:${bL.toFixed(2)}%;width:${bW.toFixed(2)}%"></div></div></div>
       ${phRows}
     </div></div>
     ${dur>0?`
