@@ -1,3 +1,5 @@
+const https = require('https');
+
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -16,32 +18,39 @@ module.exports = async function handler(req, res) {
 
   const auth = Buffer.from(`${JIRA_EMAIL}:${JIRA_TOKEN}`).toString('base64');
   const { jql, fields, maxResults = 100, startAt = 0 } = req.body;
+  const body = JSON.stringify({ jql, fields, maxResults, startAt });
 
-  try {
-    const response = await fetch(`https://${JIRA_CLOUD}.atlassian.net/rest/api/3/search`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Basic ${auth}`,
-        'Content-Type':  'application/json',
-        'Accept':        'application/json',
-      },
-      body: JSON.stringify({ jql, fields, maxResults, startAt }),
+  const options = {
+    hostname: `${JIRA_CLOUD}.atlassian.net`,
+    path: '/rest/api/3/search',
+    method: 'POST',
+    headers: {
+      'Authorization': `Basic ${auth}`,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Content-Length': Buffer.byteLength(body),
+    },
+  };
+
+  return new Promise((resolve) => {
+    const request = https.request(options, (response) => {
+      let data = '';
+      response.on('data', chunk => { data += chunk; });
+      response.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          res.status(response.statusCode).json(json);
+        } catch (e) {
+          res.status(500).json({ error: 'Error al parsear respuesta de Jira' });
+        }
+        resolve();
+      });
     });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      return res.status(response.status).json({ error: JSON.stringify(data) });
-    }
-
-    return res.status(200).json(data);
-
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
-  }
+    request.on('error', (e) => {
+      res.status(500).json({ error: e.message });
+      resolve();
+    });
+    request.write(body);
+    request.end();
+  });
 };
-
-Clic en "Commit changes" → "Commit changes" (verde)
-
-
-Dime cuando termines ese paso y te guío con el vercel.json. 
