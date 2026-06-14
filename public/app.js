@@ -151,7 +151,7 @@ function buildGantt(e){
     </div>
     <div style="overflow-x:auto"><div class="gc">
       <div class="g-hdr"><div class="g-lc"></div><div class="g-months">${months.map(m=>`<div class="g-month" style="left:${m.lp.toFixed(2)}%;width:${m.wp.toFixed(2)}%">${m.label}</div>`).join('')}</div></div>
-      <div class="grow"><div class="grow-lbl main">${label}</div><div class="grow-track">${grid}${tl}<div class="g-bar ${bc}" style="left:${bL.toFixed(2)}%;width:${bW.toFixed(2)}%">${bW>10?label:''}</div></div></div>
+      <div class="grow"><div class="grow-lbl main">${label}</div><div class="grow-track">${grid}${tl}<div class="g-bar ${bc}" style="left:${bL.toFixed(2)}%;width:${bW.toFixed(2)}%"></div></div></div>
       ${phRows}
     </div></div>
     ${dur>0?`
@@ -182,9 +182,6 @@ function buildDetail(e){
   const bitHtml=e.bitacora?`<div class="log-box">${esc(e.bitacora)}</div>`:`<div class="log-box empty">Sin registros en bitácora</div>`;
   const proxHtml=e.proximosPasos?`<div class="log-box">${esc(e.proximosPasos)}</div>`:`<div class="log-box empty">Sin próximos pasos definidos</div>`;
   return `
-    <div class="dsec">Identificación</div>
-    <div class="drow"><span class="dlbl">Código</span><span class="dval" style="font-family:var(--font-mono);font-weight:700;color:var(--blue)">${esc(e.codigo)||'<span class="dval m">—</span>'}</span></div>
-    <div class="drow"><span class="dlbl">Clave Jira</span><span class="dval"><a class="jlink" href="${JIRA_BASE}${e.key}" target="_blank">${e.key}</a></span></div>
     <div class="dsec">Asignación</div>
     <div class="drow"><span class="dlbl">Asignado</span><span class="dval ${e.asignado?'':' m'}">${esc(e.asignado)||'—'}</span></div>
     <div class="dsec">Fechas</div>
