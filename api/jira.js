@@ -16,7 +16,7 @@ function jiraGet(auth, cloud, path) {
       res.on('data', chunk => { data += chunk; });
       res.on('end', () => {
         try { resolve({ status: res.statusCode, body: JSON.parse(data) }); }
-        catch(e) { reject(new Error('Parse error: ' + data.slice(0, 200))); }
+        catch(e) { reject(new Error('Parse error: ' + data.slice(0,200))); }
       });
     });
     req.on('error', reject);
@@ -44,29 +44,32 @@ module.exports = async function handler(req, res) {
   const jqlStr = jql || 'project = PTS AND issuetype = Epic ORDER BY created ASC';
 
   try {
-    // Page 1: startAt=0, maxResults=100
-    const p1 = new URLSearchParams({ jql: jqlStr, fields: fieldsStr, maxResults: 100, startAt: 0 });
-    const r1 = await jiraGet(auth, JIRA_CLOUD, `/rest/api/3/search/jql?${p1.toString()}`);
-    if (r1.status !== 200) return res.status(r1.status).json(r1.body);
+    let allIssues = [];
+    let nextPageToken = null;
 
-    let allIssues = r1.body.issues || [];
+    // Paginate using nextPageToken
+    do {
+      const params = new URLSearchParams({
+        jql: jqlStr,
+        fields: fieldsStr,
+        maxResults: 100,
+      });
+      if (nextPageToken) params.set('nextPageToken', nextPageToken);
 
-    // Page 2: only if first page returned exactly 100 items
-    if (allIssues.length === 100) {
-      const p2 = new URLSearchParams({ jql: jqlStr, fields: fieldsStr, maxResults: 100, startAt: 100 });
-      const r2 = await jiraGet(auth, JIRA_CLOUD, `/rest/api/3/search/jql?${p2.toString()}`);
-      if (r2.status === 200 && r2.body.issues) {
-        allIssues = allIssues.concat(r2.body.issues);
+      const result = await jiraGet(auth, JIRA_CLOUD, `/rest/api/3/search/jql?${params.toString()}`);
+
+      if (result.status !== 200) {
+        return res.status(result.status).json(result.body);
       }
-    }
 
-    // Deduplicate by id
-    const seen = new Set();
-    allIssues = allIssues.filter(i => {
-      if (seen.has(i.id)) return false;
-      seen.add(i.id);
-      return true;
-    });
+      const page = result.body;
+      allIssues = allIssues.concat(page.issues || []);
+      nextPageToken = page.isLast ? null : page.nextPageToken;
+
+      // Safety limit
+      if (allIssues.length >= 500) break;
+
+    } while (nextPageToken);
 
     return res.status(200).json({
       issues: allIssues,
