@@ -88,10 +88,10 @@ function renderTable(data){
       <td class="muted">${e.pctDesarrollo!==null?Math.round(e.pctDesarrollo*100)+'% / '+(e.pctPruebas!==null?Math.round(e.pctPruebas*100)+'%':'—'):'—'}</td>
       <td class="muted">${fmtD(e.fechaInicio)||'—'}</td>
       <td class="muted">${fmtD(e.duedate)||'—'}</td>
-      <td class="muted">${esc(e.asignado)||'—'}</td>
-      <td class="muted">${e.conformidad?`<span class="pill">${esc(e.conformidad)}</span>`:'—'}</td>
+      <td class="muted">—</td>
+      <td class="muted">${e.conformidad==='Si'?'<span style="color:var(--green);font-size:15px">✓</span>':'—'}</td>
       <td class="muted">${e.planPct!==null?Math.round(e.planPct*100)+'% / '+(e.realPct!==null?Math.round(e.realPct*100)+'%':'—'):'—'}</td>
-      <td class="muted">${e.docFuncional?`<span style="color:${e.docFuncional==='Si'?'var(--green)':'var(--red)'}">✕</span>`:'—'}</td>
+      <td class="muted">${e.docFuncional==='Si'?'<span style="color:var(--green);font-size:15px">✓</span>':e.docFuncional==='No'?'<span style="color:var(--red);font-size:15px">✕</span>':'—'}</td>
       <td class="muted">${esc(e.sponsor)||'—'}</td>
       <td><button class="btn-action" type="button" title="Cronograma y detalles" onclick="openModal('${e.key}');event.stopPropagation()">···</button></td>
     </tr>
@@ -575,10 +575,10 @@ function renderTable(data){
       <td class="muted">${e.pctDesarrollo!==null?Math.round(e.pctDesarrollo*100)+'% / '+(e.pctPruebas!==null?Math.round(e.pctPruebas*100)+'%':'—'):'—'}</td>
       <td class="muted">${fmtD(e.fechaInicio)||'—'}</td>
       <td class="muted">${fmtD(e.duedate)||'—'}</td>
-      <td class="muted">${esc(e.asignado)||'—'}</td>
-      <td class="muted">${e.conformidad?`<span class="pill">${esc(e.conformidad)}</span>`:'—'}</td>
+      <td class="muted">—</td>
+      <td class="muted">${e.conformidad==='Si'?'<span style="color:var(--green);font-size:15px">✓</span>':'—'}</td>
       <td class="muted">${e.planPct!==null?Math.round(e.planPct*100)+'% / '+(e.realPct!==null?Math.round(e.realPct*100)+'%':'—'):'—'}</td>
-      <td class="muted">${e.docFuncional?`<span style="color:${e.docFuncional==='Si'?'var(--green)':'var(--red)'}">✕</span>`:'—'}</td>
+      <td class="muted">${e.docFuncional==='Si'?'<span style="color:var(--green);font-size:15px">✓</span>':e.docFuncional==='No'?'<span style="color:var(--red);font-size:15px">✕</span>':'—'}</td>
       <td class="muted">${esc(e.sponsor)||'—'}</td>
       <td><button class="btn-action" type="button" title="Cronograma y detalles" onclick="openModal('${e.key}');event.stopPropagation()">···</button></td>
     </tr>
