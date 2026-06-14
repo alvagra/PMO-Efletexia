@@ -459,16 +459,140 @@ document.querySelectorAll('.tabs .tab').forEach(tab=>{
     tab.classList.add('active');
     const panel=document.getElementById('panel-'+tab.dataset.tab);
     if(panel) panel.classList.add('active');
+    // Load recursos data when switching to that tab
+    if(tab.dataset.tab==='recursos' && recursos.length===0) loadRecursos();
   });
 });
 
+
+
+// ── CARGA DE RECURSOS DESDE JIRA ──
+async function loadRecursos() {
+  const tbody = document.getElementById('rec-table-body');
+  const info  = document.getElementById('rec-table-info');
+  if(info) info.textContent = 'Cargando recursos desde Jira...';
+
+  try {
+    const resp = await fetch('/api/jira', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ type: 'recursos' })
+    });
+    if(!resp.ok) throw new Error('Error ' + resp.status);
+    const data = await resp.json();
+    const historias = data.issues || [];
+
+    // Capacity: 168h/month standard
+    const CAPACITY = 168;
+    const today = new Date(); today.setHours(0,0,0,0);
+    const fechaCorteEl = document.getElementById('rec-fecha-corte');
+    const fechaCorte = fechaCorteEl && fechaCorteEl.value ? new Date(fechaCorteEl.value + 'T12:00:00') : today;
+    const mesActual = fechaCorte.getMonth();
+    const anioActual = fechaCorte.getFullYear();
+    const diasMes = new Date(anioActual, mesActual+1, 0).getDate();
+    const diaCorte = fechaCorte.getDate();
+    const horasTranscurridas = Math.round((diaCorte / diasMes) * CAPACITY);
+    const horasFuturas = CAPACITY - horasTranscurridas;
+
+    // Update fecha corte info bar
+    const paises = ['Perú','Colombia','México','Guatemala','Regional'];
+    const mesNombre = fechaCorte.toLocaleDateString('es-PE',{month:'long',year:'numeric'});
+    const avanceMes = Math.round((diaCorte/diasMes)*100);
+    const infoBar = document.getElementById('rec-corte-info');
+    if(infoBar) infoBar.innerHTML = `
+      <span style="color:var(--text-muted);font-size:12px">Ref. · ${mesNombre} &nbsp;|&nbsp;
+      Capacidad mensual: <span style="color:var(--blue)">${CAPACITY}h</span> &nbsp;|&nbsp;
+      Horas transcurridas: <span style="color:var(--text-muted)">${horasTranscurridas}h</span> &nbsp;|&nbsp;
+      Horas futuras disponibles: <span style="color:var(--yellow)">${horasFuturas}h</span> &nbsp;|&nbsp;
+      Avance del mes: <span style="color:var(--green)">${avanceMes}%</span></span>
+    `;
+
+    // Group by assignee
+    const byPerson = {};
+    historias.forEach(h => {
+      const f = h.fields;
+      const nombre = f.assignee ? f.assignee.displayName : 'Sin asignar';
+      const horasEst  = f.customfield_11136 || 0;
+      const horasPend = f.customfield_11137 || 0;
+      const horasCerr = Math.max(0, horasEst - horasPend);
+      const epicaKey  = f.parent ? f.parent.key : null;
+      const epicaNom  = f.parent ? f.parent.fields.summary : 'Sin épica';
+      const area      = f.customfield_10930 ? f.customfield_10930.value : null;
+      const pais      = f.customfield_10592 ? f.customfield_10592.value : null;
+      const bloq      = f.customfield_11003 ? f.customfield_11003.value : null;
+      const status    = f.status ? f.status.name : '';
+      const isDone    = ['Finalizada','Producción','En producción'].includes(status);
+
+      if(!byPerson[nombre]){
+        byPerson[nombre] = {
+          nombre, area, pais,
+          horasEst:0, horasPend:0, horasCerr:0,
+          totalHistorias:0, entregasPend:0, bloqueantes:0,
+          epicasMap: {},
+        };
+      }
+      const p = byPerson[nombre];
+      p.horasEst   += horasEst;
+      p.horasPend  += horasPend;
+      p.horasCerr  += horasCerr;
+      p.totalHistorias++;
+      if(!isDone) p.entregasPend++;
+      if(bloq === 'Si') p.bloqueantes++;
+      if(area && !p.area) p.area = area;
+      if(pais && !p.pais) p.pais = pais;
+
+      // Épica tracking
+      if(epicaKey){
+        if(!p.epicasMap[epicaKey]){
+          p.epicasMap[epicaKey] = { key:epicaKey, nombre:epicaNom, horasEst:0, horasPend:0, actividades:0, pendientes:0 };
+        }
+        p.epicasMap[epicaKey].horasEst   += horasEst;
+        p.epicasMap[epicaKey].horasPend  += horasPend;
+        p.epicasMap[epicaKey].actividades++;
+        if(!isDone) p.epicasMap[epicaKey].pendientes++;
+      }
+    });
+
+    // Build recursos array sorted by horasPend desc
+    recursos = Object.values(byPerson).map(p => ({
+      nombre:         p.nombre,
+      area:           p.area,
+      pais:           p.pais,
+      proyectos:      Object.keys(p.epicasMap).length,
+      horasPend:      p.horasPend,
+      horasTotal:     p.horasEst,
+      horasCerr:      p.horasCerr,
+      horasLibre:     Math.max(0, CAPACITY - p.horasEst),
+      entregasPend:   p.entregasPend,
+      bloqueantes:    p.bloqueantes,
+      proyectosDetalle: Object.values(p.epicasMap).map(e => ({
+        key:        e.key,
+        nombre:     e.nombre,
+        horasTotal: e.horasEst,
+        horasPend:  e.horasPend,
+        actividades:e.actividades,
+        pendientes: e.pendientes,
+      })).sort((a,b) => b.horasTotal - a.horasTotal),
+    })).filter(r => r.nombre !== 'Sin asignar')
+      .sort((a,b) => b.horasPend - a.horasPend);
+
+    renderRecursos();
+
+  } catch(err) {
+    console.error('Error cargando recursos:', err);
+    if(info) info.textContent = 'Error al cargar recursos: ' + err.message;
+  }
+}
 
 // ── RECURSOS ──
 (function initRecursos(){
   // Set default fecha corte = today
   const today = new Date().toISOString().split('T')[0];
   const fechaInput = document.getElementById('rec-fecha-corte');
-  if(fechaInput) fechaInput.value = today;
+  if(fechaInput){
+    fechaInput.value = today;
+    fechaInput.addEventListener('change', ()=>{ if(recursos.length>0) renderRecursos(); });
+  }
 
   // Area buttons
   document.querySelectorAll('.rec-area-btn').forEach(btn => {
