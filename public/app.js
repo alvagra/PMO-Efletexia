@@ -885,18 +885,16 @@ function verProyecto(recursoEncoded, epicaKey) {
       ${tareasHtml}
     </div>`;
 
-  document.getElementById('det-overlay').classList.add('open');
+  document.getElementById('det-panel').classList.add('open');
 }
 
 function closeDetModal(){
-  const ov = document.getElementById('det-overlay');
-  if(ov) ov.classList.remove('open');
+  const panel = document.getElementById('det-panel');
+  if(panel) panel.classList.remove('open');
 }
 (function(){
-  const ov  = document.getElementById('det-overlay');
   const btn = document.getElementById('det-close');
   if(btn) btn.addEventListener('click', function(ev){ ev.stopPropagation(); closeDetModal(); });
-  if(ov)  ov.addEventListener('click',  function(ev){ if(ev.target === ov) closeDetModal(); });
 })();
 
 // Close recurso modal
@@ -914,7 +912,7 @@ function closeRecModal(){
 // Cerrar modales con Escape (en cascada: det → rec → portfolio)
 document.addEventListener('keydown', function(ev){
   if(ev.key === 'Escape'){
-    const detOv = document.getElementById('det-overlay');
+    const detOv = document.getElementById('det-panel');
     if(detOv && detOv.classList.contains('open')){ closeDetModal(); return; }
     const recOv = document.getElementById('rec-modal-overlay');
     if(recOv && recOv.classList.contains('open')){ closeRecModal(); return; }
