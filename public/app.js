@@ -96,7 +96,7 @@ function renderTable(data){
       <td><button class="btn-action" type="button" title="Cronograma y detalles" onclick="openModal('${e.key}');event.stopPropagation()">···</button></td>
     </tr>
   `).join('');
-  tb.querySelectorAll('tr[data-key]').forEach(tr=>tr.addEventListener('click',()=>openModal(tr.dataset.key)));
+
 }
 
 // ── GANTT ──
