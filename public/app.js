@@ -266,15 +266,7 @@ document.getElementById('btn-limpiar').addEventListener('click',()=>{
   ['s-sponsor','s-pais','s-cat','s-area'].forEach(id=>document.getElementById(id).value='');
   document.querySelectorAll('.estados-grid input').forEach(cb=>cb.checked=false);
 });
-document.querySelectorAll('.tabs .tab').forEach(tab=>{
-  tab.addEventListener('click',()=>{
-    document.querySelectorAll('.tabs .tab').forEach(t=>t.classList.remove('active'));
-    document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
-    tab.classList.add('active');
-    const panel=document.getElementById('panel-'+tab.dataset.tab);
-    if(panel)panel.classList.add('active');
-  });
-});
+
 // ── SORT ──
 let sortCol=null, sortDir=1;
 function sortedData(data){
@@ -857,6 +849,105 @@ function renderRecursos() {
 }
 
 function verRecurso(nombre) {
-  // Placeholder — se expandirá cuando haya datos reales
-  console.log('Ver recurso:', nombre);
+  const r = recursos.find(x => x.nombre === nombre);
+  if(!r) return;
+
+  document.getElementById('rec-modal-name').textContent = r.nombre;
+  document.getElementById('rec-modal-area').textContent = r.area || '—';
+
+  const proyectos = r.proyectosDetalle || [];
+  const totalHrs  = proyectos.reduce((a,p) => a + (p.horasTotal||0), 0);
+
+  // Stats
+  const statsHtml = `
+    <div class="rec-modal-stats">
+      <div class="rec-modal-stat">
+        <div class="rec-modal-stat-val c-blue">${r.proyectos}</div>
+        <div class="rec-modal-stat-lbl">Proyectos</div>
+      </div>
+      <div class="rec-modal-stat">
+        <div class="rec-modal-stat-val" style="color:${r.horasPend>=40?'var(--red)':r.horasPend>=20?'var(--yellow)':'var(--green)'}">${r.horasPend}h</div>
+        <div class="rec-modal-stat-lbl">Horas Pend.</div>
+      </div>
+      <div class="rec-modal-stat">
+        <div class="rec-modal-stat-val" style="color:${r.entregasPend>10?'var(--red)':'var(--green)'}">${r.entregasPend}</div>
+        <div class="rec-modal-stat-lbl">Entregas Pend.</div>
+      </div>
+    </div>`;
+
+  // Participación por proyecto
+  let partRows = '';
+  if(proyectos.length && totalHrs > 0) {
+    partRows = proyectos.map(p => {
+      const pct = Math.round((p.horasTotal / totalHrs) * 100);
+      return `<div class="rec-part-row">
+        <span class="rec-part-name" title="${p.nombre}">${p.nombre}</span>
+        <div class="rec-part-bar-wrap"><div class="rec-part-bar-fill" style="width:${pct}%"></div></div>
+        <span class="rec-part-pct">${pct}%</span>
+        <span class="rec-part-hrs">${p.horasTotal}h</span>
+      </div>`;
+    }).join('');
+    partRows += `<div class="rec-part-total">Total: ${totalHrs}h</div>`;
+  } else {
+    partRows = '<div style="color:var(--text-dim);font-size:12px">Sin datos de proyectos disponibles</div>';
+  }
+
+  // Proyectos · Actividades
+  let projCards = '';
+  if(proyectos.length) {
+    projCards = proyectos.map(p => {
+      const hasPend = p.pendientes > 0;
+      return `<div class="rec-proj-card">
+        <div class="rec-proj-card-left">
+          <div class="rec-proj-card-name">${p.nombre}</div>
+          <div class="rec-proj-card-meta">${p.actividades} act · ${p.horasTotal}h · ${p.horasPend}h pend.</div>
+        </div>
+        <span class="rec-proj-pend-badge ${hasPend?'has-pend':'no-pend'}">${p.pendientes} pend.</span>
+        <button class="rec-proj-link" title="Abrir en Jira" onclick="window.open('${JIRA_BASE}${p.key||''}','_blank')">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+        </button>
+      </div>`;
+    }).join('');
+  } else {
+    projCards = '<div style="color:var(--text-dim);font-size:12px">Sin proyectos registrados</div>';
+  }
+
+  document.getElementById('rec-modal-body').innerHTML = `
+    ${statsHtml}
+    <div style="margin-bottom:20px">
+      <div class="rec-section-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        Participación por proyecto
+      </div>
+      ${partRows}
+    </div>
+    <div>
+      <div class="rec-section-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        Proyectos · Actividades
+      </div>
+      ${projCards}
+    </div>
+  `;
+
+  document.getElementById('rec-modal-overlay').classList.add('open');
 }
+
+// Close modal
+document.getElementById('rec-modal-close')?.addEventListener('click', () => {
+  document.getElementById('rec-modal-overlay').classList.remove('open');
+});
+document.getElementById('rec-modal-overlay')?.addEventListener('click', function(ev) {
+  if(ev.target === this) this.classList.remove('open');
+});
+
+// Remove Capacidad tab logic (if any remains)
+document.querySelectorAll('.tabs .tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tabs .tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    const panel = document.getElementById('panel-' + tab.dataset.tab);
+    if(panel) panel.classList.add('active');
+  });
+});
