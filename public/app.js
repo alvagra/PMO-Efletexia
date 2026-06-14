@@ -472,9 +472,8 @@ async function loadRecursos() {
   try {
     const respRec = await fetch('/api/jira', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ type:'recursos' }) });
     if(!respRec.ok) throw new Error('Error recursos ' + respRec.status);
-    const dataRec          = await respRec.json();
-    const historias        = dataRec.issues || [];          // en realidad son Tareas
-    const historiaToEpica  = dataRec.historiaToEpica || {}; // Historia.key → {key, nombre} de Épica
+    const dataRec   = await respRec.json();
+    const historias = dataRec.issues || [];
 
     // Capacity: 168h/month standard
     const CAPACITY = 168;
@@ -509,14 +508,10 @@ async function loadRecursos() {
       const horasEst  = f.customfield_11136 || 0;
       const horasPend = f.customfield_11137 || 0;
       const horasCerr = Math.max(0, horasEst - horasPend);
-      // Tarea → parent = Historia → historiaToEpica[Historia.key] = Épica
+      // Tarea → parent directo = Épica (jerarquía de un nivel)
       const parentDir  = f.parent || null;
-      const historiaKey = parentDir ? parentDir.key : null;
-      const epicaInfo  = historiaKey && historiaToEpica[historiaKey]
-                           ? historiaToEpica[historiaKey]
-                           : (parentDir ? { key: parentDir.key, nombre: parentDir.fields ? parentDir.fields.summary : parentDir.key } : null);
-      const epicaKey   = epicaInfo ? epicaInfo.key   : null;
-      const epicaNom   = epicaInfo ? epicaInfo.nombre : 'Sin épica';
+      const epicaKey   = parentDir ? parentDir.key : null;
+      const epicaNom   = parentDir && parentDir.fields ? parentDir.fields.summary : (parentDir ? parentDir.key : 'Sin épica');
       const area      = f.customfield_10930 ? f.customfield_10930.value : null;
       const pais      = f.customfield_10592 ? f.customfield_10592.value : null;
       const bloq      = f.customfield_11003 ? f.customfield_11003.value : null;
