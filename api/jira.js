@@ -6,10 +6,7 @@ function jiraGet(auth, cloud, path) {
       hostname: `${cloud}.atlassian.net`,
       path,
       method: 'GET',
-      headers: {
-        'Authorization': `Basic ${auth}`,
-        'Accept': 'application/json',
-      },
+      headers: { 'Authorization': `Basic ${auth}`, 'Accept': 'application/json' },
     };
     const req = https.request(options, (res) => {
       let data = '';
@@ -22,6 +19,23 @@ function jiraGet(auth, cloud, path) {
     req.on('error', reject);
     req.end();
   });
+}
+
+async function fetchAllPages(auth, cloud, jql, fields) {
+  const fieldsStr = Array.isArray(fields) ? fields.join(',') : fields;
+  let allIssues = [];
+  let nextPageToken = null;
+  do {
+    const params = new URLSearchParams({ jql, fields: fieldsStr, maxResults: 100 });
+    if (nextPageToken) params.set('nextPageToken', nextPageToken);
+    const result = await jiraGet(auth, cloud, `/rest/api/3/search/jql?${params.toString()}`);
+    if (result.status !== 200) throw new Error(`Jira ${result.status}: ${JSON.stringify(result.body)}`);
+    const page = result.body;
+    allIssues = allIssues.concat(page.issues || []);
+    nextPageToken = page.isLast ? null : page.nextPageToken;
+    if (allIssues.length >= 2000) break;
+  } while (nextPageToken);
+  return allIssues;
 }
 
 module.exports = async function handler(req, res) {
@@ -39,43 +53,43 @@ module.exports = async function handler(req, res) {
   }
 
   const auth = Buffer.from(`${JIRA_EMAIL}:${JIRA_TOKEN}`).toString('base64');
-  const { jql, fields } = req.body || {};
-  const fieldsStr = Array.isArray(fields) ? fields.join(',') : (fields || '');
-  const jqlStr = jql || 'project = PTS AND issuetype = Epic ORDER BY created ASC';
+  const { type } = req.body || {};
 
   try {
-    let allIssues = [];
-    let nextPageToken = null;
+    if (type === 'recursos') {
+      // Fetch all Historias with hours fields
+      const HISTORIA_FIELDS = [
+        'summary', 'status', 'assignee', 'parent', 'duedate',
+        'customfield_10930', // Área
+        'customfield_10592', // País
+        'customfield_11003', // Bloqueante
+        'customfield_11136', // Horas Estimadas
+        'customfield_11137', // Horas Pendientes
+      ];
+      const issues = await fetchAllPages(
+        auth, JIRA_CLOUD,
+        'project = PTS AND issuetype = Historia ORDER BY assignee ASC',
+        HISTORIA_FIELDS
+      );
+      return res.status(200).json({ issues, total: issues.length, type: 'recursos' });
 
-    // Paginate using nextPageToken
-    do {
-      const params = new URLSearchParams({
-        jql: jqlStr,
-        fields: fieldsStr,
-        maxResults: 100,
-      });
-      if (nextPageToken) params.set('nextPageToken', nextPageToken);
-
-      const result = await jiraGet(auth, JIRA_CLOUD, `/rest/api/3/search/jql?${params.toString()}`);
-
-      if (result.status !== 200) {
-        return res.status(result.status).json(result.body);
-      }
-
-      const page = result.body;
-      allIssues = allIssues.concat(page.issues || []);
-      nextPageToken = page.isLast ? null : page.nextPageToken;
-
-      // Safety limit
-      if (allIssues.length >= 500) break;
-
-    } while (nextPageToken);
-
-    return res.status(200).json({
-      issues: allIssues,
-      total: allIssues.length,
-      isLast: true,
-    });
+    } else {
+      // Default: fetch Epics
+      const { jql, fields } = req.body || {};
+      const jqlStr = jql || 'project = PTS AND issuetype = Epic ORDER BY created ASC';
+      const EPIC_FIELDS = fields || [
+        'summary','status','assignee','reporter','labels','duedate',
+        'customfield_10015','customfield_10592','customfield_10659',
+        'customfield_10725','customfield_10726','customfield_10759',
+        'customfield_10895','customfield_10928','customfield_10929',
+        'customfield_10930','customfield_10931','customfield_10934',
+        'customfield_10829','customfield_10862','customfield_10969',
+        'customfield_10970','customfield_11003','customfield_11004',
+        'customfield_11037','customfield_11070'
+      ];
+      const issues = await fetchAllPages(auth, JIRA_CLOUD, jqlStr, EPIC_FIELDS);
+      return res.status(200).json({ issues, total: issues.length, isLast: true });
+    }
 
   } catch (err) {
     return res.status(500).json({ error: err.message });
