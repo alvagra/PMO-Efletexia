@@ -77,7 +77,7 @@ function renderTable(data){
   if(!data.length){tb.innerHTML='<tr><td colspan="17" style="text-align:center;padding:40px;color:var(--text-muted)">Sin resultados</td></tr>';return}
   tb.innerHTML=data.map(e=>`
     <tr data-key="${e.key}">
-      <td style="color:var(--text-muted)">—</td>
+      <td style="text-align:center;font-weight:600;color:var(--text-primary)">${e.prioridad||'—'}</td>
       <td class="code"><a class="jlink" href="${JIRA_BASE}${e.key}" target="_blank" title="Abrir en Jira" onclick="event.stopPropagation()">${esc(e.codigo||e.key)}</a></td>
       <td class="proj" title="${esc(e.summary)}">${esc(e.summary)}</td>
       <td class="cat">${esc(e.categoria)||'<span style="color:var(--text-muted)">—</span>'}</td>
