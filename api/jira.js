@@ -44,36 +44,29 @@ module.exports = async function handler(req, res) {
   const jqlStr = jql || 'project = PTS AND issuetype = Epic ORDER BY created ASC';
 
   try {
-    // Load all pages — fetch page by page until isLast = true
-    let allIssues = [];
-    let startAt = 0;
-    let isLast = false;
+    // Page 1: startAt=0, maxResults=100
+    const p1 = new URLSearchParams({ jql: jqlStr, fields: fieldsStr, maxResults: 100, startAt: 0 });
+    const r1 = await jiraGet(auth, JIRA_CLOUD, `/rest/api/3/search/jql?${p1.toString()}`);
+    if (r1.status !== 200) return res.status(r1.status).json(r1.body);
 
-    while (!isLast) {
-      const params = new URLSearchParams({
-        jql: jqlStr,
-        fields: fieldsStr,
-        maxResults: 100,
-        startAt: startAt,
-      });
+    let allIssues = r1.body.issues || [];
 
-      const result = await jiraGet(auth, JIRA_CLOUD, `/rest/api/3/search/jql?${params.toString()}`);
-
-      if (result.status !== 200) {
-        return res.status(result.status).json(result.body);
+    // Page 2: only if first page returned exactly 100 items
+    if (allIssues.length === 100) {
+      const p2 = new URLSearchParams({ jql: jqlStr, fields: fieldsStr, maxResults: 100, startAt: 100 });
+      const r2 = await jiraGet(auth, JIRA_CLOUD, `/rest/api/3/search/jql?${p2.toString()}`);
+      if (r2.status === 200 && r2.body.issues) {
+        allIssues = allIssues.concat(r2.body.issues);
       }
-
-      const page = result.body;
-      const pageIssues = page.issues || [];
-      allIssues = allIssues.concat(pageIssues);
-
-      // Check if there are more pages
-      isLast = page.isLast === true || pageIssues.length < 100;
-      startAt += pageIssues.length;
-
-      // Safety limit
-      if (startAt >= 1000) break;
     }
+
+    // Deduplicate by id
+    const seen = new Set();
+    allIssues = allIssues.filter(i => {
+      if (seen.has(i.id)) return false;
+      seen.add(i.id);
+      return true;
+    });
 
     return res.status(200).json({
       issues: allIssues,
