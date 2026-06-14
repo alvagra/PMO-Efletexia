@@ -478,41 +478,14 @@ a.jlink:hover{text-decoration:underline}
   </div>
 
   <!-- Filtros -->
-  <div class="rec-filters">
-    <div class="rec-search-wrap">
+  <div class="rec-filters" style="display:none"></div>
+
+  <!-- Fecha de corte + Buscador -->
+  <div class="rec-corte">
+    <div class="rec-search-wrap" style="margin-right:16px">
       <svg class="rec-search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
       <input id="rec-search" class="rec-search-input" placeholder="Buscar recurso o proyecto..." autocomplete="off"/>
     </div>
-    <div class="rec-area-btns" id="rec-area-btns">
-      <button class="rec-area-btn active" data-area="">Todas</button>
-      <button class="rec-area-btn" data-area="Desarrollo">Desarrollo</button>
-      <button class="rec-area-btn" data-area="Soporte TI">Soporte TI</button>
-      <button class="rec-area-btn" data-area="PMO">PMO</button>
-      <button class="rec-area-btn" data-area="PM">PM</button>
-      <button class="rec-area-btn" data-area="Torre de Control">Torre de Control</button>
-      <button class="rec-area-btn" data-area="Data">Data</button>
-      <button class="rec-area-btn" data-area="Operacion">Operacion</button>
-    </div>
-    <select id="rec-pais" class="rec-pais-sel">
-      <option value="">Todos los países</option>
-      <option>Perú</option>
-      <option>Colombia</option>
-      <option>México</option>
-      <option>Guatemala</option>
-      <option>Regional</option>
-    </select>
-    <button class="rec-sort-btn" id="rec-sort-btn">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M7 12h10M11 18h2"/></svg>
-      Ordenar por columna
-    </button>
-    <button class="rec-limpiar" id="rec-limpiar">
-      <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l10 10M13 3L3 13"/></svg>
-      Limpiar
-    </button>
-  </div>
-
-  <!-- Fecha de corte -->
-  <div class="rec-corte">
     <div class="rec-corte-label">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
       FECHA DE CORTE
