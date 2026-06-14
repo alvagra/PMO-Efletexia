@@ -473,18 +473,10 @@ async function loadRecursos() {
   if(info) info.textContent = 'Cargando recursos desde Jira...';
 
   try {
-    // Carga Historias y Ventas en paralelo
-    const [respRec, respVent] = await Promise.all([
-      fetch('/api/jira', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ type:'recursos' }) }),
-      fetch('/api/jira', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ type:'ventas' }) }),
-    ]);
-    if(!respRec.ok)  throw new Error('Error recursos ' + respRec.status);
-    if(!respVent.ok) throw new Error('Error ventas '   + respVent.status);
-
-    const dataRec  = await respRec.json();
-    const dataVent = await respVent.json();
-    const historias = dataRec.issues  || [];
-    const ventas    = dataVent.issues || [];
+    const respRec = await fetch('/api/jira', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ type:'recursos' }) });
+    if(!respRec.ok) throw new Error('Error recursos ' + respRec.status);
+    const dataRec   = await respRec.json();
+    const historias = dataRec.issues || [];
 
     // Capacity: 168h/month standard
     const CAPACITY = 168;
@@ -566,50 +558,6 @@ async function loadRecursos() {
       }
     });
 
-    // ── PROCESAR VENTAS por persona ──
-    const byPersonVentas = {};
-    ventas.forEach(v => {
-      const f = v.fields;
-      const nombre    = f.assignee ? f.assignee.displayName : 'Sin asignar';
-      const horasEst  = f.customfield_11136 || 0;
-      const horasPend = f.customfield_11137 || 0;
-      const status    = f.status ? f.status.name : '';
-      const isDone    = ['Finalizada','Producción','En producción'].includes(status);
-      const area      = f.customfield_10930 ? f.customfield_10930.value : null;
-      const sponsor   = f.customfield_10931 ? f.customfield_10931.value : null;
-      const pctPlan   = f.customfield_10725 != null ? f.customfield_10725 : null;
-      const pctReal   = f.customfield_10726 != null ? f.customfield_10726 : null;
-      const desvioPct = f.customfield_10759 != null ? f.customfield_10759 : null;
-      const pctAnal   = f.customfield_10895 != null ? f.customfield_10895 : null;
-      const pctDesarr = f.customfield_10928 != null ? f.customfield_10928 : null;
-      const pctPrueb  = f.customfield_10969 != null ? f.customfield_10969 : null;
-      const fechaFin  = f.duedate || null;
-      const fechaIni  = f.customfield_10015 || null;
-
-      if(!byPersonVentas[nombre]){
-        byPersonVentas[nombre] = { nombre, horasEst:0, horasPend:0, total:0, pendientes:0, ventasMap:{} };
-      }
-      const pv = byPersonVentas[nombre];
-      pv.horasEst   += horasEst;
-      pv.horasPend  += horasPend;
-      pv.total++;
-      if(!isDone) pv.pendientes++;
-
-      // Una entrada por venta
-      pv.ventasMap[v.key] = {
-        key: v.key,
-        nombre:    f.summary || v.key,
-        status,
-        area,
-        sponsor,
-        pctPlan, pctReal, desvioPct,
-        pctAnal, pctDesarr, pctPrueb,
-        fechaFin, fechaIni,
-        horasEst, horasPend,
-        isDone,
-      };
-    });
-
     // Build recursos array sorted by horasPend desc
     recursos = Object.values(byPerson).map(p => ({
       nombre:         p.nombre,
@@ -631,14 +579,6 @@ async function loadRecursos() {
         pendientes: e.pendientes,
         tareas:     e.tareas || [],
       })).sort((a,b) => b.horasTotal - a.horasTotal),
-      // Ventas de esta persona
-      ventasDetalle: byPersonVentas[p.nombre]
-        ? Object.values(byPersonVentas[p.nombre].ventasMap).sort((a,b) => (b.horasEst||0)-(a.horasEst||0))
-        : [],
-      ventasTotal:    byPersonVentas[p.nombre] ? byPersonVentas[p.nombre].total     : 0,
-      ventasPend:     byPersonVentas[p.nombre] ? byPersonVentas[p.nombre].pendientes : 0,
-      ventasHorasEst: byPersonVentas[p.nombre] ? byPersonVentas[p.nombre].horasEst  : 0,
-      ventasHorasPend:byPersonVentas[p.nombre] ? byPersonVentas[p.nombre].horasPend : 0,
     })).filter(r => r.nombre !== 'Sin asignar')
       .sort((a,b) => b.horasPend - a.horasPend);
 
@@ -853,55 +793,6 @@ function verRecurso(nombre) {
     projCards = '<div style="color:var(--text-dim);font-size:12px">Sin proyectos registrados</div>';
   }
 
-  // ── VENTAS · Métricas + Detalle ──
-  const ventas = r.ventasDetalle || [];
-  const ventasStats = `
-    <div class="rec-modal-stats" style="margin-bottom:16px">
-      <div class="rec-modal-stat">
-        <div class="rec-modal-stat-val" style="color:var(--purple,#a78bfa)">${r.ventasTotal||0}</div>
-        <div class="rec-modal-stat-lbl">Actividades</div>
-      </div>
-      <div class="rec-modal-stat">
-        <div class="rec-modal-stat-val" style="color:${(r.ventasHorasPend||0)>=40?'var(--red)':(r.ventasHorasPend||0)>=20?'var(--yellow)':'var(--green)'}">${r.ventasHorasPend||0}h</div>
-        <div class="rec-modal-stat-lbl">Horas Pend.</div>
-      </div>
-      <div class="rec-modal-stat">
-        <div class="rec-modal-stat-val" style="color:var(--blue)">${r.ventasHorasEst||0}h</div>
-        <div class="rec-modal-stat-lbl">Horas Total</div>
-      </div>
-    </div>`;
-
-  let ventaCards = '';
-  if(ventas.length) {
-    ventaCards = ventas.map(v => {
-      const pReal  = v.pctReal   != null ? Math.round(v.pctReal*100)   : null;
-      const pPlan  = v.pctPlan   != null ? Math.round(v.pctPlan*100)   : null;
-      const pDesv  = v.desvioPct != null ? Math.round(v.desvioPct*100) : null;
-      const pDesarr= v.pctDesarr != null ? Math.round(v.pctDesarr*100) : null;
-      const desvColor = pDesv===null?'var(--text-muted)':Math.abs(pDesv)>17?'var(--red)':Math.abs(pDesv)>=5?'var(--yellow)':'var(--green)';
-      const avance = pReal!=null&&pPlan!=null?`${pReal}% / Plan ${pPlan}%`:pReal!=null?`${pReal}%`:'—';
-      const statusCls = {'Backlog':'backlog','Análisis':'analisis','Desarrollo':'desarrollo','Pruebas':'pruebas','Producción':'produccion','Planificado':'planificado','Stand by':'standby','Desestimado':'desestimado','En curso':'en-curso'}[v.status]||'backlog';
-      return `<div class="rec-venta-card">
-        <div class="rec-venta-card-header">
-          <span class="rec-venta-nombre" title="${esc(v.nombre)}">${esc(v.nombre)}</span>
-          <span class="badge badge-${statusCls}">${esc(v.status)}</span>
-          <button class="rec-proj-link" title="Abrir en Jira" onclick="window.open('${JIRA_BASE}${v.key}','_blank')">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-          </button>
-        </div>
-        <div class="rec-venta-card-fields">
-          <div class="rec-venta-field"><span class="rec-venta-lbl">Área</span><span class="rec-venta-val">${esc(v.area)||'—'}</span></div>
-          <div class="rec-venta-field"><span class="rec-venta-lbl">Sponsor</span><span class="rec-venta-val">${esc(v.sponsor)||'—'}</span></div>
-          <div class="rec-venta-field"><span class="rec-venta-lbl">Avance</span><span class="rec-venta-val">${avance}</span></div>
-          <div class="rec-venta-field"><span class="rec-venta-lbl">Fin</span><span class="rec-venta-val">${fmtD(v.fechaFin)||'—'}</span></div>
-          <div class="rec-venta-field"><span class="rec-venta-lbl">Desvío</span><span class="rec-venta-val" style="color:${desvColor}">${pDesv!==null?pDesv+'%':'—'}</span></div>
-        </div>
-      </div>`;
-    }).join('');
-  } else {
-    ventaCards = '<div style="color:var(--text-dim);font-size:12px">Sin ventas registradas</div>';
-  }
-
   document.getElementById('rec-modal-body').innerHTML = `
     ${statsHtml}
     <div style="margin-bottom:20px">
@@ -911,20 +802,12 @@ function verRecurso(nombre) {
       </div>
       ${partRows}
     </div>
-    <div style="margin-bottom:20px">
+    <div>
       <div class="rec-section-title">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
         Proyectos · Actividades
       </div>
       ${projCards}
-    </div>
-    <div>
-      <div class="rec-section-title" style="color:var(--purple,#a78bfa)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-        Ventas
-      </div>
-      ${ventasStats}
-      ${ventaCards}
     </div>
   `;
 
