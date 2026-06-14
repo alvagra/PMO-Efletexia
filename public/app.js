@@ -699,7 +699,6 @@ function renderRecursos() {
 
     return `<tr>
       <td><span class="rec-name">${r.nombre}</span></td>
-      <td><span class="rec-area-badge ${getAreaClass(r.area)}">${r.area||'—'}</span></td>
       <td style="text-align:center">${r.proyectos}</td>
       <td><span class="${hClass}">${r.horasPend}h</span></td>
       <td style="color:var(--text-muted)">${r.horasTotal}h</td>
