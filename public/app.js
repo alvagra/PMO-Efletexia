@@ -845,15 +845,15 @@ function verProyecto(epicIdx) {
       <div class="det-field"><span class="det-lbl">Desvío</span><span class="det-val" style="color:${desvColor};font-weight:600">${desvioPct!==null?desvioPct+'%':'—'}</span></div>
     </div>`;
 
-  // Sección ACTIVIDADES
-  const tareas = p.tareas || [];
+  // Sección ACTIVIDADES — solo subtareas con fecha válida
+  const tareas = (p.tareas || []).filter(t => fmtD(t.fecha) !== null);
   let tareasHtml = '';
   if(tareas.length) {
     tareasHtml = tareas.map(t => {
       const doneCls = t.isDone ? 'done' : 'open';
       const doneLabel = t.isDone ? 'Cerrado' : 'En proceso';
       return `<div class="det-task-row">
-        <span class="det-task-date">${fmtD(t.fecha) || '—'}</span>
+        <span class="det-task-date">${fmtD(t.fecha)}</span>
         <span class="det-task-name" title="${esc(t.nombre)}">${esc(t.nombre)}</span>
         <span class="det-task-hrs">${t.horasEst}h</span>
         <span class="det-task-status"><span class="det-badge ${doneCls}">${doneLabel}</span></span>
