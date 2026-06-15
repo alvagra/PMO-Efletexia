@@ -38,11 +38,8 @@ function updateKpis(data){
   const crit=data.filter(e=>e.desvioPct!==null&&Math.abs(e.desvioPct)>0.17).length;
   const tol=data.filter(e=>e.desvioPct!==null&&Math.abs(e.desvioPct)>=0.05&&Math.abs(e.desvioPct)<=0.17).length;
   const onT=data.filter(e=>e.desvioPct!==null&&Math.abs(e.desvioPct)<0.05).length;
-  // Avance prom. = promedio de (% Análisis + % Desarrollo + % Pruebas) por épica
-  const avgs=data.map(e=>{
-    const vals=[e.pctAnalisis,e.pctDesarrollo,e.pctPruebas].filter(v=>v!==null);
-    return vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null;
-  }).filter(v=>v!==null);
+  // Avance prom. = promedio de realPct (% Real reportado por el equipo)
+  const avgs=data.map(e=>e.realPct!==null?e.realPct:null).filter(v=>v!==null);
   const avg=avgs.length?Math.round(avgs.reduce((a,b)=>a+b,0)/avgs.length*100):0;
   const cj=data.filter(e=>e.duedate&&e.duedate.startsWith('2026-06')).length;
   const isFiltered=data.length<epics.length;
