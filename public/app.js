@@ -754,14 +754,15 @@ function verRecurso(nombre) {
   if(proyectos.length) {
     projCards = proyectos.map(p => {
       const hasPend = p.pendientes > 0;
-      const recursoNombre = encodeURIComponent(r.nombre);
+      const recIdx = recursos.findIndex(x => x.nombre === r.nombre);
+      const epicIdx = proyectos.indexOf(p);
       return `<div class="rec-proj-card">
         <div class="rec-proj-card-left">
           <div class="rec-proj-card-name">${p.nombre}</div>
           <div class="rec-proj-card-meta">${p.actividades} act · ${p.horasTotal}h · ${p.horasPend}h pend.</div>
         </div>
         <span class="rec-proj-pend-badge ${hasPend?'has-pend':'no-pend'}">${p.pendientes} pend.</span>
-        <button class="rec-proj-link" title="Ver detalle" onclick="verProyecto('${recursoNombre}','${p.key}');event.stopPropagation()">
+        <button class="rec-proj-link" title="Ver detalle" onclick="verProyecto(${recIdx},${epicIdx});event.stopPropagation()">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
         </button>
       </div>`;
@@ -792,12 +793,14 @@ function verRecurso(nombre) {
 }
 
 // ── DETALLE DE PROYECTO (segundo modal anidado) ──
-function verProyecto(recursoEncoded, epicaKey) {
-  const recursoNombre = decodeURIComponent(recursoEncoded);
-  const r = recursos.find(x => x.nombre === recursoNombre);
+function verProyecto(recIdx, epicIdx) {
+  const r = recursos[recIdx];
   if(!r) return;
-  const p = (r.proyectosDetalle || []).find(x => x.key === epicaKey);
+  const p = (r.proyectosDetalle || [])[epicIdx];
   if(!p) return;
+
+  const epicaKey      = p.key;
+  const recursoNombre = r.nombre;
 
   document.getElementById('det-title').textContent = p.nombre;
 
