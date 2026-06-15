@@ -517,10 +517,10 @@ async function loadRecursos() {
       const horasEst  = f.customfield_11136 || 0;
       const horasPend = f.customfield_11137 || 0;
       const horasCerr = Math.max(0, horasEst - horasPend);
-      // Tarea → parent directo = Épica (jerarquía de un nivel)
-      const parentDir  = f.parent || null;
-      const epicaKey   = parentDir ? parentDir.key : null;
-      const epicaNom   = parentDir && parentDir.fields ? parentDir.fields.summary : (parentDir ? parentDir.key : 'Sin épica');
+      // Subtarea → parent = Tarea → parent = Épica (resuelto en el API)
+      const epica     = f._epicaParent || null;
+      const epicaKey  = epica ? epica.key : null;
+      const epicaNom  = epica ? (epica.summary || epica.key) : 'Sin épica';
       const area      = f.customfield_10930 ? f.customfield_10930.value : null;
       const pais      = f.customfield_10592 ? f.customfield_10592.value : null;
       const bloq      = f.customfield_11003 ? f.customfield_11003.value : null;
