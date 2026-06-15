@@ -133,26 +133,34 @@ module.exports = async function handler(req, res) {
       const { epicKey } = req.body;
       if (!epicKey) return res.status(400).json({ error: 'epicKey requerido' });
 
-      const STORY_FIELDS = ['summary','status','assignee','parent','customfield_10015','duedate','subtasks','customfield_10725','customfield_10726'];
-      const SUBTASK_FIELDS = ['summary','status','assignee','parent','customfield_10015','duedate'];
+      const STORY_FIELDS = ['summary','status','assignee','parent','customfield_10015','duedate','subtasks','customfield_10725','customfield_10726','issuetype'];
+      const SUBTASK_FIELDS = ['summary','status','assignee','parent','customfield_10015','duedate','issuetype'];
 
-      // Historias hijas de la épica (intentar Epic Link primero, luego parent)
+      // Buscar todos los hijos directos de la épica (Next-gen: parent=EPIC; clásico: Epic Link)
       let storiesFinal = await fetchAllPages(auth, JIRA_CLOUD,
-        `project = PTS AND issuetype = Tarea AND "Epic Link" = ${epicKey} ORDER BY created ASC`,
+        `project = PTS AND parent = ${epicKey} ORDER BY created ASC`,
         STORY_FIELDS);
+
       if (!storiesFinal.length) {
         storiesFinal = await fetchAllPages(auth, JIRA_CLOUD,
-          `project = PTS AND issuetype = Tarea AND parent = ${epicKey} ORDER BY created ASC`,
+          `project = PTS AND "Epic Link" = ${epicKey} AND issuetype not in subTaskIssueTypes() ORDER BY created ASC`,
           STORY_FIELDS);
       }
 
-      // Subtareas de cada historia en lotes de 50
+      // Filtrar solo historias/tareas (excluir subtareas que puedan aparecer)
+      storiesFinal = storiesFinal.filter(s => {
+        const it = (s.fields?.issuetype?.name || '').toLowerCase();
+        return !['subtarea','subtask','sub-task','sub-tarea'].includes(it);
+      });
+
+      // Subtareas de cada historia
       const storyKeys = storiesFinal.map(s => s.key);
       const subtaskMap = {};
       for (let i = 0; i < storyKeys.length; i += 50) {
         const chunk = storyKeys.slice(i, i + 50);
+        if (!chunk.length) continue;
         const subs = await fetchAllPages(auth, JIRA_CLOUD,
-          `project = PTS AND issuetype = Subtarea AND parent in (${chunk.join(',')}) ORDER BY created ASC`,
+          `project = PTS AND parent in (${chunk.join(',')}) ORDER BY created ASC`,
           SUBTASK_FIELDS);
         subs.forEach(sub => {
           const pk = sub.fields.parent?.key;
@@ -162,6 +170,7 @@ module.exports = async function handler(req, res) {
 
       storiesFinal.forEach(s => { s.fields._subtasks = subtaskMap[s.key] || []; });
       return res.status(200).json({ stories: storiesFinal, total: storiesFinal.length, type: 'stories' });
+
 
     } else {
       // Default: fetch Epics
