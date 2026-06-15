@@ -83,8 +83,8 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ issues, total: issues.length, type: 'ventas' });
 
     } else if (type === 'recursos') {
-      // Tareas tienen como parent directo una Épica
-      const TAREA_FIELDS = [
+      // Subtareas: parent = Tarea, Tarea.parent = Épica
+      const SUBTAREA_FIELDS = [
         'summary', 'status', 'assignee', 'parent', 'duedate', 'created',
         'customfield_10015', // Fecha inicio
         'customfield_10930', // Área
@@ -95,9 +95,38 @@ module.exports = async function handler(req, res) {
       ];
       const issues = await fetchAllPages(
         auth, JIRA_CLOUD,
-        'project = PTS AND issuetype = Tarea ORDER BY assignee ASC',
-        TAREA_FIELDS
+        'project = PTS AND issuetype = Subtarea ORDER BY assignee ASC',
+        SUBTAREA_FIELDS
       );
+
+      // Resolver el segundo nivel: Subtarea→Tarea→Épica
+      // Recopilar todas las Tareas padre únicas que aún no conocemos la épica
+      const tareaKeys = [...new Set(
+        issues
+          .map(i => i.fields.parent?.key)
+          .filter(Boolean)
+      )];
+
+      // Traer solo las Tareas necesarias para obtener su parent (Épica)
+      const tareaMap = {};
+      const CHUNK = 50;
+      for (let i = 0; i < tareaKeys.length; i += CHUNK) {
+        const chunk = tareaKeys.slice(i, i + CHUNK);
+        const jqlChunk = `key in (${chunk.join(',')})`;
+        const tareas = await fetchAllPages(auth, JIRA_CLOUD, jqlChunk, ['summary', 'parent']);
+        tareas.forEach(t => { tareaMap[t.key] = t; });
+      }
+
+      // Enriquecer cada subtarea con la épica de su tarea padre
+      issues.forEach(sub => {
+        const tareaKey = sub.fields.parent?.key;
+        const tarea = tareaKey ? tareaMap[tareaKey] : null;
+        sub.fields._tareaParent  = tarea ? { key: tarea.key, summary: tarea.fields?.summary } : null;
+        sub.fields._epicaParent  = tarea?.fields?.parent
+          ? { key: tarea.fields.parent.key, summary: tarea.fields.parent.fields?.summary }
+          : null;
+      });
+
       return res.status(200).json({ issues, total: issues.length, type: 'recursos' });
 
     } else {
