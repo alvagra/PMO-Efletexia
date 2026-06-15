@@ -9,7 +9,9 @@ function sbClass(s){
 }
 function fmtD(iso){
   if(!iso)return null;
-  return new Date(iso+'T12:00:00').toLocaleDateString('es-PE',{day:'2-digit',month:'short',year:'numeric'});
+  const d=new Date(iso+'T12:00:00');
+  if(isNaN(d.getTime()))return null;
+  return d.toLocaleDateString('es-PE',{day:'2-digit',month:'short',year:'numeric'});
 }
 // Días calendario (para posicionamiento eje Gantt)
 function diffD(a,b){return Math.round((b-a)/864e5)}
