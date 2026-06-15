@@ -133,7 +133,7 @@ module.exports = async function handler(req, res) {
       const { epicKey } = req.body;
       if (!epicKey) return res.status(400).json({ error: 'epicKey requerido' });
 
-      const STORY_FIELDS = ['summary','status','assignee','parent','customfield_10015','duedate','subtasks'];
+      const STORY_FIELDS = ['summary','status','assignee','parent','customfield_10015','duedate','subtasks','customfield_10725','customfield_10726'];
       const SUBTASK_FIELDS = ['summary','status','assignee','parent','customfield_10015','duedate'];
 
       // Historias hijas de la épica (intentar Epic Link primero, luego parent)
