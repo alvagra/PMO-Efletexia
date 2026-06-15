@@ -137,7 +137,22 @@ function buildGantt(e){
     {l:'Pruebas',pct:e.pctPruebas!==null?Math.round(e.pctPruebas*100):null,cls:'gb-pruebas',w:.20},
   ].filter(p=>p.pct!==null);
   let phRows='',off=bL;
-  phases.forEach(p=>{const pw=bW*p.w;phRows+=`<div class="grow"><div class="grow-lbl">${p.l}</div><div class="grow-track">${grid}${tl}<div class="g-bar ${p.cls}" style="left:${off.toFixed(2)}%;width:${pw.toFixed(2)}%">${pw>8?p.pct+'%':''}</div></div></div>`;off+=pw;});
+  phases.forEach(p=>{
+    const pw=bW*p.w;                          // ancho del contenedor de fase en el eje temporal
+    const fillW=(pw*(p.pct/100)).toFixed(2);  // relleno proporcional al % real de avance
+    const showLabel=pw>6;
+    phRows+=`<div class="grow">
+      <div class="grow-lbl">${p.l}</div>
+      <div class="grow-track">
+        ${grid}${tl}
+        <div class="g-bar-track" style="left:${off.toFixed(2)}%;width:${pw.toFixed(2)}%">
+          <div class="g-bar-fill ${p.cls}" style="width:${p.pct}%"></div>
+        </div>
+        ${showLabel?`<span class="g-bar-pct" style="left:${(off+pw+0.5).toFixed(2)}%">${p.pct}%</span>`:''}
+      </div>
+    </div>`;
+    off+=pw;
+  });
   return `
     <div class="gantt-meta">
       <div class="gm-item"><span class="gm-lbl">Fecha inicio</span><span class="gm-val">${fmtD(e.fechaInicio)||'—'}</span></div>
