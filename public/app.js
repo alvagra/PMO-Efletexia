@@ -536,7 +536,7 @@ async function loadRecursos() {
       if(area && !p.area) p.area = area;
       if(pais && !p.pais) p.pais = pais;
 
-      // Épica tracking
+      // Épica tracking — solo si tiene épica asignada
       if(epicaKey){
         if(!p.epicasMap[epicaKey]){
           p.epicasMap[epicaKey] = { key:epicaKey, nombre:epicaNom, horasEst:0, horasPend:0, actividades:0, pendientes:0, tareas:[] };
@@ -606,6 +606,7 @@ async function loadRecursos() {
 
 // Datos de recursos — se poblarán desde Jira cuando estén disponibles
 let recursos = [];
+let activeRecIdx = -1;
 
 function getAreaClass(area) {
   const m = {
@@ -708,6 +709,7 @@ function renderRecursos() {
 function verRecurso(nombre) {
   const r = recursos.find(x => x.nombre === nombre);
   if(!r) return;
+  activeRecIdx = recursos.indexOf(r); // guardar índice activo global
 
   document.getElementById('rec-modal-name').textContent = r.nombre;
   document.getElementById('rec-modal-area').textContent = r.area || '—';
@@ -762,7 +764,7 @@ function verRecurso(nombre) {
           <div class="rec-proj-card-meta">${p.actividades} act · ${p.horasTotal}h · ${p.horasPend}h pend.</div>
         </div>
         <span class="rec-proj-pend-badge ${hasPend?'has-pend':'no-pend'}">${p.pendientes} pend.</span>
-        <button class="rec-proj-link" title="Ver detalle" onclick="verProyecto(${recIdx},${epicIdx});event.stopPropagation()">
+        <button class="rec-proj-link" title="Ver detalle" onclick="verProyecto(${epicIdx});event.stopPropagation()">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
         </button>
       </div>`;
@@ -793,8 +795,8 @@ function verRecurso(nombre) {
 }
 
 // ── DETALLE DE PROYECTO (segundo modal anidado) ──
-function verProyecto(recIdx, epicIdx) {
-  const r = recursos[recIdx];
+function verProyecto(epicIdx) {
+  const r = recursos[activeRecIdx];
   if(!r) return;
   const p = (r.proyectosDetalle || [])[epicIdx];
   if(!p) return;
