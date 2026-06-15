@@ -563,7 +563,7 @@ async function loadRecursos() {
           isDone,
           horasEst,
           horasPend,
-          fecha:    f.customfield_10015 || f.duedate || f.created || null,
+          fecha:    f.customfield_10015 || f.duedate || null,
         });
       }
     });
@@ -853,7 +853,7 @@ function verProyecto(epicIdx) {
       const doneCls = t.isDone ? 'done' : 'open';
       const doneLabel = t.isDone ? 'Cerrado' : 'En proceso';
       return `<div class="det-task-row">
-        <span class="det-task-date">${t.fecha ? fmtD(t.fecha) : '—'}</span>
+        <span class="det-task-date">${fmtD(t.fecha) || '—'}</span>
         <span class="det-task-name" title="${esc(t.nombre)}">${esc(t.nombre)}</span>
         <span class="det-task-hrs">${t.horasEst}h</span>
         <span class="det-task-status"><span class="det-badge ${doneCls}">${doneLabel}</span></span>
