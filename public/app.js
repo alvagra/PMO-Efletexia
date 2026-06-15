@@ -82,7 +82,9 @@ function renderTable(data){
       <td class="proj" title="${esc(e.summary)}">${esc(e.summary)}</td>
       <td class="cat">${esc(e.categoria)||'<span style="color:var(--text-muted)">—</span>'}</td>
       <td class="muted">${e.area?`<span class="pill">${esc(e.area)}</span>`:'—'}</td>
+      <td class="muted">${esc(e.sponsor)||'—'}</td>
       <td><span class="badge badge-${sbClass(e.status)}">${e.status}</span></td>
+      <td class="muted">${e.planPct!==null?Math.round(e.planPct*100)+'% / '+(e.realPct!==null?Math.round(e.realPct*100)+'%':'—'):'—'}</td>
       <td>${progCell(e.pctDesarrollo)}</td>
       <td class="muted" style="color:${e.desvioPct!==null?(Math.abs(e.desvioPct)>0.17?'var(--red)':Math.abs(e.desvioPct)>=0.05?'var(--yellow)':'var(--green)'):'var(--text-muted)'}">${e.desvioPct!==null?Math.round(e.desvioPct*100)+'%':'—'}</td>
       <td class="muted">${e.pctDesarrollo!==null?Math.round(e.pctDesarrollo*100)+'% / '+(e.pctPruebas!==null?Math.round(e.pctPruebas*100)+'%':'—'):'—'}</td>
@@ -90,9 +92,7 @@ function renderTable(data){
       <td class="muted">${fmtD(e.duedate)||'—'}</td>
       <td class="muted">—</td>
       <td class="muted">${e.conformidad==='Si'?'<span style="color:var(--green);font-size:15px">✓</span>':'—'}</td>
-      <td class="muted">${e.planPct!==null?Math.round(e.planPct*100)+'% / '+(e.realPct!==null?Math.round(e.realPct*100)+'%':'—'):'—'}</td>
       <td class="muted">${e.docFuncional==='Si'?'<span style="color:var(--green);font-size:15px">✓</span>':e.docFuncional==='No'?'<span style="color:var(--red);font-size:15px">✕</span>':'—'}</td>
-      <td class="muted">${esc(e.sponsor)||'—'}</td>
       <td><button class="btn-action" type="button" title="Cronograma y detalles" onclick="openModal('${e.key}');event.stopPropagation()">···</button></td>
     </tr>
   `).join('');
