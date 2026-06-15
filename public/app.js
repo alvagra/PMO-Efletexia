@@ -104,6 +104,7 @@ function buildGantt(e, stories){
     return `<div class="gno-dates"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="margin-bottom:10px;opacity:.4;display:block;margin-left:auto;margin-right:auto"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Sin fechas definidas en Jira.<br><span style="font-size:11px;color:var(--text-dim)">Agrega Fecha de inicio y Fecha de vencimiento en la épica.</span></div>`;
   }
 
+  // ── Eje temporal ──
   const sRaw=e.fechaInicio||e.duedate, eRaw=e.duedate||e.fechaInicio;
   const pS=new Date(sRaw+'T12:00:00'), pE=new Date(eRaw+'T12:00:00');
   let aS=new Date(pS.getFullYear(),pS.getMonth(),1);
@@ -118,14 +119,18 @@ function buildGantt(e, stories){
     const mS=new Date(cur.getFullYear(),cur.getMonth(),1);
     const mE=new Date(cur.getFullYear(),cur.getMonth()+1,0);
     const vS=mS<aS?aS:mS, vE=mE>aE?aE:mE;
-    months.push({label:cur.toLocaleDateString('es-PE',{month:'short',year:'2-digit'}).toUpperCase(),lp:(diffD(aS,vS)/total)*100,wp:((diffD(vS,vE)+1)/total)*100});
+    months.push({
+      label:cur.toLocaleDateString('es-PE',{month:'short',year:'2-digit'}).toUpperCase(),
+      lp:(diffD(aS,vS)/total)*100,
+      wp:((diffD(vS,vE)+1)/total)*100
+    });
     cur=new Date(cur.getFullYear(),cur.getMonth()+1,1);
   }
   const grid=months.map(m=>`<div class="g-grid" style="left:${m.lp}%"></div>`).join('');
   const tp=(diffD(aS,TODAY)/total)*100;
   const tl=tp>=0&&tp<=100?`<div class="g-today" style="left:${tp.toFixed(2)}%"><div class="g-today-lbl">hoy</div></div>`:'';
 
-  // Helper posición de barra
+  // Helper: posición de barra en % del eje
   function barPos(s,en){
     if(!s||!en) return null;
     const ds=new Date(s+'T12:00:00'), de=new Date(en+'T12:00:00');
@@ -135,6 +140,18 @@ function buildGantt(e, stories){
     return {l, w:Math.max(0.5,r-l)};
   }
 
+  // Helper: columna derecha Plan% / Real%
+  function pctHtml(plan, real){
+    if(plan===null&&real===null) return `<span style="color:var(--text-dim)">—</span>`;
+    const p=plan!==null?Math.round(plan*100):null;
+    const r=real!==null?Math.round(real*100):null;
+    const rColor=r===null?'var(--text-dim)':r>=100?'var(--green)':r>=50?'var(--yellow)':'var(--red)';
+    const pStr=p!==null?`<span style="color:var(--text-muted)">${p}%</span>`:'—';
+    const rStr=r!==null?`<span style="color:${rColor};font-weight:700">${r}%</span>`:'<span style="color:var(--text-dim)">0%</span>';
+    return `${pStr} / ${rStr}`;
+  }
+
+  // ── Épica: barra principal ──
   const bL=Math.max(0,(diffD(aS,pS)/total)*100);
   const bR=Math.min(100,(diffD(aS,pE)/total)*100);
   const bW=Math.max(.5,bR-bL);
@@ -144,57 +161,68 @@ function buildGantt(e, stories){
   const elapsed=workDays(pS,TODAY);
   const remaining=workDays(TODAY,pE);
   const pctT=durWork>0?Math.min(100,Math.round((elapsed/durWork)*100)):0;
-  const pctA=e.pctDesarrollo!==null?Math.round(e.pctDesarrollo*100):null;
-  const advColor=pctA===null?'var(--text-muted)':pctA>=pctT?'var(--green)':pctA>=pctT-15?'var(--yellow)':'var(--red)';
+  const pctDev=e.pctDesarrollo!==null?Math.round(e.pctDesarrollo*100):null;
+  const advColor=pctDev===null?'var(--text-muted)':pctDev>=pctT?'var(--green)':pctDev>=pctT-15?'var(--yellow)':'var(--red)';
 
-  // Fila épica
+  const epicPlan=e.planPct!==null?Math.round(e.planPct*100):null;
+  const epicReal=e.realPct!==null?Math.round(e.realPct*100):null;
+
   const epicRow=`<div class="grow g-epic-row">
-    <div class="grow-lbl main" title="${esc(e.summary)}">${esc(e.codigo||e.key)}</div>
+    <div class="grow-lbl" title="${esc(e.summary)}">${esc(e.summary)}</div>
     <div class="grow-track">${grid}${tl}<div class="g-bar ${bc}" style="left:${bL.toFixed(2)}%;width:${bW.toFixed(2)}%"></div></div>
+    <div class="g-row-pct">${pctHtml(e.planPct,e.realPct)}</div>
   </div>`;
 
-  // Filas historias + subtareas
+  // ── Historias + Subtareas ──
   let storyRows='';
+
   if(stories===undefined){
-    storyRows=`<div class="grow"><div class="grow-lbl" style="color:var(--text-dim);font-size:11px;font-style:italic">Cargando historias…</div><div class="grow-track">${grid}${tl}</div></div>`;
+    storyRows=`<div class="grow">
+      <div class="grow-lbl" style="color:var(--text-dim);font-size:11px;font-style:italic">Cargando historias…</div>
+      <div class="grow-track">${grid}${tl}</div>
+      <div class="g-row-pct"></div>
+    </div>`;
   } else if(!stories||!stories.length){
-    // Sin historias: fallback a fases
-    const phases=[
-      {l:'Análisis',pct:e.pctAnalisis!==null?Math.round(e.pctAnalisis*100):null,cls:'gb-analisis',w:.20},
-      {l:'Desarrollo',pct:e.pctDesarrollo!==null?Math.round(e.pctDesarrollo*100):null,cls:'gb-desarrollo',w:.60},
-      {l:'Pruebas',pct:e.pctPruebas!==null?Math.round(e.pctPruebas*100):null,cls:'gb-pruebas',w:.20},
-    ].filter(p=>p.pct!==null);
-    let off=bL;
-    phases.forEach(p=>{
-      const pw=bW*p.w;
-      storyRows+=`<div class="grow"><div class="grow-lbl">${p.l}</div><div class="grow-track">${grid}${tl}<div class="g-bar-track" style="left:${off.toFixed(2)}%;width:${pw.toFixed(2)}%"><div class="g-bar-fill ${p.cls}" style="width:${p.pct}%"></div><span class="g-bar-pct-label">${p.pct}%</span></div></div></div>`;
-      off+=pw;
-    });
+    storyRows=`<div class="grow">
+      <div class="grow-lbl" style="color:var(--text-dim);font-size:11px;font-style:italic">Sin historias con fechas</div>
+      <div class="grow-track">${grid}${tl}</div>
+      <div class="g-row-pct"></div>
+    </div>`;
   } else {
     stories.forEach(story=>{
       const sf=story.fields;
       const sNom=sf.summary||story.key;
-      const sAsig=sf.assignee?` (${sf.assignee.displayName})`:'';
+      const sAsig=sf.assignee?sf.assignee.displayName:'';
       const sStatus=sf.status?sf.status.name:'';
       const sCls='gb-'+sbClass(sStatus);
       const sPos=barPos(sf.customfield_10015||null, sf.duedate||null);
+      const sPlan=sf.customfield_10725!==undefined?sf.customfield_10725:null;
+      const sReal=sf.customfield_10726!==undefined?sf.customfield_10726:null;
       const sBarHtml=sPos?`<div class="g-bar ${sCls}" style="left:${sPos.l.toFixed(2)}%;width:${sPos.w.toFixed(2)}%"></div>`:'';
+
       storyRows+=`<div class="grow g-story-row">
-        <div class="grow-lbl g-lbl-story" title="${esc(sNom)}">${esc(sNom)}<span class="g-asig">${esc(sAsig)}</span></div>
+        <div class="grow-lbl g-lbl-story" title="${esc(sNom)}">${esc(sNom)}${sAsig?` <span class="g-asig">(${esc(sAsig)})</span>`:''}
+        </div>
         <div class="grow-track">${grid}${tl}${sBarHtml}</div>
+        <div class="g-row-pct">${pctHtml(sPlan,sReal)}</div>
       </div>`;
+
+      // Subtareas
       const subtasks=sf._subtasks||[];
       subtasks.forEach(sub=>{
         const tf=sub.fields;
         const tNom=tf.summary||sub.key;
-        const tAsig=tf.assignee?` (${tf.assignee.displayName})`:'';
+        const tAsig=tf.assignee?tf.assignee.displayName:'';
         const tStatus=tf.status?tf.status.name:'';
         const tCls='gb-'+sbClass(tStatus);
         const tPos=barPos(tf.customfield_10015||null, tf.duedate||null);
         const tBarHtml=tPos?`<div class="g-bar ${tCls}" style="left:${tPos.l.toFixed(2)}%;width:${tPos.w.toFixed(2)}%"></div>`:'';
+
         storyRows+=`<div class="grow g-subtask-row">
-          <div class="grow-lbl g-lbl-subtask" title="${esc(tNom)}">↳ ${esc(tNom)}<span class="g-asig">${esc(tAsig)}</span></div>
+          <div class="grow-lbl g-lbl-subtask" title="${esc(tNom)}">${esc(tNom)}${tAsig?` <span class="g-asig">(${esc(tAsig)})</span>`:''}
+          </div>
           <div class="grow-track">${grid}${tl}${tBarHtml}</div>
+          <div class="g-row-pct" style="color:var(--text-dim);font-size:10px">${tStatus?`<span class="badge badge-${sbClass(tStatus)}" style="font-size:9px">${tStatus}</span>`:''}</div>
         </div>`;
       });
     });
@@ -208,7 +236,11 @@ function buildGantt(e, stories){
       <div class="gm-item"><span class="gm-lbl">Estado</span><span class="gm-val"><span class="badge badge-${sbClass(e.status)}">${e.status}</span></span></div>
     </div>
     <div style="overflow-x:auto"><div class="gc">
-      <div class="g-hdr"><div class="g-lc"></div><div class="g-months">${months.map(m=>`<div class="g-month" style="left:${m.lp.toFixed(2)}%;width:${m.wp.toFixed(2)}%">${m.label}</div>`).join('')}</div></div>
+      <div class="g-hdr">
+        <div class="g-lc"></div>
+        <div class="g-months">${months.map(m=>`<div class="g-month" style="left:${m.lp.toFixed(2)}%;width:${m.wp.toFixed(2)}%">${m.label}</div>`).join('')}</div>
+        <div class="g-rc" style="text-align:right;font-size:10px;color:var(--text-dim);padding-left:8px">Plan / Real</div>
+      </div>
       ${epicRow}
       ${storyRows}
     </div></div>
@@ -216,15 +248,16 @@ function buildGantt(e, stories){
     <div class="g-stats">
       <div class="g-stat"><div class="g-stat-lbl">Días transcurridos</div><div class="g-stat-val" style="color:var(--text-muted)">${elapsed}</div></div>
       <div class="g-stat"><div class="g-stat-lbl">Días restantes</div><div class="g-stat-val" style="color:${remaining===0?'var(--red)':'var(--blue)'}">${remaining}</div></div>
-      <div class="g-stat"><div class="g-stat-lbl">% Desarrollo</div><div class="g-stat-val" style="color:${advColor}">${pctA!==null?pctA+'%':'—'}</div></div>
+      <div class="g-stat"><div class="g-stat-lbl">% Desarrollo</div><div class="g-stat-val" style="color:${advColor}">${pctDev!==null?pctDev+'%':'—'}</div></div>
     </div>
     <div class="g-legend">
-      <div class="g-legend-item"><div class="g-legend-dot" style="background:#c85a00"></div>Desarrollo</div>
-      <div class="g-legend-item"><div class="g-legend-dot" style="background:#1a7fa8"></div>Análisis</div>
-      <div class="g-legend-item"><div class="g-legend-dot" style="background:#b8860b"></div>Pruebas</div>
+      <div class="g-legend-item"><div class="g-legend-dot" style="background:var(--green)"></div>Completado</div>
+      <div class="g-legend-item"><div class="g-legend-dot" style="background:#c85a00"></div>En curso</div>
+      <div class="g-legend-item"><div class="g-legend-dot" style="background:var(--text-dim)"></div>Pendiente</div>
       <div class="g-legend-item"><div class="g-legend-dot" style="background:var(--red);width:2px;border-radius:0"></div>Hoy</div>
     </div>`;
 }
+
 
 // ── DETAIL ──
 function buildDetail(e){
