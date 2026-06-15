@@ -97,11 +97,13 @@ function renderTable(data){
 
 }
 
+
 // ── GANTT ──
-function buildGantt(e){
+function buildGantt(e, stories){
   if(!e.fechaInicio&&!e.duedate){
     return `<div class="gno-dates"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="margin-bottom:10px;opacity:.4;display:block;margin-left:auto;margin-right:auto"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Sin fechas definidas en Jira.<br><span style="font-size:11px;color:var(--text-dim)">Agrega Fecha de inicio y Fecha de vencimiento en la épica.</span></div>`;
   }
+
   const sRaw=e.fechaInicio||e.duedate, eRaw=e.duedate||e.fechaInicio;
   const pS=new Date(sRaw+'T12:00:00'), pE=new Date(eRaw+'T12:00:00');
   let aS=new Date(pS.getFullYear(),pS.getMonth(),1);
@@ -109,6 +111,7 @@ function buildGantt(e){
   if(TODAY>aE) aE=new Date(TODAY.getFullYear(),TODAY.getMonth()+1,0);
   if(TODAY<aS) aS=new Date(aS.getFullYear(),aS.getMonth()-1,1);
   const total=diffD(aS,aE)+1;
+
   const months=[];
   let cur=new Date(aS);
   while(cur<=aE){
@@ -118,41 +121,85 @@ function buildGantt(e){
     months.push({label:cur.toLocaleDateString('es-PE',{month:'short',year:'2-digit'}).toUpperCase(),lp:(diffD(aS,vS)/total)*100,wp:((diffD(vS,vE)+1)/total)*100});
     cur=new Date(cur.getFullYear(),cur.getMonth()+1,1);
   }
+  const grid=months.map(m=>`<div class="g-grid" style="left:${m.lp}%"></div>`).join('');
+  const tp=(diffD(aS,TODAY)/total)*100;
+  const tl=tp>=0&&tp<=100?`<div class="g-today" style="left:${tp.toFixed(2)}%"><div class="g-today-lbl">hoy</div></div>`:'';
+
+  // Helper posición de barra
+  function barPos(s,en){
+    if(!s||!en) return null;
+    const ds=new Date(s+'T12:00:00'), de=new Date(en+'T12:00:00');
+    if(isNaN(ds.getTime())||isNaN(de.getTime())) return null;
+    const l=Math.max(0,(diffD(aS,ds)/total)*100);
+    const r=Math.min(100,(diffD(aS,de)/total)*100);
+    return {l, w:Math.max(0.5,r-l)};
+  }
+
   const bL=Math.max(0,(diffD(aS,pS)/total)*100);
   const bR=Math.min(100,(diffD(aS,pE)/total)*100);
   const bW=Math.max(.5,bR-bL);
   const bc='gb-'+sbClass(e.status);
-  const dur=diffD(pS,pE); // calendar days (for Gantt bar)
-  const durWork=workDays(pS,pE); // business days (for % time)
-  const grid=months.map(m=>`<div class="g-grid" style="left:${m.lp}%"></div>`).join('');
-  const tp=(diffD(aS,TODAY)/total)*100;
-  const tl=tp>=0&&tp<=100?`<div class="g-today" style="left:${tp.toFixed(2)}%"><div class="g-today-lbl">hoy</div></div>`:'';
+  const dur=diffD(pS,pE);
+  const durWork=workDays(pS,pE);
   const elapsed=workDays(pS,TODAY);
   const remaining=workDays(TODAY,pE);
   const pctT=durWork>0?Math.min(100,Math.round((elapsed/durWork)*100)):0;
   const pctA=e.pctDesarrollo!==null?Math.round(e.pctDesarrollo*100):null;
   const advColor=pctA===null?'var(--text-muted)':pctA>=pctT?'var(--green)':pctA>=pctT-15?'var(--yellow)':'var(--red)';
-  const label=esc(e.codigo||e.key);
-  const phases=[
-    {l:'Análisis',pct:e.pctAnalisis!==null?Math.round(e.pctAnalisis*100):null,cls:'gb-analisis',w:.20},
-    {l:'Desarrollo',pct:e.pctDesarrollo!==null?Math.round(e.pctDesarrollo*100):null,cls:'gb-desarrollo',w:.60},
-    {l:'Pruebas',pct:e.pctPruebas!==null?Math.round(e.pctPruebas*100):null,cls:'gb-pruebas',w:.20},
-  ].filter(p=>p.pct!==null);
-  let phRows='',off=bL;
-  phases.forEach(p=>{
-    const pw=bW*p.w; // ancho del track en el eje temporal
-    phRows+=`<div class="grow">
-      <div class="grow-lbl">${p.l}</div>
-      <div class="grow-track">
-        ${grid}${tl}
-        <div class="g-bar-track" style="left:${off.toFixed(2)}%;width:${pw.toFixed(2)}%">
-          <div class="g-bar-fill ${p.cls}" style="width:${p.pct}%"></div>
-          <span class="g-bar-pct-label">${p.pct}%</span>
-        </div>
-      </div>
-    </div>`;
-    off+=pw;
-  });
+
+  // Fila épica
+  const epicRow=`<div class="grow g-epic-row">
+    <div class="grow-lbl main" title="${esc(e.summary)}">${esc(e.codigo||e.key)}</div>
+    <div class="grow-track">${grid}${tl}<div class="g-bar ${bc}" style="left:${bL.toFixed(2)}%;width:${bW.toFixed(2)}%"></div></div>
+  </div>`;
+
+  // Filas historias + subtareas
+  let storyRows='';
+  if(stories===undefined){
+    storyRows=`<div class="grow"><div class="grow-lbl" style="color:var(--text-dim);font-size:11px;font-style:italic">Cargando historias…</div><div class="grow-track">${grid}${tl}</div></div>`;
+  } else if(!stories||!stories.length){
+    // Sin historias: fallback a fases
+    const phases=[
+      {l:'Análisis',pct:e.pctAnalisis!==null?Math.round(e.pctAnalisis*100):null,cls:'gb-analisis',w:.20},
+      {l:'Desarrollo',pct:e.pctDesarrollo!==null?Math.round(e.pctDesarrollo*100):null,cls:'gb-desarrollo',w:.60},
+      {l:'Pruebas',pct:e.pctPruebas!==null?Math.round(e.pctPruebas*100):null,cls:'gb-pruebas',w:.20},
+    ].filter(p=>p.pct!==null);
+    let off=bL;
+    phases.forEach(p=>{
+      const pw=bW*p.w;
+      storyRows+=`<div class="grow"><div class="grow-lbl">${p.l}</div><div class="grow-track">${grid}${tl}<div class="g-bar-track" style="left:${off.toFixed(2)}%;width:${pw.toFixed(2)}%"><div class="g-bar-fill ${p.cls}" style="width:${p.pct}%"></div><span class="g-bar-pct-label">${p.pct}%</span></div></div></div>`;
+      off+=pw;
+    });
+  } else {
+    stories.forEach(story=>{
+      const sf=story.fields;
+      const sNom=sf.summary||story.key;
+      const sAsig=sf.assignee?` (${sf.assignee.displayName})`:'';
+      const sStatus=sf.status?sf.status.name:'';
+      const sCls='gb-'+sbClass(sStatus);
+      const sPos=barPos(sf.customfield_10015||null, sf.duedate||null);
+      const sBarHtml=sPos?`<div class="g-bar ${sCls}" style="left:${sPos.l.toFixed(2)}%;width:${sPos.w.toFixed(2)}%"></div>`:'';
+      storyRows+=`<div class="grow g-story-row">
+        <div class="grow-lbl g-lbl-story" title="${esc(sNom)}">${esc(sNom)}<span class="g-asig">${esc(sAsig)}</span></div>
+        <div class="grow-track">${grid}${tl}${sBarHtml}</div>
+      </div>`;
+      const subtasks=sf._subtasks||[];
+      subtasks.forEach(sub=>{
+        const tf=sub.fields;
+        const tNom=tf.summary||sub.key;
+        const tAsig=tf.assignee?` (${tf.assignee.displayName})`:'';
+        const tStatus=tf.status?tf.status.name:'';
+        const tCls='gb-'+sbClass(tStatus);
+        const tPos=barPos(tf.customfield_10015||null, tf.duedate||null);
+        const tBarHtml=tPos?`<div class="g-bar ${tCls}" style="left:${tPos.l.toFixed(2)}%;width:${tPos.w.toFixed(2)}%"></div>`:'';
+        storyRows+=`<div class="grow g-subtask-row">
+          <div class="grow-lbl g-lbl-subtask" title="${esc(tNom)}">↳ ${esc(tNom)}<span class="g-asig">${esc(tAsig)}</span></div>
+          <div class="grow-track">${grid}${tl}${tBarHtml}</div>
+        </div>`;
+      });
+    });
+  }
+
   return `
     <div class="gantt-meta">
       <div class="gm-item"><span class="gm-lbl">Fecha inicio</span><span class="gm-val">${fmtD(e.fechaInicio)||'—'}</span></div>
@@ -162,12 +209,10 @@ function buildGantt(e){
     </div>
     <div style="overflow-x:auto"><div class="gc">
       <div class="g-hdr"><div class="g-lc"></div><div class="g-months">${months.map(m=>`<div class="g-month" style="left:${m.lp.toFixed(2)}%;width:${m.wp.toFixed(2)}%">${m.label}</div>`).join('')}</div></div>
-      <div class="grow"><div class="grow-lbl main"></div><div class="grow-track">${grid}${tl}<div class="g-bar ${bc}" style="left:${bL.toFixed(2)}%;width:${bW.toFixed(2)}%"></div></div></div>
-      ${phRows}
+      ${epicRow}
+      ${storyRows}
     </div></div>
-    ${dur>0?`
-    <div class="g-prog-row"><div class="g-prog-lbl"><span>Tiempo transcurrido</span><span>${pctT}%</span></div><div class="g-prog-track"><div class="g-prog-fill" style="width:${pctT}%;background:var(--text-dim)"></div></div></div>
-    `:''}
+    ${dur>0?`<div class="g-prog-row"><div class="g-prog-lbl"><span>Tiempo transcurrido</span><span>${pctT}%</span></div><div class="g-prog-track"><div class="g-prog-fill" style="width:${pctT}%;background:var(--text-dim)"></div></div></div>`:''}
     <div class="g-stats">
       <div class="g-stat"><div class="g-stat-lbl">Días transcurridos</div><div class="g-stat-val" style="color:var(--text-muted)">${elapsed}</div></div>
       <div class="g-stat"><div class="g-stat-lbl">Días restantes</div><div class="g-stat-val" style="color:${remaining===0?'var(--red)':'var(--blue)'}">${remaining}</div></div>
@@ -361,6 +406,20 @@ loadData();
 
 // ── MODAL ──
 let activeEpic=null, activeTab='gantt';
+const epicStoriesCache = {};
+
+async function loadEpicStories(epicKey) {
+  if (epicStoriesCache[epicKey]) return epicStoriesCache[epicKey];
+  const resp = await fetch('/api/jira', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ type: 'stories', epicKey })
+  });
+  if (!resp.ok) return [];
+  const data = await resp.json();
+  epicStoriesCache[epicKey] = data.stories || [];
+  return epicStoriesCache[epicKey];
+}
 
 function renderModalBody(){
   document.getElementById('modal-body').innerHTML =
@@ -375,8 +434,14 @@ function openModal(key){
   document.getElementById('modal-title').textContent = activeEpic.summary;
   document.getElementById('modal-panel').className  = 'modal-panel w-gantt';
   document.querySelectorAll('.modal-tab').forEach(t=>t.classList.toggle('active', t.dataset.mtab==='gantt'));
+  // Mostrar gantt base inmediato, luego enriquecer con historias
   renderModalBody();
   document.getElementById('modal-overlay').classList.add('open');
+  loadEpicStories(key).then(stories => {
+    if (activeEpic && activeEpic.key === key && activeTab === 'gantt') {
+      document.getElementById('modal-body').innerHTML = buildGantt(activeEpic, stories);
+    }
+  });
 }
 
 document.querySelectorAll('.modal-tab').forEach(t=>{
@@ -384,7 +449,16 @@ document.querySelectorAll('.modal-tab').forEach(t=>{
     activeTab = t.dataset.mtab;
     document.querySelectorAll('.modal-tab').forEach(x=>x.classList.toggle('active', x===t));
     document.getElementById('modal-panel').className = 'modal-panel ' + (activeTab==='gantt' ? 'w-gantt' : 'w-detail');
-    renderModalBody();
+    if(activeTab==='gantt' && activeEpic){
+      renderModalBody();
+      const key=activeEpic.key;
+      loadEpicStories(key).then(stories=>{
+        if(activeEpic&&activeEpic.key===key&&activeTab==='gantt')
+          document.getElementById('modal-body').innerHTML=buildGantt(activeEpic,stories);
+      });
+    } else {
+      renderModalBody();
+    }
   });
 });
 
