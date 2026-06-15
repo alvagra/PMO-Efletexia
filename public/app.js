@@ -176,13 +176,13 @@ function buildGantt(e, stories){
   // ── Historias + Subtareas ──
   let storyRows='';
 
-  if(stories===undefined){
+  if(stories===undefined||stories===null){
     storyRows=`<div class="grow">
       <div class="grow-lbl" style="color:var(--text-dim);font-size:11px;font-style:italic">Cargando historias…</div>
       <div class="grow-track">${grid}${tl}</div>
       <div class="g-row-pct"></div>
     </div>`;
-  } else if(!stories||!stories.length){
+  } else if(!stories.length){
     storyRows=`<div class="grow">
       <div class="grow-lbl" style="color:var(--text-dim);font-size:11px;font-style:italic">Sin historias con fechas</div>
       <div class="grow-track">${grid}${tl}</div>
@@ -442,16 +442,22 @@ let activeEpic=null, activeTab='gantt';
 const epicStoriesCache = {};
 
 async function loadEpicStories(epicKey) {
-  if (epicStoriesCache[epicKey]) return epicStoriesCache[epicKey];
-  const resp = await fetch('/api/jira', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ type: 'stories', epicKey })
-  });
-  if (!resp.ok) return [];
-  const data = await resp.json();
-  epicStoriesCache[epicKey] = data.stories || [];
-  return epicStoriesCache[epicKey];
+  if (epicStoriesCache[epicKey] !== undefined) return epicStoriesCache[epicKey];
+  try {
+    const resp = await fetch('/api/jira', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ type: 'stories', epicKey })
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    const stories = data.stories || [];
+    epicStoriesCache[epicKey] = stories; // solo cachear si hay datos o array vacío confirmado
+    return stories;
+  } catch(err) {
+    console.error('Error cargando historias:', err);
+    return null;
+  }
 }
 
 function renderModalBody(){
