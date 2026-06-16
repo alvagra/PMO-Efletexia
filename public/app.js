@@ -6,7 +6,6 @@ const TODAY = new Date(); TODAY.setHours(0,0,0,0);
 
 // Data stores
 let epics    = [];
-let ventas   = [];
 let recursos = [];
 let activeRecIdx = -1;
 
@@ -15,7 +14,10 @@ function sbClass(s){
   return({
     "Backlog":"backlog","Análisis":"analisis","Desarrollo":"desarrollo",
     "Pruebas":"pruebas","Producción":"produccion","Planificado":"planificado",
-    "Stand by":"standby","Desestimado":"desestimado","En curso":"en-curso"
+    "Stand by":"standby","Desestimado":"desestimado",
+    "Tareas por hacer":"backlog",
+    "En curso":"en-curso","Review":"en-curso",
+    "Blocked":"bloqueado","Finalizada":"produccion"
   }[s]||"backlog");
 }
 function fmtD(iso){
@@ -89,26 +91,10 @@ function exportPortafolioCSV(){
   downloadCSV([hdr,...rows], `portafolio_${new Date().toISOString().slice(0,10)}.csv`);
 }
 
-function exportVentasCSV(){
-  const data = ventasSorted(ventasFiltered());
-  const hdr  = ['Clave','Venta','Estado','Área','País','Sponsor','Asignado',
-                 'Plan%','Real%','Desvío%','FechaInicio','FechaFin','Bloqueante'];
-  const rows = data.map(v => [
-    v.key, v.summary, v.status, v.area, v.pais, v.sponsor, v.asignado,
-    v.planPct!==null?Math.round(v.planPct*100):'',
-    v.realPct!==null?Math.round(v.realPct*100):'',
-    v.desvioPct!==null?Math.round(v.desvioPct*100):'',
-    v.fechaInicio||'', v.duedate||'', v.bloqueante||''
-  ]);
-  downloadCSV([hdr,...rows], `ventas_${new Date().toISOString().slice(0,10)}.csv`);
-}
-
 document.getElementById('btn-export-port').addEventListener('click', exportPortafolioCSV);
-document.getElementById('btn-export-vta').addEventListener('click',  exportVentasCSV);
 
 
 // ── TABS ───────────────────────────────────────────────────
-let ventasLoaded   = false;
 let recursosLoaded = false;
 
 document.querySelectorAll('.tabs .tab').forEach(tab => {
@@ -118,7 +104,6 @@ document.querySelectorAll('.tabs .tab').forEach(tab => {
     tab.classList.add('active');
     const panel = document.getElementById('panel-'+tab.dataset.tab);
     if(panel) panel.classList.add('active');
-    if(tab.dataset.tab==='ventas'   && !ventasLoaded)   loadVentas();
     if(tab.dataset.tab==='recursos' && !recursosLoaded) loadRecursos();
   });
 });
@@ -362,178 +347,6 @@ loadData();
 
 
 // ── VENTAS: parse & render ─────────────────────────────────
-const VENTA_FIELDS = [
-  'summary','status','assignee','duedate','parent',
-  'customfield_10015','customfield_10930','customfield_10592',
-  'customfield_10931','customfield_10929','customfield_10725',
-  'customfield_10726','customfield_10759','customfield_10895',
-  'customfield_10928','customfield_10969','customfield_11003',
-  'customfield_11136','customfield_11137','customfield_11070',
-];
-
-function parseVenta(i){
-  const f=i.fields;
-  return {
-    key:       i.key,
-    summary:   f.summary,
-    status:    f.status.name,
-    asignado:  f.assignee?f.assignee.displayName:null,
-    duedate:   f.duedate||null,
-    fechaInicio: f.customfield_10015||null,
-    area:      f.customfield_10930?f.customfield_10930.value:null,
-    pais:      f.customfield_10592?f.customfield_10592.value:null,
-    sponsor:   f.customfield_11070?f.customfield_11070.value:null,
-    planPct:   f.customfield_10725!==undefined?f.customfield_10725:null,
-    realPct:   f.customfield_10726!==undefined?f.customfield_10726:null,
-    desvioPct: f.customfield_10759!==undefined?f.customfield_10759:null,
-    bloqueante:f.customfield_11003?f.customfield_11003.value:null,
-    horasEst:  f.customfield_11136||null,
-    horasPend: f.customfield_11137||null,
-  };
-}
-
-let vtaSortCol=null, vtaSortDir=1;
-
-function ventasFiltered(){
-  const s   = (document.getElementById('vta-search')?.value||'').toLowerCase();
-  const p   = document.getElementById('vta-pais')?.value||'';
-  const a   = document.getElementById('vta-area')?.value||'';
-  const sp  = document.getElementById('vta-sponsor')?.value||'';
-  const est = document.getElementById('vta-estado')?.value||'';
-  return ventas.filter(v=>{
-    if(s  && !v.summary.toLowerCase().includes(s) && !v.key.toLowerCase().includes(s)) return false;
-    if(p  && v.pais!==p)    return false;
-    if(a  && v.area!==a)    return false;
-    if(sp && v.sponsor!==sp) return false;
-    if(est&& v.status!==est) return false;
-    return true;
-  });
-}
-
-function ventasSorted(data){
-  if(!vtaSortCol) return data;
-  const colMap={vkey:'key',vsummary:'summary',vstatus:'status',varea:'area',
-                vpais:'pais',vsponsor:'sponsor',vasignado:'asignado',
-                vdesvioPct:'desvioPct',vfechaInicio:'fechaInicio',
-                vduedate:'duedate',vbloqueante:'bloqueante'};
-  const col=colMap[vtaSortCol]||vtaSortCol;
-  return [...data].sort((a,b)=>{
-    let av=a[col], bv=b[col];
-    if(av===null||av===undefined) return 1;
-    if(bv===null||bv===undefined) return -1;
-    if(typeof av==='number'&&typeof bv==='number') return (av-bv)*vtaSortDir;
-    return String(av).localeCompare(String(bv),'es',{sensitivity:'base'})*vtaSortDir;
-  });
-}
-
-function updateVentasKpis(data){
-  const t     = data.length;
-  const encurso = data.filter(v=>['Desarrollo','Análisis','Pruebas','En curso'].includes(v.status)).length;
-  const prod  = data.filter(v=>v.status==='Producción').length;
-  const anal  = data.filter(v=>v.status==='Análisis').length;
-  const bloq  = data.filter(v=>v.bloqueante==='Si').length;
-  const avgs  = data.map(v=>v.realPct!==null?v.realPct:null).filter(x=>x!==null);
-  const avg   = avgs.length?Math.round(avgs.reduce((a,b)=>a+b,0)/avgs.length*100):0;
-  const sk=(id,v)=>{ const el=document.getElementById(id); if(el) el.textContent=v||'0'; };
-  sk('vkpi-total',   t||'—');
-  sk('vkpi-encurso', encurso);
-  sk('vkpi-prod',    prod);
-  sk('vkpi-analisis',anal);
-  sk('vkpi-bloq',    bloq);
-  sk('vkpi-avg',     avg+'%');
-}
-
-function renderVentas(){
-  const data   = ventasSorted(ventasFiltered());
-  const info   = document.getElementById('vta-table-info');
-  const tbody  = document.getElementById('vta-table-body');
-  updateVentasKpis(data);
-  if(info) info.innerHTML=`Mostrando <strong>${data.length}</strong> de ${ventas.length} ventas`;
-  if(!data.length){
-    tbody.innerHTML='<tr><td colspan="12" style="text-align:center;padding:40px;color:var(--text-muted)">Sin resultados</td></tr>';
-    return;
-  }
-  tbody.innerHTML=data.map(v=>{
-    const dColor = v.desvioPct!==null
-      ?(Math.abs(v.desvioPct)>0.17?'var(--red)':Math.abs(v.desvioPct)>=0.05?'var(--yellow)':'var(--green)')
-      :'var(--text-muted)';
-    const planReal = v.planPct!==null
-      ? Math.round(v.planPct*100)+'% / '+(v.realPct!==null?Math.round(v.realPct*100)+'%':'—')
-      : '—';
-    return `<tr>
-      <td class="code"><a class="jlink" href="${JIRA_BASE}${v.key}" target="_blank">${esc(v.key)}</a></td>
-      <td class="proj" title="${esc(v.summary)}">${esc(v.summary)}</td>
-      <td><span class="badge badge-${sbClass(v.status)}">${v.status}</span></td>
-      <td class="muted">${v.area?`<span class="pill">${esc(v.area)}</span>`:'—'}</td>
-      <td class="muted">${esc(v.pais)||'—'}</td>
-      <td class="muted">${esc(v.sponsor)||'—'}</td>
-      <td class="muted">${esc(v.asignado)||'—'}</td>
-      <td class="muted">${planReal}</td>
-      <td class="muted" style="color:${dColor}">${v.desvioPct!==null?Math.round(v.desvioPct*100)+'%':'—'}</td>
-      <td class="muted">${fmtD(v.fechaInicio)||'—'}</td>
-      <td class="muted">${fmtD(v.duedate)||'—'}</td>
-      <td class="muted">${v.bloqueante==='Si'?'<span style="color:var(--red);font-weight:700">⚠ Sí</span>':'<span style="color:var(--green)">✓</span>'}</td>
-    </tr>`;
-  }).join('');
-}
-
-async function loadVentas(){
-  ventasLoaded = true;
-  document.getElementById('vta-table-info').innerHTML='Cargando ventas desde Jira...';
-  try {
-    const resp = await fetch('/api/jira',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ type:'ventas' })
-    });
-    if(!resp.ok) throw new Error('Error '+resp.status);
-    const data = await resp.json();
-    ventas = (data.issues||[]).map(parseVenta);
-
-    // Populate ventas filters
-    function popSel(id,vals,all){
-      const el=document.getElementById(id); if(!el) return;
-      el.innerHTML=`<option value="">${all}</option>`+[...new Set(vals)].sort().map(v=>`<option>${v}</option>`).join('');
-    }
-    popSel('vta-pais',    ventas.map(v=>v.pais).filter(Boolean),   'Todos');
-    popSel('vta-area',    ventas.map(v=>v.area).filter(Boolean),   'Todas');
-    popSel('vta-sponsor', ventas.map(v=>v.sponsor).filter(Boolean),'Todos');
-    popSel('vta-estado',  ventas.map(v=>v.status).filter(Boolean), 'Todos');
-
-    renderVentas();
-  } catch(err) {
-    console.error('Error ventas:', err);
-    document.getElementById('vta-table-info').textContent='Error al cargar ventas: '+err.message;
-  }
-}
-
-// Ventas filter listeners
-['vta-search','vta-pais','vta-area','vta-sponsor','vta-estado'].forEach(id=>{
-  const el=document.getElementById(id);
-  if(el) el.addEventListener('input', renderVentas);
-});
-document.getElementById('vta-btn-limpiar').addEventListener('click',()=>{
-  ['vta-search','vta-pais','vta-area','vta-sponsor','vta-estado'].forEach(id=>{
-    const el=document.getElementById(id); if(el) el.value='';
-  });
-  vtaSortCol=null; vtaSortDir=1;
-  renderVentas();
-});
-
-// Ventas sort
-document.querySelectorAll('#panel-ventas thead th[data-col]').forEach(th=>{
-  th.addEventListener('click',()=>{
-    const col=th.dataset.col;
-    if(vtaSortCol===col){ vtaSortDir*=-1; } else { vtaSortCol=col; vtaSortDir=1; }
-    document.querySelectorAll('#panel-ventas thead th').forEach(t=>{
-      t.classList.remove('sort-asc','sort-desc');
-      const si=t.querySelector('.sort-icon'); if(si) si.textContent='';
-    });
-    th.classList.add(vtaSortDir===1?'sort-asc':'sort-desc');
-    renderVentas();
-  });
-});
-
 
 // ── GANTT & DETAIL (Portafolio) ────────────────────────────
 function buildGantt(e, stories){
