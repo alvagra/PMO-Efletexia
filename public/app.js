@@ -523,7 +523,57 @@ function buildGantt(e, stories){
       <div class="g-legend-item"><div class="g-legend-dot" style="background:var(--text-dim)"></div>Pendiente</div>
       <div class="g-legend-item"><div class="g-legend-dot" style="background:#8b1a1a"></div>Bloqueado</div>
       <div class="g-legend-item"><div class="g-legend-dot" style="background:var(--red);width:2px;border-radius:0"></div>Hoy</div>
-    </div>`;
+    </div>
+    ${(()=>{
+      // Collect hours per assignee from all subtasks across all stories
+      if(!stories||!stories.length) return '';
+      const PART_COLORS=['#3fb950','#f0883e','#39c5f0','#f85149','#bc8cff','#58a6ff','#d29922','#ff7b72','#56d364','#ffa657'];
+      const byPerson={};
+      stories.forEach(story=>{
+        const subs=story.fields._subtasks||[];
+        subs.forEach(sub=>{
+          const name=sub.fields?.assignee?.displayName||'';
+          if(!name) return;
+          const hrs=sub.fields?.customfield_11136||0;
+          if(!byPerson[name]) byPerson[name]={name,hrs:0};
+          byPerson[name].hrs+=hrs;
+        });
+        // Also count story-level hours if no subtasks
+        if(!subs.length){
+          const name=story.fields?.assignee?.displayName||'';
+          if(!name) return;
+          const hrs=story.fields?.customfield_11136||0;
+          if(!byPerson[name]) byPerson[name]={name,hrs:0};
+          byPerson[name].hrs+=hrs;
+        }
+      });
+      const entries=Object.values(byPerson).filter(p=>p.hrs>0).sort((a,b)=>b.hrs-a.hrs);
+      if(!entries.length) return '';
+      const totalHrs=entries.reduce((s,p)=>s+p.hrs,0);
+      const maxHrs=entries[0].hrs;
+      const rows=entries.map((p,i)=>{
+        const ini=p.name.trim().split(/\s+/).map(w=>w[0]||'').join('').toUpperCase();
+        const pct=Math.round((p.hrs/totalHrs)*100);
+        const barW=Math.round((p.hrs/maxHrs)*100);
+        const col=PART_COLORS[i%PART_COLORS.length];
+        return `<div class="gpart-row">
+          <div class="gpart-ini" style="background:${col}22;color:${col}">${esc(ini)}</div>
+          <div class="gpart-name">${esc(p.name)}</div>
+          <div class="gpart-bar-wrap"><div class="gpart-bar" style="width:${barW}%;background:${col}"></div></div>
+          <div class="gpart-pct">${pct}%</div>
+          <div class="gpart-hrs">${p.hrs}h</div>
+        </div>`;
+      }).join('');
+      return `<div class="gpart-section">
+        <div class="gpart-title">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><path d="M21 21v-2a4 4 0 0 0-3-3.87"/></svg>
+          PARTICIPACIÓN DE RECURSOS
+        </div>
+        ${rows}
+        <div class="gpart-total">Total: ${totalHrs}h</div>
+      </div>`;
+    })()}
+  `;
 }
 
 function buildDetail(e){
