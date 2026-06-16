@@ -610,18 +610,16 @@ function buildGantt(e, stories){
       if(isNaN(d.getTime())) return null;
       return String(d.getDate()).padStart(2,'0')+'/'+(d.getMonth()+1).toString().padStart(2,'0');
     }
-    // Build right-column: "IN · dd/mm → dd/mm"
+    // Build right-column: "IN · dd/mm → dd/mm" — single line
     function metaCol(assigneeName, startIso, endIso){
       const ini   = initials(assigneeName);
       const start = fmtShort(startIso);
       const end   = fmtShort(endIso);
+      const dateRange = [start, end].filter(Boolean).join(' → ');
       const parts = [];
-      if(ini)   parts.push(`<span style="color:var(--blue);font-weight:700;letter-spacing:.3px">${esc(ini)}</span>`);
-      if(start||end){
-        const range = [start,end].filter(Boolean).join(' → ');
-        parts.push(`<span style="color:var(--text-muted)">${range}</span>`);
-      }
-      return parts.join('<span style="color:var(--text-dim);margin:0 3px">·</span>');
+      if(ini)       parts.push(`<span style="color:var(--blue);font-weight:700;letter-spacing:.3px">${esc(ini)}</span>`);
+      if(dateRange) parts.push(`<span style="color:var(--text-muted)">${dateRange}</span>`);
+      return parts.join(' ');
     }
 
     stories.forEach(story=>{
