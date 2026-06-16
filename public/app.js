@@ -11,14 +11,18 @@ let activeRecIdx = -1;
 
 // ── UTILS ──────────────────────────────────────────────────
 function sbClass(s){
-  return({
-    "Backlog":"backlog","Análisis":"analisis","Desarrollo":"desarrollo",
-    "Pruebas":"pruebas","Producción":"produccion","Planificado":"planificado",
-    "Stand by":"standby","Desestimado":"desestimado",
-    "Tareas por hacer":"backlog",
-    "En curso":"en-curso","Review":"en-curso",
-    "Blocked":"bloqueado","Finalizada":"produccion"
-  }[s]||"backlog");
+  if(!s) return 'backlog';
+  const map={
+    "backlog":"backlog","análisis":"analisis","analisis":"analisis",
+    "desarrollo":"desarrollo","pruebas":"pruebas",
+    "producción":"produccion","produccion":"produccion",
+    "planificado":"planificado","stand by":"standby","desestimado":"desestimado",
+    "tareas por hacer":"backlog",
+    "en curso":"en-curso","review":"en-curso",
+    "blocked":"bloqueado","bloqueado":"bloqueado","bloqued":"bloqueado",
+    "finalizada":"produccion"
+  };
+  return map[s.toLowerCase()]||'backlog';
 }
 function fmtD(iso){
   if(!iso) return null;
