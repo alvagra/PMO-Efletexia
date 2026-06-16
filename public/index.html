@@ -51,7 +51,9 @@ select.filter-input option{background:var(--bg-elevated)}
 .estado-item input[type=checkbox]{accent-color:var(--blue);width:12px;height:12px;cursor:pointer}
 .btn-limpiar{margin-left:auto;background:var(--bg-elevated);border:1px solid var(--border);border-radius:5px;padding:5px 14px;font-size:12px;color:var(--blue);cursor:pointer;display:flex;align-items:center;gap:5px;font-family:var(--font);height:30px}
 .btn-limpiar:hover{background:var(--border)}
-.table-info{padding:8px 20px;font-size:11px;color:var(--text-muted);background:var(--bg-base);border-bottom:1px solid var(--border-light)}
+.btn-export{background:var(--bg-elevated);border:1px solid var(--border);border-radius:5px;padding:5px 14px;font-size:12px;color:var(--green);cursor:pointer;display:flex;align-items:center;gap:5px;font-family:var(--font);height:30px}
+.btn-export:hover{background:var(--border)}
+.table-info{padding:8px 20px;font-size:11px;color:var(--text-muted);background:var(--bg-base);border-bottom:1px solid var(--border-light);display:flex;align-items:center;gap:12px}
 .table-wrap{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:12px}
 thead tr{background:var(--bg-surface);border-bottom:2px solid var(--border);position:sticky;top:0;z-index:10}
@@ -87,13 +89,11 @@ td.cat{color:var(--text-muted);font-size:11px}
 .prog-pct{font-size:11px;color:var(--text-muted);min-width:28px}
 .btn-action{background:var(--bg-elevated);border:1px solid var(--border);border-radius:5px;padding:3px 10px;cursor:pointer;color:var(--blue);font-size:13px;font-family:var(--font);line-height:1}
 .btn-action:hover{background:var(--border)}
-.priority-badge{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--text-dim)}
-.priority-badge.high{background:var(--red)}.priority-badge.med{background:var(--yellow)}.priority-badge.low{background:var(--text-dim)}
 a.jlink{color:var(--blue);text-decoration:none;font-family:var(--font-mono);font-size:11px}
 a.jlink:hover{text-decoration:underline}
 .pill{background:var(--bg-elevated);border:1px solid var(--border);border-radius:3px;padding:1px 8px;font-size:11px;display:inline-block}
 .tab-panel{display:none}.tab-panel.active{display:block}
-.tab-panel-ph{text-align:center;color:var(--text-dim);font-size:14px;padding:60px 20px}
+
 /* MODAL */
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;align-items:flex-start;justify-content:flex-end}
 .modal-overlay.open{display:flex}
@@ -110,6 +110,7 @@ a.jlink:hover{text-decoration:underline}
 .modal-tab{padding:9px 14px;font-size:12px;cursor:pointer;border-bottom:2px solid transparent;color:var(--text-muted);user-select:none}
 .modal-tab:hover{color:var(--text-primary)}.modal-tab.active{color:var(--blue);border-bottom-color:var(--blue)}
 .modal-body{padding:20px;flex:1;overflow-y:auto}
+
 /* DETAIL */
 .dsec{font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin:16px 0 8px;border-top:1px solid var(--border);padding-top:14px}
 .dsec:first-child{margin-top:0;border-top:none;padding-top:0}
@@ -117,7 +118,6 @@ a.jlink:hover{text-decoration:underline}
 .dlbl{font-size:11px;color:var(--text-muted);min-width:130px;flex-shrink:0;padding-top:1px}
 .dval{font-size:12px;color:var(--text-primary);word-break:break-word}
 .dval.m{color:var(--text-muted)}
-.av{width:22px;height:22px;border-radius:50%;background:var(--blue-bg);display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;margin-right:5px;vertical-align:middle}
 /* LOG BOXES */
 .log-section{margin-top:20px}
 .log-title{display:flex;align-items:center;gap:8px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-muted);margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border)}
@@ -125,6 +125,7 @@ a.jlink:hover{text-decoration:underline}
 .log-box{background:var(--bg-base);border:1px solid var(--border);border-left:3px solid var(--yellow);border-radius:0 6px 6px 0;padding:12px 14px;font-size:12px;color:var(--text-primary);line-height:1.75;white-space:pre-wrap;word-break:break-word}
 .log-box.empty{color:var(--text-dim);font-style:italic;border-left-color:var(--border);background:transparent}
 .log-spacer{height:14px}
+
 /* GANTT */
 .gantt-meta{display:flex;gap:20px;margin-bottom:16px;flex-wrap:wrap}
 .gm-item{display:flex;flex-direction:column;gap:2px}
@@ -134,12 +135,11 @@ a.jlink:hover{text-decoration:underline}
 .gc{position:relative;width:100%;min-width:600px}
 .g-hdr{display:flex;margin-bottom:4px}
 .g-lc{width:220px;flex-shrink:0}
-.g-rc{width:90px;flex-shrink:0}
+.g-rc{width:160px;flex-shrink:0}
 .g-months{flex:1;position:relative;height:18px}
 .g-month{position:absolute;text-align:center;font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;border-left:1px solid var(--border-light);overflow:hidden;white-space:nowrap}
 .grow{display:flex;align-items:center;margin-bottom:4px;height:26px}
 .grow-lbl{width:220px;flex-shrink:0;font-size:11px;color:var(--text-muted);padding-right:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.grow-lbl.main{font-weight:700;color:var(--blue);font-size:11px;font-family:var(--font-mono)}
 .g-epic-row .grow-lbl{font-weight:700;color:var(--text-primary);font-size:12px}
 .g-epic-row{margin-bottom:6px}
 .g-story-row{background:rgba(255,255,255,.015);border-radius:3px}
@@ -147,19 +147,12 @@ a.jlink:hover{text-decoration:underline}
 .g-subtask-row .grow-lbl,.g-lbl-subtask{color:var(--text-muted);font-size:10.5px;padding-left:18px}
 .g-asig{color:var(--text-dim);font-weight:400;font-size:10px}
 .g-row-pct{width:90px;flex-shrink:0;text-align:right;font-size:10.5px;font-weight:600;padding-left:8px;white-space:nowrap}
+.g-row-meta{width:160px;font-size:10px;display:flex;flex-direction:column;align-items:flex-end;gap:1px;line-height:1.35}
 .grow-track{flex:1;position:relative;height:100%;background:var(--bg-elevated);border-radius:3px;overflow:hidden}
 .g-grid{position:absolute;top:0;bottom:0;width:1px;background:var(--border-light);z-index:0}
 .g-bar{position:absolute;top:4px;bottom:4px;border-radius:3px;z-index:1;display:flex;align-items:center;padding:0 6px;font-size:10px;font-weight:600;color:#fff;overflow:hidden;white-space:nowrap;min-width:3px}
 .gb-backlog{background:#484f58}.gb-analisis{background:#1a7fa8}.gb-desarrollo{background:#c85a00}
 .gb-pruebas{background:#b8860b}.gb-produccion{background:#1e7a36}.gb-default{background:#484f58}
-.g-bar-track{position:absolute;top:4px;bottom:4px;border-radius:4px;z-index:1;background:rgba(255,255,255,.07);overflow:hidden;min-width:4px}
-.g-bar-fill{position:absolute;left:0;top:0;bottom:0;border-radius:4px;transition:width .4s ease}
-.g-bar-fill.gb-analisis{background:#1a7fa8}.g-bar-fill.gb-desarrollo{background:#c85a00}.g-bar-fill.gb-pruebas{background:#b8860b}
-.g-bar-pct-label{position:absolute;left:0;top:0;right:0;bottom:0;z-index:3;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;white-space:nowrap;text-shadow:0 1px 3px rgba(0,0,0,.8);pointer-events:none}
-.g-bar-pct{position:absolute;top:50%;transform:translateY(-50%);font-size:10px;font-weight:700;color:var(--text-muted);white-space:nowrap;pointer-events:none}
-.g-bar-label{position:absolute;right:4px;top:50%;transform:translateY(-50%);font-size:10px;font-weight:700;color:#fff;white-space:nowrap;pointer-events:none;text-shadow:0 1px 2px rgba(0,0,0,.5)}
-.g-today{position:absolute;top:0;bottom:0;width:2px;background:var(--red);z-index:2;opacity:.9}
-.g-today-lbl{position:absolute;top:-16px;font-size:9px;color:var(--red);transform:translateX(-50%);white-space:nowrap;font-weight:600}
 .g-prog-row{margin-top:14px}
 .g-prog-lbl{font-size:11px;color:var(--text-muted);margin-bottom:5px;display:flex;justify-content:space-between}
 .g-prog-track{background:var(--bg-elevated);border-radius:4px;height:10px;overflow:hidden}
@@ -171,10 +164,10 @@ a.jlink:hover{text-decoration:underline}
 .g-legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px}
 .g-legend-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted)}
 .g-legend-dot{width:10px;height:10px;border-radius:2px;flex-shrink:0}
-@media(max-width:900px){.kpis{grid-template-columns:repeat(3,1fr)}}
-@media(max-width:600px){.kpis{grid-template-columns:repeat(2,1fr)}.filters{flex-direction:column;align-items:stretch}.btn-limpiar{margin-left:0}.modal-panel.w-gantt,.modal-panel.w-detail{width:100vw}}
+.g-today{position:absolute;top:0;bottom:0;width:2px;background:var(--red);z-index:2;opacity:.9}
+.g-today-lbl{position:absolute;top:-16px;font-size:9px;color:var(--red);transform:translateX(-50%);white-space:nowrap;font-weight:600}
 
-
+/* LOADING / ERROR */
 .loading-screen{position:fixed;inset:0;background:var(--bg-base);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;gap:16px}
 .loading-screen.hidden{display:none}
 .loading-spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite}
@@ -194,23 +187,19 @@ a.jlink:hover{text-decoration:underline}
 /* ── RECURSOS ── */
 .rec-kpis{display:grid;grid-template-columns:repeat(6,1fr);background:var(--border);gap:1px;border-bottom:1px solid var(--border)}
 .rec-filters{background:var(--bg-surface);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.rec-search{background:var(--bg-base);border:1px solid var(--border);border-radius:20px;padding:5px 12px 5px 32px;font-size:12px;color:var(--text-primary);height:30px;outline:none;font-family:var(--font);min-width:160px;position:relative}
 .rec-search-wrap{position:relative;display:flex;align-items:center}
 .rec-search-icon{position:absolute;left:10px;color:var(--text-muted);pointer-events:none}
-.rec-search-input{background:var(--bg-base);border:1px solid var(--border);border-radius:20px;padding:5px 12px 5px 32px;font-size:12px;color:var(--text-primary);height:30px;outline:none;font-family:var(--font);min-width:160px}
+.rec-search-input{background:var(--bg-base);border:1px solid var(--border);border-radius:20px;padding:5px 12px 5px 32px;font-size:12px;color:var(--text-primary);height:30px;outline:none;font-family:var(--font);min-width:180px}
 .rec-search-input:focus{border-color:var(--blue)}
 .rec-area-btns{display:flex;gap:6px;flex-wrap:wrap}
 .rec-area-btn{background:var(--bg-elevated);border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-size:11px;color:var(--text-muted);cursor:pointer;font-family:var(--font);transition:all .15s;white-space:nowrap}
 .rec-area-btn:hover{background:var(--border);color:var(--text-primary)}
 .rec-area-btn.active{background:var(--blue-bg);border-color:var(--blue);color:#fff}
 .rec-pais-sel{background:var(--bg-base);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:11px;color:var(--text-primary);height:30px;outline:none;font-family:var(--font);cursor:pointer}
-.rec-sort-btn{background:none;border:none;color:var(--text-muted);font-size:11px;cursor:pointer;font-family:var(--font);display:flex;align-items:center;gap:4px;margin-left:auto}
-.rec-sort-btn:hover{color:var(--text-primary)}
-.rec-limpiar{background:var(--bg-elevated);border:1px solid var(--border);border-radius:5px;padding:4px 12px;font-size:11px;color:var(--blue);cursor:pointer;font-family:var(--font);display:flex;align-items:center;gap:4px}
+.rec-limpiar{background:var(--bg-elevated);border:1px solid var(--border);border-radius:5px;padding:4px 12px;font-size:11px;color:var(--blue);cursor:pointer;font-family:var(--font);display:flex;align-items:center;gap:4px;margin-left:auto}
 .rec-limpiar:hover{background:var(--border)}
 .rec-corte{background:var(--bg-surface);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;gap:10px}
 .rec-corte-label{font-size:10px;color:var(--blue);text-transform:uppercase;letter-spacing:.5px;font-weight:600;display:flex;align-items:center;gap:6px}
-.rec-corte-label svg{width:14px;height:14px}
 .rec-date-input{background:var(--bg-elevated);border:1px solid var(--blue);border-radius:5px;padding:4px 10px;font-size:12px;color:var(--blue);font-family:var(--font);outline:none;cursor:pointer;height:30px}
 .rec-table-wrap{overflow-x:auto}
 .rec-table{width:100%;border-collapse:collapse;font-size:12px}
@@ -230,7 +219,6 @@ a.jlink:hover{text-decoration:underline}
 .rec-area-pm{background:#1a2d3d;color:#58c8ff}
 .rec-area-torre{background:var(--green-bg);color:var(--green)}
 .rec-area-soporte{background:#2a2020;color:#a05050}
-.rec-area-operacion{background:#2d1f0a;color:#f0883e}
 .rec-area-default{background:var(--bg-elevated);color:var(--text-muted)}
 .rec-hours-high{color:var(--red);font-weight:700}
 .rec-hours-med{color:var(--yellow);font-weight:600}
@@ -242,10 +230,6 @@ a.jlink:hover{text-decoration:underline}
 .rec-dist-bar-wrap{position:relative;height:14px;background:var(--bg-elevated);border-radius:3px;overflow:hidden;display:flex}
 .rec-dist-cerr{height:100%;background:var(--green);border-radius:3px 0 0 3px}
 .rec-dist-pend{height:100%;background:var(--yellow)}
-.rec-dist-libre{height:100%;background:var(--bg-elevated);flex:1}
-.rec-dist-pct{position:absolute;right:4px;top:0;bottom:0;display:flex;align-items:center;font-size:10px;font-weight:700}
-.rec-dist-pct.over{color:var(--red)}
-.rec-dist-pct.ok{color:var(--green)}
 .rec-dist-labels{display:flex;gap:8px;margin-top:3px;font-size:10px;color:var(--text-muted)}
 .rec-dist-lbl{display:flex;align-items:center;gap:3px}
 .rec-dist-dot{width:6px;height:6px;border-radius:1px;flex-shrink:0}
@@ -256,7 +240,6 @@ a.jlink:hover{text-decoration:underline}
 .rec-ver-btn:hover{opacity:.85}
 .rec-table-info{padding:8px 20px;font-size:11px;color:var(--text-muted);background:var(--bg-base);border-bottom:1px solid var(--border-light)}
 .rec-empty{text-align:center;padding:60px;color:var(--text-dim);font-size:13px}
-
 
 /* ── RECURSO DETAIL MODAL ── */
 .rec-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:300;align-items:flex-start;justify-content:flex-end}
@@ -292,15 +275,6 @@ a.jlink:hover{text-decoration:underline}
 .rec-proj-link{background:var(--blue-bg);border:none;border-radius:4px;padding:5px 8px;cursor:pointer;color:#fff;display:flex;align-items:center;flex-shrink:0}
 .rec-proj-link:hover{opacity:.85}
 
-/* ── VENTAS en rec-modal ── */
-.rec-venta-card{background:var(--bg-elevated);border:1px solid var(--border);border-radius:6px;padding:12px 14px;margin-bottom:8px}
-.rec-venta-card-header{display:flex;align-items:center;gap:8px;margin-bottom:10px}
-.rec-venta-nombre{flex:1;font-size:13px;font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
-.rec-venta-card-fields{display:grid;grid-template-columns:1fr 1fr;gap:4px 16px}
-.rec-venta-field{display:flex;align-items:baseline;gap:6px}
-.rec-venta-lbl{font-size:11px;color:var(--text-muted);min-width:52px;flex-shrink:0}
-.rec-venta-val{font-size:12px;color:var(--text-primary)}
-
 /* ── DETALLE DE PROYECTO (segundo modal anidado) ── */
 .det-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:400;align-items:flex-start;justify-content:flex-end}
 .det-overlay.open{display:flex}
@@ -334,6 +308,16 @@ a.jlink:hover{text-decoration:underline}
 .det-badge.open{background:rgba(59,130,246,.15);color:#60a5fa}
 .det-badge.done{background:var(--green-bg,rgba(34,197,94,.1));color:var(--green,#4ade80)}
 
+/* ── VENTAS ── */
+.vta-kpis{display:grid;grid-template-columns:repeat(6,1fr);background:var(--border);gap:1px;border-bottom:1px solid var(--border)}
+.vta-filters{background:var(--bg-surface);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap}
+.vta-table-wrap{overflow-x:auto}
+.vta-prog-bar{background:var(--bg-elevated);border-radius:3px;height:5px;width:54px;overflow:hidden;display:inline-block;vertical-align:middle;margin-right:5px}
+.vta-prog-fill{height:100%;border-radius:3px;background:var(--blue-bg);transition:width .3s}
+.vta-prog-fill.full{background:var(--green)}
+
+@media(max-width:900px){.kpis,.vta-kpis,.rec-kpis{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:600px){.kpis,.vta-kpis,.rec-kpis{grid-template-columns:repeat(2,1fr)}.modal-panel.w-gantt,.modal-panel.w-detail,.rec-modal-panel{width:100vw}}
 </style>
 </head>
 <body>
@@ -369,12 +353,15 @@ a.jlink:hover{text-decoration:underline}
   <div class="tab active" data-tab="portafolio">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="12" height="9" rx="1.5"/><path d="M5 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/></svg>Portafolio
   </div>
+  <div class="tab" data-tab="ventas">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 12l3-4 3 2 3-5 3 2"/><circle cx="14" cy="5" r="1.5" fill="currentColor" stroke="none"/></svg>Ventas
+  </div>
   <div class="tab" data-tab="recursos">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.314 2.686-6 6-6s6 2.686 6 6"/></svg>Recursos
   </div>
-
 </nav>
 
+<!-- ══ PORTAFOLIO ══ -->
 <div class="tab-panel active" id="panel-portafolio">
   <div class="kpis" id="kpis-section"></div>
   <div class="filters">
@@ -384,54 +371,19 @@ a.jlink:hover{text-decoration:underline}
     </div>
     <div class="filter-group">
       <label class="filter-label" for="s-pais">País</label>
-      <select id="s-pais" class="filter-input">
-        <option value="">Todos</option>
-        <option>Colombia</option>
-<option>Guatemala</option>
-<option>México</option>
-<option>Perú</option>
-<option>Regional</option>
-      </select>
+      <select id="s-pais" class="filter-input"><option value="">Todos</option></select>
     </div>
     <div class="filter-group">
       <label class="filter-label" for="s-area">Área</label>
-      <select id="s-area" class="filter-input">
-        <option value="">Todas</option>
-        <option>Administracion y Finanzas</option>
-        <option>AJE</option>
-        <option>Innovation Hub</option>
-        <option>Operaciones</option>
-        <option>TI</option>
-        <option>Torre de Control</option>
-        <option>Transporte</option>
-      </select>
+      <select id="s-area" class="filter-input"><option value="">Todas</option></select>
     </div>
     <div class="filter-group">
       <label class="filter-label" for="s-sponsor">Sponsor</label>
-      <select id="s-sponsor" class="filter-input">
-        <option value="">Todos</option>
-        <option>Albaro Rivera</option>
-<option>Andrés Medina</option>
-<option>César Casteñeda</option>
-<option>Edgar Noriega</option>
-<option>Fabian Mosquera </option>
-<option>Farah Fidel</option>
-<option>Kevin Skopljak</option>
-<option>Marcos Fidel</option>
-      </select>
+      <select id="s-sponsor" class="filter-input"><option value="">Todos</option></select>
     </div>
     <div class="filter-group">
       <label class="filter-label" for="s-cat">Categoría</label>
-      <select id="s-cat" class="filter-input">
-        <option value="">Todas</option>
-        <option>Aplicaciones</option>
-<option>Automatización Operativa</option>
-<option>Data & Analytics</option>
-<option>Gestión</option>
-<option>Infraestrutura</option>
-<option>Innovación y Nuevos Negocios</option>
-<option>Transformación</option>
-      </select>
+      <select id="s-cat" class="filter-input"><option value="">Todas</option></select>
     </div>
     <div class="estados-wrap">
       <div class="filter-label">Estado</div>
@@ -448,6 +400,9 @@ a.jlink:hover{text-decoration:underline}
     </div>
     <button class="btn-limpiar" id="btn-limpiar" type="button">
       <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l10 10M13 3L3 13"/></svg>Limpiar
+    </button>
+    <button class="btn-export" id="btn-export-port" type="button" title="Exportar a CSV">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>CSV
     </button>
   </div>
   <div class="table-info" id="table-info"></div>
@@ -467,8 +422,7 @@ a.jlink:hover{text-decoration:underline}
           <th>Des/Pru</th>
           <th data-col="fechaInicio">Inicio<span class="sort-icon"></span></th>
           <th data-col="duedate">Fin<span class="sort-icon"></span></th>
-          <th data-col="asignado">Cond.<span class="sort-icon"></span></th>
-          <th data-col="conformidad">Conformidad<span class="sort-icon"></span></th>
+          <th data-col="conformidad">Conform.<span class="sort-icon"></span></th>
           <th data-col="docFuncional">DF<span class="sort-icon"></span></th>
           <th></th>
         </tr>
@@ -478,9 +432,74 @@ a.jlink:hover{text-decoration:underline}
   </div>
 </div>
 
-<div class="tab-panel" id="panel-recursos">
+<!-- ══ VENTAS ══ -->
+<div class="tab-panel" id="panel-ventas">
+  <div class="vta-kpis" id="vta-kpis-section">
+    <div class="kpi"><div class="kpi-label">Total Ventas</div><div class="kpi-value c-white" id="vkpi-total">—</div></div>
+    <div class="kpi"><div class="kpi-label">En Curso</div><div class="kpi-value c-blue" id="vkpi-encurso">—</div></div>
+    <div class="kpi"><div class="kpi-label">Producción</div><div class="kpi-value c-green" id="vkpi-prod">—</div></div>
+    <div class="kpi"><div class="kpi-label">Análisis</div><div class="kpi-value c-cyan" id="vkpi-analisis">—</div></div>
+    <div class="kpi"><div class="kpi-label">Bloqueados</div><div class="kpi-value c-red" id="vkpi-bloq">—</div><div class="kpi-sub">Con bloqueante</div></div>
+    <div class="kpi"><div class="kpi-label">Avance prom.</div><div class="kpi-value c-yellow" id="vkpi-avg">—</div></div>
+  </div>
+  <div class="vta-filters" id="vta-filters">
+    <div class="filter-group">
+      <label class="filter-label" for="vta-search">Buscar</label>
+      <input id="vta-search" class="filter-input" placeholder="Nombre/código..." autocomplete="off"/>
+    </div>
+    <div class="filter-group">
+      <label class="filter-label" for="vta-pais">País</label>
+      <select id="vta-pais" class="filter-input"><option value="">Todos</option></select>
+    </div>
+    <div class="filter-group">
+      <label class="filter-label" for="vta-area">Área</label>
+      <select id="vta-area" class="filter-input"><option value="">Todas</option></select>
+    </div>
+    <div class="filter-group">
+      <label class="filter-label" for="vta-sponsor">Sponsor</label>
+      <select id="vta-sponsor" class="filter-input"><option value="">Todos</option></select>
+    </div>
+    <div class="filter-group">
+      <label class="filter-label" for="vta-estado">Estado</label>
+      <select id="vta-estado" class="filter-input"><option value="">Todos</option></select>
+    </div>
+    <button class="btn-limpiar" id="vta-btn-limpiar" type="button">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l10 10M13 3L3 13"/></svg>Limpiar
+    </button>
+    <button class="btn-export" id="btn-export-vta" type="button" title="Exportar a CSV">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>CSV
+    </button>
+  </div>
+  <div class="table-info" id="vta-table-info">
+    <span>Cargando...</span>
+  </div>
+  <div class="vta-table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th data-col="vkey">Clave<span class="sort-icon"></span></th>
+          <th data-col="vsummary">Venta<span class="sort-icon"></span></th>
+          <th data-col="vstatus">Estado<span class="sort-icon"></span></th>
+          <th data-col="varea">Área<span class="sort-icon"></span></th>
+          <th data-col="vpais">País<span class="sort-icon"></span></th>
+          <th data-col="vsponsor">Sponsor<span class="sort-icon"></span></th>
+          <th data-col="vasignado">Asignado<span class="sort-icon"></span></th>
+          <th>Plan/Real</th>
+          <th data-col="vdesvioPct">Desv%<span class="sort-icon"></span></th>
+          <th data-col="vfechaInicio">Inicio<span class="sort-icon"></span></th>
+          <th data-col="vduedate">Fin<span class="sort-icon"></span></th>
+          <th data-col="vbloqueante">Bloq.<span class="sort-icon"></span></th>
+        </tr>
+      </thead>
+      <tbody id="vta-table-body">
+        <tr><td colspan="12" style="text-align:center;padding:40px;color:var(--text-muted)">Cargando ventas...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
 
-  <!-- KPIs Recursos -->
+<!-- ══ RECURSOS ══ -->
+<div class="tab-panel" id="panel-recursos">
   <div class="rec-kpis" id="rec-kpis">
     <div class="kpi"><div class="kpi-label">Recursos</div><div class="kpi-value c-white" id="rec-kpi-total">—</div></div>
     <div class="kpi"><div class="kpi-label">Alta Carga</div><div class="kpi-value c-red" id="rec-kpi-alta">—</div><div class="kpi-sub">≥40h pend.</div></div>
@@ -490,30 +509,38 @@ a.jlink:hover{text-decoration:underline}
     <div class="kpi"><div class="kpi-label">Entregas Pend.</div><div class="kpi-value c-yellow" id="rec-kpi-entregas">—</div></div>
   </div>
 
-  <!-- Filtros -->
-  <div class="rec-filters" style="display:none"></div>
-
-  <!-- Fecha de corte + Buscador -->
-  <div class="rec-corte">
-    <div class="rec-search-wrap" style="margin-right:16px">
+  <!-- Filtros Recursos: búsqueda + área + país -->
+  <div class="rec-filters" id="rec-filters-bar">
+    <div class="rec-search-wrap">
       <svg class="rec-search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
       <input id="rec-search" class="rec-search-input" placeholder="Buscar recurso o proyecto..." autocomplete="off"/>
     </div>
+    <div id="rec-area-btns" class="rec-area-btns"></div>
+    <select id="rec-pais-sel" class="rec-pais-sel filter-input">
+      <option value="">Todos los países</option>
+    </select>
+    <button class="rec-limpiar" id="rec-limpiar-btn">
+      <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l10 10M13 3L3 13"/></svg>Limpiar
+    </button>
+  </div>
+
+  <!-- Fecha de corte -->
+  <div class="rec-corte">
     <div class="rec-corte-label">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
       FECHA DE CORTE
     </div>
     <input type="date" id="rec-fecha-corte" class="rec-date-input"/>
     <div id="rec-corte-info" style="margin-left:16px;font-size:12px;color:var(--text-muted)"></div>
   </div>
 
-  <!-- Tabla -->
   <div class="rec-table-info" id="rec-table-info">Sin datos cargados</div>
   <div class="rec-table-wrap">
     <table class="rec-table">
       <thead>
         <tr>
           <th>Recurso ↕</th>
+          <th>Área</th>
           <th>Proyectos ↕</th>
           <th>Horas Pend. ↕</th>
           <th>Horas Total ↕</th>
@@ -524,18 +551,17 @@ a.jlink:hover{text-decoration:underline}
         </tr>
       </thead>
       <tbody id="rec-table-body">
-        <tr>
-          <td colspan="9" class="rec-empty">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="margin-bottom:10px;opacity:.3;display:block;margin-left:auto;margin-right:auto"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4.418 3.582-8 8-8s8 3.582 8 8"/></svg>
-            Los datos de recursos se cargarán cuando estén disponibles en Jira
-          </td>
-        </tr>
+        <tr><td colspan="9" class="rec-empty">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="margin-bottom:10px;opacity:.3;display:block;margin-left:auto;margin-right:auto"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4.418 3.582-8 8-8s8 3.582 8 8"/></svg>
+          Los datos de recursos se cargarán al abrir esta pestaña
+        </td></tr>
       </tbody>
     </table>
   </div>
 </div>
 
 
+<!-- MODAL PORTAFOLIO -->
 <div class="modal-overlay" id="modal-overlay">
   <div class="modal-panel w-gantt" id="modal-panel">
     <div class="modal-hdr">
@@ -553,7 +579,7 @@ a.jlink:hover{text-decoration:underline}
   </div>
 </div>
 
-<!-- RECURSO DETAIL MODAL + DETALLE DE PROYECTO (paneles lado a lado) -->
+<!-- RECURSO DETAIL MODAL + DETALLE DE PROYECTO -->
 <div class="rec-modal-overlay" id="rec-modal-overlay">
   <div class="det-panel" id="det-panel">
     <div class="det-hdr">
