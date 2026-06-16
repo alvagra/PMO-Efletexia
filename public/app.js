@@ -624,12 +624,40 @@ function buildGantt(e, stories){
 
     stories.forEach(story=>{
       const sf=story.fields;
-      const sNom=sf.summary||story.key, sAsig=sf.assignee?sf.assignee.displayName:'';
+      const sNom=sf.summary||story.key;
       const sStatus=sf.status?sf.status.name:'', sCls='gb-'+sbClass(sStatus);
       const sStart=sf.customfield_10015||null, sEnd=sf.duedate||null;
       const sPos=barPos(sStart, sEnd);
       const sBarHtml=sPos?`<div class="g-bar ${sCls}" style="left:${sPos.l.toFixed(2)}%;width:${sPos.w.toFixed(2)}%"></div>`:'';
-      const sRightCol=metaCol(sAsig, sStart, sEnd);
+
+      // Historia: iniciales = union de asignados de subtareas (únicos, en orden de aparición)
+      // Fechas = min(inicio subtareas) → max(fin subtareas)
+      const subItems = sf._subtasks||[];
+      let sRightCol;
+      if(subItems.length){
+        // Iniciales únicas preservando orden
+        const seenIni = new Set();
+        const subInits = [];
+        subItems.forEach(sub=>{
+          const name = sub.fields?.assignee?.displayName||'';
+          const ini  = initials(name);
+          if(ini && !seenIni.has(ini)){ seenIni.add(ini); subInits.push(ini); }
+        });
+        // Rango de fechas de subtareas
+        const subStarts = subItems.map(s=>s.fields?.customfield_10015).filter(Boolean);
+        const subEnds   = subItems.map(s=>s.fields?.duedate).filter(Boolean);
+        const minStart  = subStarts.length ? subStarts.reduce((a,b)=>a<b?a:b) : sStart;
+        const maxEnd    = subEnds.length   ? subEnds.reduce((a,b)=>a>b?a:b)   : sEnd;
+        const inisHtml  = subInits.length
+          ? `<span style="color:var(--blue);font-weight:700;letter-spacing:.3px">${subInits.join(', ')}</span>`
+          : '';
+        const dateRange = [fmtShort(minStart), fmtShort(maxEnd)].filter(Boolean).join(' → ');
+        const dateHtml  = dateRange ? `<span style="color:var(--text-muted)">${dateRange}</span>` : '';
+        sRightCol = [inisHtml, dateHtml].filter(Boolean).join(' ');
+      } else {
+        // Sin subtareas: usar asignado e fechas de la historia
+        sRightCol = metaCol(sf.assignee?sf.assignee.displayName:'', sStart, sEnd);
+      }
       storyRows+=`<div class="grow g-story-row">
         <div class="grow-lbl g-lbl-story" title="${esc(sNom)}">${esc(sNom)}</div>
         <div class="grow-track">${grid}${tl}${sBarHtml}</div>
