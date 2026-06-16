@@ -82,6 +82,7 @@ td.cat{color:var(--text-muted);font-size:11px}
 .badge-standby{background:#1f2d3d;color:var(--blue)}
 .badge-desestimado{background:#2a2020;color:#a05050}
 .badge-en-curso{background:var(--orange-bg);color:var(--orange)}
+.badge-bloqueado{background:#3d1a1a;color:var(--red)}
 .prog-cell{display:flex;align-items:center;gap:7px}
 .prog-bar{background:var(--bg-elevated);border-radius:3px;height:6px;width:60px;overflow:hidden;flex-shrink:0}
 .prog-fill{height:100%;border-radius:3px;background:var(--blue-bg)}
@@ -308,16 +309,8 @@ a.jlink:hover{text-decoration:underline}
 .det-badge.open{background:rgba(59,130,246,.15);color:#60a5fa}
 .det-badge.done{background:var(--green-bg,rgba(34,197,94,.1));color:var(--green,#4ade80)}
 
-/* ── VENTAS ── */
-.vta-kpis{display:grid;grid-template-columns:repeat(6,1fr);background:var(--border);gap:1px;border-bottom:1px solid var(--border)}
-.vta-filters{background:var(--bg-surface);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap}
-.vta-table-wrap{overflow-x:auto}
-.vta-prog-bar{background:var(--bg-elevated);border-radius:3px;height:5px;width:54px;overflow:hidden;display:inline-block;vertical-align:middle;margin-right:5px}
-.vta-prog-fill{height:100%;border-radius:3px;background:var(--blue-bg);transition:width .3s}
-.vta-prog-fill.full{background:var(--green)}
-
-@media(max-width:900px){.kpis,.vta-kpis,.rec-kpis{grid-template-columns:repeat(3,1fr)}}
-@media(max-width:600px){.kpis,.vta-kpis,.rec-kpis{grid-template-columns:repeat(2,1fr)}.modal-panel.w-gantt,.modal-panel.w-detail,.rec-modal-panel{width:100vw}}
+@media(max-width:900px){.kpis,.rec-kpis{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:600px){.kpis,.rec-kpis{grid-template-columns:repeat(2,1fr)}.modal-panel.w-gantt,.modal-panel.w-detail,.rec-modal-panel{width:100vw}}
 </style>
 </head>
 <body>
@@ -352,9 +345,6 @@ a.jlink:hover{text-decoration:underline}
 <nav class="tabs" role="tablist">
   <div class="tab active" data-tab="portafolio">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="12" height="9" rx="1.5"/><path d="M5 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/></svg>Portafolio
-  </div>
-  <div class="tab" data-tab="ventas">
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 12l3-4 3 2 3-5 3 2"/><circle cx="14" cy="5" r="1.5" fill="currentColor" stroke="none"/></svg>Ventas
   </div>
   <div class="tab" data-tab="recursos">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.314 2.686-6 6-6s6 2.686 6 6"/></svg>Recursos
@@ -432,71 +422,6 @@ a.jlink:hover{text-decoration:underline}
   </div>
 </div>
 
-<!-- ══ VENTAS ══ -->
-<div class="tab-panel" id="panel-ventas">
-  <div class="vta-kpis" id="vta-kpis-section">
-    <div class="kpi"><div class="kpi-label">Total Ventas</div><div class="kpi-value c-white" id="vkpi-total">—</div></div>
-    <div class="kpi"><div class="kpi-label">En Curso</div><div class="kpi-value c-blue" id="vkpi-encurso">—</div></div>
-    <div class="kpi"><div class="kpi-label">Producción</div><div class="kpi-value c-green" id="vkpi-prod">—</div></div>
-    <div class="kpi"><div class="kpi-label">Análisis</div><div class="kpi-value c-cyan" id="vkpi-analisis">—</div></div>
-    <div class="kpi"><div class="kpi-label">Bloqueados</div><div class="kpi-value c-red" id="vkpi-bloq">—</div><div class="kpi-sub">Con bloqueante</div></div>
-    <div class="kpi"><div class="kpi-label">Avance prom.</div><div class="kpi-value c-yellow" id="vkpi-avg">—</div></div>
-  </div>
-  <div class="vta-filters" id="vta-filters">
-    <div class="filter-group">
-      <label class="filter-label" for="vta-search">Buscar</label>
-      <input id="vta-search" class="filter-input" placeholder="Nombre/código..." autocomplete="off"/>
-    </div>
-    <div class="filter-group">
-      <label class="filter-label" for="vta-pais">País</label>
-      <select id="vta-pais" class="filter-input"><option value="">Todos</option></select>
-    </div>
-    <div class="filter-group">
-      <label class="filter-label" for="vta-area">Área</label>
-      <select id="vta-area" class="filter-input"><option value="">Todas</option></select>
-    </div>
-    <div class="filter-group">
-      <label class="filter-label" for="vta-sponsor">Sponsor</label>
-      <select id="vta-sponsor" class="filter-input"><option value="">Todos</option></select>
-    </div>
-    <div class="filter-group">
-      <label class="filter-label" for="vta-estado">Estado</label>
-      <select id="vta-estado" class="filter-input"><option value="">Todos</option></select>
-    </div>
-    <button class="btn-limpiar" id="vta-btn-limpiar" type="button">
-      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l10 10M13 3L3 13"/></svg>Limpiar
-    </button>
-    <button class="btn-export" id="btn-export-vta" type="button" title="Exportar a CSV">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>CSV
-    </button>
-  </div>
-  <div class="table-info" id="vta-table-info">
-    <span>Cargando...</span>
-  </div>
-  <div class="vta-table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th data-col="vkey">Clave<span class="sort-icon"></span></th>
-          <th data-col="vsummary">Venta<span class="sort-icon"></span></th>
-          <th data-col="vstatus">Estado<span class="sort-icon"></span></th>
-          <th data-col="varea">Área<span class="sort-icon"></span></th>
-          <th data-col="vpais">País<span class="sort-icon"></span></th>
-          <th data-col="vsponsor">Sponsor<span class="sort-icon"></span></th>
-          <th data-col="vasignado">Asignado<span class="sort-icon"></span></th>
-          <th>Plan/Real</th>
-          <th data-col="vdesvioPct">Desv%<span class="sort-icon"></span></th>
-          <th data-col="vfechaInicio">Inicio<span class="sort-icon"></span></th>
-          <th data-col="vduedate">Fin<span class="sort-icon"></span></th>
-          <th data-col="vbloqueante">Bloq.<span class="sort-icon"></span></th>
-        </tr>
-      </thead>
-      <tbody id="vta-table-body">
-        <tr><td colspan="12" style="text-align:center;padding:40px;color:var(--text-muted)">Cargando ventas...</td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
 
 <!-- ══ RECURSOS ══ -->
 <div class="tab-panel" id="panel-recursos">
