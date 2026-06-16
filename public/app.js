@@ -517,6 +517,7 @@ function buildGantt(e, stories){
       <div class="g-legend-item"><div class="g-legend-dot" style="background:var(--green)"></div>Completado</div>
       <div class="g-legend-item"><div class="g-legend-dot" style="background:#c85a00"></div>En curso</div>
       <div class="g-legend-item"><div class="g-legend-dot" style="background:var(--text-dim)"></div>Pendiente</div>
+      <div class="g-legend-item"><div class="g-legend-dot" style="background:#8b1a1a"></div>Bloqueado</div>
       <div class="g-legend-item"><div class="g-legend-dot" style="background:var(--red);width:2px;border-radius:0"></div>Hoy</div>
     </div>`;
 }
