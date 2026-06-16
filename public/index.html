@@ -168,6 +168,18 @@ a.jlink:hover{text-decoration:underline}
 .g-today{position:absolute;top:0;bottom:0;width:2px;background:var(--red);z-index:2;opacity:.9}
 .g-today-lbl{position:absolute;top:-16px;font-size:9px;color:var(--red);transform:translateX(-50%);white-space:nowrap;font-weight:600}
 
+/* ── PARTICIPACIÓN DE RECURSOS (Gantt) ── */
+.gpart-section{margin-top:20px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;padding:14px 16px}
+.gpart-title{display:flex;align-items:center;gap:7px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--text-muted);margin-bottom:12px}
+.gpart-row{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.gpart-ini{width:28px;height:20px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;letter-spacing:.3px}
+.gpart-name{font-size:11px;color:var(--text-muted);min-width:130px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gpart-bar-wrap{flex:1;background:var(--bg-base);border-radius:3px;height:10px;overflow:hidden}
+.gpart-bar{height:100%;border-radius:3px;transition:width .4s}
+.gpart-pct{font-size:11px;color:var(--text-muted);min-width:34px;text-align:right}
+.gpart-hrs{font-size:11px;color:var(--text-muted);min-width:38px;text-align:right}
+.gpart-total{font-size:11px;color:var(--text-dim);margin-top:8px;padding-top:8px;border-top:1px solid var(--border-light)}
+
 /* LOADING / ERROR */
 .loading-screen{position:fixed;inset:0;background:var(--bg-base);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;gap:16px}
 .loading-screen.hidden{display:none}
