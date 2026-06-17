@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>PMO Dashboard — Efletexia</title>
 <style>
+<style>
 
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -324,69 +325,66 @@ a.jlink:hover{text-decoration:underline}
 @media(max-width:900px){.kpis,.rec-kpis{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:600px){.kpis,.rec-kpis{grid-template-columns:repeat(2,1fr)}.modal-panel.w-gantt,.modal-panel.w-detail,.rec-modal-panel{width:100vw}}
 </style>
-<style>
+
 /* ── DASHBOARD TAB ──────────────────────────────────── */
-#panel-dashboard { padding: 0 }
-.dash-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px; padding: 20px }
-.dash-card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px }
-.dash-card-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .6px; color: var(--text-muted); margin-bottom: 14px; display: flex; align-items: center; gap: 7px }
-.dash-card-title svg { width: 14px; height: 14px; opacity: .7 }
-.dash-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--border-light); font-size: 12px }
-.dash-row:last-child { border-bottom: none }
-.dash-row-lbl { color: var(--text-muted) }
-.dash-row-val { font-weight: 600; color: var(--text-primary) }
-.dash-donut-wrap { display: flex; align-items: center; gap: 20px }
-.dash-legend { display: flex; flex-direction: column; gap: 8px }
-.dash-legend-item { display: flex; align-items: center; gap: 7px; font-size: 11px }
-.dash-legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0 }
-.dash-legend-lbl { color: var(--text-muted) }
-.dash-legend-val { margin-left: auto; font-weight: 600; color: var(--text-primary) }
-.dash-stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px }
-.dash-stat { background: var(--bg-elevated); border-radius: 8px; padding: 10px 12px; text-align: center }
-.dash-stat-val { font-size: 22px; font-weight: 700; line-height: 1 }
-.dash-stat-lbl { font-size: 10px; color: var(--text-muted); margin-top: 4px }
-.dash-prog-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 12px }
-.dash-prog-lbl { width: 90px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px }
-.dash-prog-bar-wrap { flex: 1; height: 6px; background: var(--bg-elevated); border-radius: 3px; overflow: hidden }
-.dash-prog-fill { height: 100%; border-radius: 3px; transition: width .4s }
-.dash-prog-pct { width: 32px; text-align: right; font-size: 11px; font-weight: 600; color: var(--text-muted) }
-.dash-empty { color: var(--text-dim); font-size: 12px; text-align: center; padding: 20px 0 }
-
+#panel-dashboard{padding:0}
+.dash-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px;padding:20px}
+.dash-card{background:var(--bg-surface);border:1px solid var(--border);border-radius:10px;padding:18px}
+.dash-card-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-muted);margin-bottom:14px;display:flex;align-items:center;gap:7px}
+.dash-card-title svg{width:14px;height:14px;opacity:.7}
+.dash-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border-light);font-size:12px}
+.dash-row:last-child{border-bottom:none}
+.dash-row-lbl{color:var(--text-muted)}
+.dash-row-val{font-weight:600;color:var(--text-primary)}
+.dash-donut-wrap{display:flex;align-items:center;gap:20px}
+.dash-legend{display:flex;flex-direction:column;gap:8px}
+.dash-legend-item{display:flex;align-items:center;gap:7px;font-size:11px}
+.dash-legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.dash-legend-lbl{color:var(--text-muted)}
+.dash-legend-val{margin-left:auto;font-weight:600;color:var(--text-primary)}
+.dash-stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.dash-stat{background:var(--bg-elevated);border-radius:8px;padding:10px 12px;text-align:center}
+.dash-stat-val{font-size:22px;font-weight:700;line-height:1}
+.dash-stat-lbl{font-size:10px;color:var(--text-muted);margin-top:4px}
+.dash-prog-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:12px}
+.dash-prog-lbl{width:90px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px}
+.dash-prog-bar-wrap{flex:1;height:6px;background:var(--bg-elevated);border-radius:3px;overflow:hidden}
+.dash-prog-fill{height:100%;border-radius:3px;transition:width .4s}
+.dash-prog-pct{width:32px;text-align:right;font-size:11px;font-weight:600;color:var(--text-muted)}
+.dash-empty{color:var(--text-dim);font-size:12px;text-align:center;padding:20px 0}
 /* ── VENTAS TAB ─────────────────────────────────────── */
-.ven-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; padding: 16px 20px; background: var(--bg-base); border-bottom: 1px solid var(--border) }
-.ven-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; padding: 12px 20px; background: var(--bg-surface); border-bottom: 1px solid var(--border) }
-.ven-table-info { padding: 8px 20px; font-size: 11px; color: var(--text-muted); background: var(--bg-base); border-bottom: 1px solid var(--border-light); display: flex; align-items: center; gap: 12px }
-.ven-table-wrap { overflow-x: auto }
-.ven-table { width: 100%; border-collapse: collapse; font-size: 12px }
-.ven-table thead tr { background: var(--bg-surface); border-bottom: 2px solid var(--border); position: sticky; top: 0; z-index: 10 }
-.ven-table thead th { padding: 9px 12px; text-align: left; color: var(--text-muted); font-weight: 500; font-size: 10px; text-transform: uppercase; letter-spacing: .4px; white-space: nowrap; cursor: pointer; user-select: none }
-.ven-table thead th:hover { color: var(--text-primary) }
-.ven-table tbody tr { border-bottom: 1px solid var(--border-light); cursor: pointer; transition: background .1s }
-.ven-table tbody tr:hover { background: var(--bg-surface) }
-.ven-table tbody td { padding: 9px 12px; color: var(--text-primary); vertical-align: middle; white-space: nowrap }
-.ven-empty { text-align: center; padding: 40px; color: var(--text-dim) }
-
-/* ── CAPACITY TAB ─────────────────────────────────────── */
-.cap-filters { display:flex; flex-wrap:wrap; align-items:flex-end; gap:10px; padding:12px 20px; background:var(--bg-surface); border-bottom:1px solid var(--border) }
-.cap-table-info { padding:8px 20px; font-size:11px; color:var(--text-muted); background:var(--bg-base); border-bottom:1px solid var(--border-light); display:flex; align-items:center; gap:12px }
-.cap-table-wrap { overflow-x:auto }
-.cap-table { width:100%; border-collapse:collapse; font-size:12px }
-.cap-table thead tr { background:var(--bg-surface); border-bottom:2px solid var(--border); position:sticky; top:0; z-index:10 }
-.cap-table thead th { padding:9px 12px; text-align:left; color:var(--text-muted); font-weight:500; font-size:10px; text-transform:uppercase; letter-spacing:.4px; white-space:nowrap; cursor:pointer; user-select:none }
-.cap-table thead th:hover { color:var(--text-primary) }
-.cap-table tbody tr { border-bottom:1px solid var(--border-light); transition:background .1s }
-.cap-table tbody tr:hover { background:var(--bg-surface) }
-.cap-table tbody td { padding:9px 12px; color:var(--text-primary); vertical-align:middle; white-space:nowrap }
-.cap-empty { text-align:center; padding:40px; color:var(--text-dim) }
-.cap-horas-badge { display:inline-block; padding:2px 8px; border-radius:10px; font-weight:700; font-size:11px }
-.cap-horas-high { background:rgba(239,68,68,.15); color:var(--red) }
-.cap-horas-med  { background:rgba(245,158,11,.15); color:var(--yellow) }
-.cap-horas-low  { background:rgba(16,185,129,.15);  color:var(--green) }
-.cap-kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:12px; padding:16px 20px; background:var(--bg-base); border-bottom:1px solid var(--border) }
+.ven-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;padding:16px 20px;background:var(--bg-base);border-bottom:1px solid var(--border)}
+.ven-filters{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px;padding:12px 20px;background:var(--bg-surface);border-bottom:1px solid var(--border)}
+.ven-table-info{padding:8px 20px;font-size:11px;color:var(--text-muted);background:var(--bg-base);border-bottom:1px solid var(--border-light);display:flex;align-items:center;gap:12px}
+.ven-table-wrap{overflow-x:auto}
+.ven-table{width:100%;border-collapse:collapse;font-size:12px}
+.ven-table thead tr{background:var(--bg-surface);border-bottom:2px solid var(--border);position:sticky;top:0;z-index:10}
+.ven-table thead th{padding:9px 12px;text-align:left;color:var(--text-muted);font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;cursor:pointer;user-select:none}
+.ven-table thead th:hover{color:var(--text-primary)}
+.ven-table tbody tr{border-bottom:1px solid var(--border-light);cursor:pointer;transition:background .1s}
+.ven-table tbody tr:hover{background:var(--bg-surface)}
+.ven-table tbody td{padding:9px 12px;color:var(--text-primary);vertical-align:middle;white-space:nowrap}
+.ven-empty{text-align:center;padding:40px;color:var(--text-dim)}
+/* ── CAPACITY TAB ────────────────────────────────────── */
+.cap-filters{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px;padding:12px 20px;background:var(--bg-surface);border-bottom:1px solid var(--border)}
+.cap-table-info{padding:8px 20px;font-size:11px;color:var(--text-muted);background:var(--bg-base);border-bottom:1px solid var(--border-light);display:flex;align-items:center;gap:12px}
+.cap-table-wrap{overflow-x:auto}
+.cap-table{width:100%;border-collapse:collapse;font-size:12px}
+.cap-table thead tr{background:var(--bg-surface);border-bottom:2px solid var(--border);position:sticky;top:0;z-index:10}
+.cap-table thead th{padding:9px 12px;text-align:left;color:var(--text-muted);font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;cursor:pointer;user-select:none}
+.cap-table thead th:hover{color:var(--text-primary)}
+.cap-table tbody tr{border-bottom:1px solid var(--border-light);transition:background .1s}
+.cap-table tbody tr:hover{background:var(--bg-surface)}
+.cap-table tbody td{padding:9px 12px;color:var(--text-primary);vertical-align:middle;white-space:nowrap}
+.cap-empty{text-align:center;padding:40px;color:var(--text-dim)}
+.cap-horas-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-weight:700;font-size:11px}
+.cap-horas-high{background:rgba(239,68,68,.15);color:var(--red)}
+.cap-horas-med{background:rgba(245,158,11,.15);color:var(--yellow)}
+.cap-horas-low{background:rgba(16,185,129,.15);color:var(--green)}
+.cap-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;padding:16px 20px;background:var(--bg-base);border-bottom:1px solid var(--border)}
 </style>
 </head>
 <body>
-
 
 <div class="loading-screen" id="loading-screen">
   <div class="loading-spinner"></div>
@@ -401,6 +399,7 @@ a.jlink:hover{text-decoration:underline}
 </div>
 
 <header class="header">
+
   <div class="header-left">
     <div class="header-icon">P</div>
     <span class="header-title">PMO Dashboard — Efletexia</span>
@@ -408,7 +407,7 @@ a.jlink:hover{text-decoration:underline}
   <div style="display:flex;align-items:center;gap:10px">
     <div class="header-meta" id="hdr-meta">PMO TI · cargando...</div>
     <span class="last-update" id="last-update"></span>
-    <button class="refresh-btn" id="refresh-btn" onclick="loadData(true)" title="Actualizar desde Jira">
+    <button class="refresh-btn" id="btn-refresh" onclick="loadData(true)" title="Actualizar desde Jira">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
       Actualizar
     </button>
@@ -437,7 +436,7 @@ a.jlink:hover{text-decoration:underline}
 <!-- ══ DASHBOARD ══ -->
 <div class="tab-panel" id="panel-dashboard">
   <div class="dash-grid" id="dash-grid">
-    <div class="dash-card" id="dash-estados-card">
+    <div class="dash-card">
       <div class="dash-card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>Proyectos por Estado</div>
       <div class="dash-donut-wrap">
         <canvas id="dash-donut" width="120" height="120"></canvas>
@@ -462,7 +461,6 @@ a.jlink:hover{text-decoration:underline}
     </div>
   </div>
 </div>
-
 <div class="tab-panel active" id="panel-portafolio">
   <div class="kpis" id="kpis-section"></div>
   <div class="filters">
@@ -537,7 +535,7 @@ a.jlink:hover{text-decoration:underline}
 <!-- ══ RECURSOS ══ -->
 <!-- ══ VENTAS ══ -->
 <div class="tab-panel" id="panel-ventas">
-  <div class="ven-kpis" id="ven-kpis">
+  <div class="ven-kpis">
     <div class="kpi"><div class="kpi-label">Total Ventas</div><div class="kpi-value c-white" id="ven-kpi-total">—</div></div>
     <div class="kpi"><div class="kpi-label">En Curso</div><div class="kpi-value c-cyan" id="ven-kpi-activas">—</div></div>
     <div class="kpi"><div class="kpi-label">Ganadas</div><div class="kpi-value c-green" id="ven-kpi-ganadas">—</div></div>
@@ -546,56 +544,34 @@ a.jlink:hover{text-decoration:underline}
     <div class="kpi"><div class="kpi-label">Con Bloqueante</div><div class="kpi-value c-red" id="ven-kpi-bloq">—</div></div>
   </div>
   <div class="ven-filters">
-    <div class="filter-group">
-      <label class="filter-label" for="ven-search">Buscar</label>
-      <input id="ven-search" class="filter-input" placeholder="Código/proyecto..." autocomplete="off"/>
-    </div>
-    <div class="filter-group">
-      <label class="filter-label" for="ven-pais">País</label>
-      <select id="ven-pais" class="filter-input"><option value="">Todos</option></select>
-    </div>
-    <div class="filter-group">
-      <label class="filter-label" for="ven-area">Área</label>
-      <select id="ven-area" class="filter-input"><option value="">Todas</option></select>
-    </div>
-    <div class="filter-group">
-      <label class="filter-label" for="ven-sponsor">Sponsor</label>
-      <select id="ven-sponsor" class="filter-input"><option value="">Todos</option></select>
-    </div>
-    <div class="filter-group">
-      <label class="filter-label" for="ven-status">Estado</label>
-      <select id="ven-status" class="filter-input"><option value="">Todos</option></select>
-    </div>
-    <button class="btn-limpiar" id="ven-limpiar" type="button">
-      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l10 10M13 3L3 13"/></svg>Limpiar
-    </button>
-    <button class="btn-export" id="btn-export-ven" type="button" title="Exportar a CSV">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>CSV
-    </button>
+    <div class="filter-group"><label class="filter-label" for="ven-search">Buscar</label><input id="ven-search" class="filter-input" placeholder="Código/proyecto..." autocomplete="off"/></div>
+    <div class="filter-group"><label class="filter-label" for="ven-pais">País</label><select id="ven-pais" class="filter-input"><option value="">Todos</option></select></div>
+    <div class="filter-group"><label class="filter-label" for="ven-area">Área</label><select id="ven-area" class="filter-input"><option value="">Todas</option></select></div>
+    <div class="filter-group"><label class="filter-label" for="ven-sponsor">Sponsor</label><select id="ven-sponsor" class="filter-input"><option value="">Todos</option></select></div>
+    <div class="filter-group"><label class="filter-label" for="ven-status">Estado</label><select id="ven-status" class="filter-input"><option value="">Todos</option></select></div>
+    <button class="btn-limpiar" id="ven-limpiar" type="button"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l10 10M13 3L3 13"/></svg>Limpiar</button>
+    <button class="btn-export" id="btn-export-ven" type="button"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>CSV</button>
   </div>
   <div class="ven-table-info" id="ven-table-info">Cargando ventas...</div>
   <div class="ven-table-wrap">
     <table class="ven-table">
-      <thead>
-        <tr>
-          <th data-vcol="codigo">Cód.<span class="sort-icon"></span></th>
-          <th data-vcol="summary">Proyecto<span class="sort-icon"></span></th>
-          <th data-vcol="area">Área<span class="sort-icon"></span></th>
-          <th data-vcol="pais">País<span class="sort-icon"></span></th>
-          <th data-vcol="sponsor">Sponsor<span class="sort-icon"></span></th>
-          <th data-vcol="status">Estado<span class="sort-icon"></span></th>
-          <th>Plan/Real</th>
-          <th data-vcol="desvioPct">Desv%<span class="sort-icon"></span></th>
-          <th data-vcol="fechaInicio">Inicio<span class="sort-icon"></span></th>
-          <th data-vcol="duedate">Fin<span class="sort-icon"></span></th>
-          <th data-vcol="bloqueante">Bloq.<span class="sort-icon"></span></th>
-        </tr>
-      </thead>
+      <thead><tr>
+        <th data-vcol="codigo">Cód.<span class="sort-icon"></span></th>
+        <th data-vcol="summary">Proyecto<span class="sort-icon"></span></th>
+        <th data-vcol="area">Área<span class="sort-icon"></span></th>
+        <th data-vcol="pais">País<span class="sort-icon"></span></th>
+        <th data-vcol="sponsor">Sponsor<span class="sort-icon"></span></th>
+        <th data-vcol="status">Estado<span class="sort-icon"></span></th>
+        <th>Plan/Real</th>
+        <th data-vcol="desvioPct">Desv%<span class="sort-icon"></span></th>
+        <th data-vcol="fechaInicio">Inicio<span class="sort-icon"></span></th>
+        <th data-vcol="duedate">Fin<span class="sort-icon"></span></th>
+        <th data-vcol="bloqueante">Bloq.<span class="sort-icon"></span></th>
+      </tr></thead>
       <tbody id="ven-table-body"><tr><td colspan="11" class="ven-empty">Cargando…</td></tr></tbody>
     </table>
   </div>
 </div>
-
 <div class="tab-panel" id="panel-recursos">
   <div class="rec-kpis" id="rec-kpis">
     <div class="kpi"><div class="kpi-label">Recursos</div><div class="kpi-value c-white" id="rec-kpi-total">—</div></div>
@@ -619,9 +595,7 @@ a.jlink:hover{text-decoration:underline}
     <button class="rec-limpiar" id="rec-limpiar-btn">
       <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l10 10M13 3L3 13"/></svg>Limpiar
     </button>
-    <button class="btn-export" id="btn-export-rec" type="button" title="Exportar recursos a CSV">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>CSV
-    </button>
+    <button class="btn-export" id="btn-export-rec" type="button"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>CSV</button>
   </div>
 
   <!-- Fecha de corte -->
@@ -670,46 +644,27 @@ a.jlink:hover{text-decoration:underline}
     <div class="kpi"><div class="kpi-label">Subtareas con log</div><div class="kpi-value c-green" id="cap-kpi-subtareas">—</div></div>
   </div>
   <div class="cap-filters">
-    <div class="filter-group">
-      <label class="filter-label" for="cap-search">Buscar</label>
-      <input id="cap-search" class="filter-input" placeholder="Persona o actividad..." autocomplete="off"/>
-    </div>
-    <div class="filter-group">
-      <label class="filter-label" for="cap-desde">Desde</label>
-      <input id="cap-desde" type="date" class="filter-input"/>
-    </div>
-    <div class="filter-group">
-      <label class="filter-label" for="cap-hasta">Hasta</label>
-      <input id="cap-hasta" type="date" class="filter-input"/>
-    </div>
-    <div class="filter-group">
-      <label class="filter-label" for="cap-persona">Persona</label>
-      <select id="cap-persona" class="filter-input"><option value="">Todas</option></select>
-    </div>
-    <button class="btn-limpiar" id="cap-limpiar" type="button">
-      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l10 10M13 3L3 13"/></svg>Limpiar
-    </button>
-    <button class="btn-export" id="btn-export-cap" type="button" title="Exportar a CSV">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>CSV
-    </button>
+    <div class="filter-group"><label class="filter-label" for="cap-search">Buscar</label><input id="cap-search" class="filter-input" placeholder="Persona o actividad..." autocomplete="off"/></div>
+    <div class="filter-group"><label class="filter-label" for="cap-desde">Desde</label><input id="cap-desde" type="date" class="filter-input"/></div>
+    <div class="filter-group"><label class="filter-label" for="cap-hasta">Hasta</label><input id="cap-hasta" type="date" class="filter-input"/></div>
+    <div class="filter-group"><label class="filter-label" for="cap-persona">Persona</label><select id="cap-persona" class="filter-input"><option value="">Todas</option></select></div>
+    <button class="btn-limpiar" id="cap-limpiar" type="button"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l10 10M13 3L3 13"/></svg>Limpiar</button>
+    <button class="btn-export" id="btn-export-cap" type="button"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>CSV</button>
   </div>
-  <div class="cap-table-info" id="cap-table-info">Cargando registros de actividad…</div>
+  <div class="cap-table-info" id="cap-table-info">Los datos se cargarán al abrir esta pestaña</div>
   <div class="cap-table-wrap">
     <table class="cap-table">
-      <thead>
-        <tr>
-          <th data-ccol="fecha">Fecha<span class="sort-icon"></span></th>
-          <th data-ccol="persona">Persona<span class="sort-icon"></span></th>
-          <th data-ccol="horas">Horas<span class="sort-icon"></span></th>
-          <th data-ccol="subtarea">Actividad (Subtarea)<span class="sort-icon"></span></th>
-          <th data-ccol="comentario">Comentario<span class="sort-icon"></span></th>
-        </tr>
-      </thead>
+      <thead><tr>
+        <th data-ccol="fecha">Fecha<span class="sort-icon"></span></th>
+        <th data-ccol="persona">Persona<span class="sort-icon"></span></th>
+        <th data-ccol="horas">Horas<span class="sort-icon"></span></th>
+        <th data-ccol="subtarea">Actividad (Subtarea)<span class="sort-icon"></span></th>
+        <th data-ccol="comentario">Comentario<span class="sort-icon"></span></th>
+      </tr></thead>
       <tbody id="cap-table-body"><tr><td colspan="5" class="cap-empty">Los datos de capacity se cargarán al abrir esta pestaña</td></tr></tbody>
     </table>
   </div>
 </div>
-
 <!-- MODAL PORTAFOLIO -->
 <div class="modal-overlay" id="modal-overlay">
   <div class="modal-panel w-gantt" id="modal-panel">
