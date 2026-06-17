@@ -296,10 +296,24 @@ async function fetchAllEpics(){
 }
 
 async function loadData(manual=false){
-  const info=document.getElementById('table-info');
-  if(info) info.textContent='Cargando proyectos desde Jira…';
+  const loadingScr = document.getElementById('loading-screen');
+  const errorScr   = document.getElementById('error-screen');
+  const loadingTxt = document.getElementById('loading-text');
+  const refreshBtn = document.getElementById('btn-refresh');
+  const info       = document.getElementById('table-info');
+
+  if(manual){
+    if(refreshBtn) refreshBtn.classList.add('spinning');
+  } else {
+    if(loadingScr) loadingScr.classList.remove('hidden');
+    if(errorScr)   errorScr.classList.add('hidden');
+  }
+  if(loadingTxt) loadingTxt.textContent='Cargando épicas desde Jira...';
+
   try{
     epics=await fetchAllEpics();
+    if(loadingTxt) loadingTxt.textContent=`Procesando ${epics.length} épicas...`;
+
     const now=new Date();
     const el=document.getElementById('last-update');
     if(el) el.textContent='Actualizado: '+now.toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'});
@@ -316,15 +330,28 @@ async function loadData(manual=false){
     populateSelect('s-sponsor',epics.map(e=>e.sponsor),  'Todos');
     populateSelect('s-cat',    epics.map(e=>e.categoria),'Todas');
 
+    if(loadingScr) loadingScr.classList.add('hidden');
+    if(errorScr)   errorScr.classList.add('hidden');
+    if(refreshBtn) refreshBtn.classList.remove('spinning');
+
     updateKpis(epics);
     renderTable(epics);
 
-    // If dashboard is active, render it
     const dashTab = document.querySelector('.tab[data-tab="dashboard"]');
     if(dashTab && dashTab.classList.contains('active')) renderDashboard();
 
   }catch(err){
     console.error('Error portafolio:',err);
+    if(loadingScr) loadingScr.classList.add('hidden');
+    if(refreshBtn) refreshBtn.classList.remove('spinning');
+    if(!manual){
+      if(errorScr) errorScr.classList.remove('hidden');
+      const errMsg=document.getElementById('error-msg');
+      if(errMsg) errMsg.textContent=err.message;
+    } else {
+      const el=document.getElementById('last-update');
+      if(el) el.textContent='⚠ Error al actualizar';
+    }
     if(info) info.textContent='Error al cargar: '+err.message;
   }
 }
