@@ -191,7 +191,36 @@ module.exports = async function handler(req, res) {
         CAP_FIELDS
       );
 
-      // 2. Por cada subtarea, traer su worklog via REST
+      // 2. Obtener épica de cada subtarea: subtarea → historia (parent) → épica (parent.parent)
+      //    Recoger keys únicos de historias padre, buscarlas en batch
+      const storyKeys = [...new Set(
+        subtareas.map(s => s.fields?.parent?.key).filter(Boolean)
+      )];
+
+      // Mapa storyKey → epicSummary
+      const epicNameMap = {};
+      if (storyKeys.length) {
+        // Buscar historias en lotes de 50 usando JQL IN
+        const STORY_BATCH = 50;
+        for (let i = 0; i < storyKeys.length; i += STORY_BATCH) {
+          const batch = storyKeys.slice(i, i + STORY_BATCH);
+          const jqlStories = `key in (${batch.join(',')})`;
+          const stories = await fetchAllPages(auth, JIRA_CLOUD, jqlStories, ['parent','summary']);
+          stories.forEach(story => {
+            // story.fields.parent es la épica
+            const epicSummary = story.fields?.parent?.fields?.summary || story.fields?.parent?.key || '';
+            epicNameMap[story.key] = epicSummary;
+          });
+        }
+      }
+
+      // Inyectar epicName en cada subtarea
+      subtareas.forEach(s => {
+        const storyKey = s.fields?.parent?.key;
+        s.fields._epicName = storyKey ? (epicNameMap[storyKey] || '') : '';
+      });
+
+      // 3. Por cada subtarea, traer su worklog via REST
       //    GET /rest/api/3/issue/{key}/worklog
       //    Limitamos a 100 entradas por issue (suficiente para registros de actividad)
       async function fetchWorklog(key) {
