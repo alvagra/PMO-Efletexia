@@ -1120,7 +1120,7 @@ async function loadCapacity(){
     (j.issues || []).forEach(sub => {
       const f = sub.fields || {};
       const subtareaNom = f.summary || sub.key;
-      const proyectoNom = f.parent?.fields?.summary || f.parent?.key || '';
+      const proyectoNom = f._epicName || '';
       const logs = f._worklogs || [];
 
       if(logs.length > 0){
