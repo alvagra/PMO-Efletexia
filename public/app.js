@@ -991,8 +991,103 @@ document.getElementById('table-body').addEventListener('click', ev=>{
 // ═══════════════════════════════════════════════════════════
 //  CAPACITY TAB  — worklogs por fecha/persona
 // ═══════════════════════════════════════════════════════════
+
+const NOMENCLATURA = {
+  'DV':  { nombre: 'Daniel Valencia',   pais: 'Peru' },
+  'AA':  { nombre: 'Abel Alva',         pais: 'Peru' },
+  'RP':  { nombre: 'Roxana Peralta',    pais: 'Peru' },
+  'HS':  { nombre: 'Henry S.',          pais: 'Colombia' },
+  'CC':  { nombre: 'Cesar C.',          pais: 'Peru' },
+  'AM':  { nombre: 'Andres Medina',     pais: 'Mexico' },
+  'EC':  { nombre: 'Eric Cacho',        pais: 'Mexico' },
+  'HR':  { nombre: 'Soporte Efletexia', pais: 'Peru' },
+  'SD':  { nombre: 'Stiven D',          pais: 'Colombia' },
+  'AR':  { nombre: 'Alexander R.',      pais: 'Peru' },
+  'JC':  { nombre: 'Javier Carrillo',   pais: 'Mexico' },
+  'FF':  { nombre: 'Farah Fidel',       pais: 'Mexico' },
+  'EN':  { nombre: 'Edgar Noriegua',    pais: 'Colombia' },
+  'LE':  { nombre: 'Lucia Escobar',     pais: 'Colombia' },
+  'MG':  { nombre: 'Manuel Gonzalez',   pais: 'Mexico' },
+  'DV2': { nombre: 'Daniela Velarde',   pais: 'Peru' },
+  'JC2': { nombre: 'Jose Cuautle',      pais: 'Mexico' },
+  'ALL': { nombre: 'Alberto Llosa',     pais: 'Peru' },
+  'NB':  { nombre: 'Natalia Blanco',    pais: 'Peru' },
+  'JM':  { nombre: 'Juan Menco',        pais: 'Colombia' },
+  'MA':  { nombre: 'Maria Aguilar',     pais: 'Guatemala' },
+  'JC3': { nombre: 'Jesus Castillon',   pais: 'Peru' },
+};
+
+// Feriados por país (YYYY-MM-DD)
+const FERIADOS = {
+  'Peru': new Set([
+    '2025-01-01','2025-04-17','2025-04-18','2025-05-01','2025-06-07',
+    '2025-06-29','2025-07-23','2025-07-28','2025-07-29','2025-08-06',
+    '2025-08-30','2025-10-08','2025-11-01','2025-12-08','2025-12-09','2025-12-25',
+    '2026-01-01','2026-04-02','2026-04-03','2026-05-01','2026-06-07',
+    '2026-06-29','2026-07-23','2026-07-28','2026-07-29','2026-08-06',
+    '2026-08-30','2026-10-08','2026-11-01','2026-12-08','2026-12-09','2026-12-25',
+  ]),
+  'Colombia': new Set([
+    '2025-01-01','2025-01-06','2025-03-24','2025-04-17','2025-04-18',
+    '2025-05-01','2025-06-02','2025-06-23','2025-06-30','2025-07-07',
+    '2025-07-20','2025-08-07','2025-08-18','2025-10-13','2025-11-03',
+    '2025-11-17','2025-12-08','2025-12-25',
+    '2026-01-01','2026-01-12','2026-03-23','2026-04-02','2026-04-03',
+    '2026-05-01','2026-05-18','2026-06-08','2026-06-15','2026-06-29',
+    '2026-07-20','2026-08-07','2026-08-17','2026-10-12','2026-11-02',
+    '2026-11-16','2026-12-08','2026-12-25',
+  ]),
+  'Mexico': new Set([
+    '2025-01-01','2025-02-03','2025-03-17','2025-05-01','2025-09-16',
+    '2025-11-17','2025-12-25',
+    '2026-01-01','2026-02-02','2026-03-16','2026-05-01','2026-09-16',
+    '2026-11-16','2026-12-25',
+  ]),
+  'Guatemala': new Set([
+    '2025-01-01','2025-04-17','2025-04-18','2025-04-19','2025-05-01',
+    '2025-06-30','2025-09-15','2025-10-20','2025-11-01','2025-12-24','2025-12-25','2025-12-31',
+    '2026-01-01','2026-04-02','2026-04-03','2026-04-04','2026-05-01',
+    '2026-06-30','2026-09-15','2026-10-20','2026-11-01','2026-12-24','2026-12-25','2026-12-31',
+  ]),
+};
+
+// Obtener nombre completo desde displayName de Jira (match por iniciales en nomenclatura)
+function resolveNombreDesdeJira(displayName) {
+  if(!displayName) return null;
+  // Buscar coincidencia exacta en nombres
+  for(const [ini, rec] of Object.entries(NOMENCLATURA)){
+    if(rec.nombre.toLowerCase() === displayName.toLowerCase()) return { ini, ...rec };
+  }
+  return null;
+}
+
+// Obtener país desde nomenclatura (iniciales en el campo assignee)
+function resolveNombreDesdeIni(ini) {
+  if(!ini) return null;
+  const key = ini.trim().toUpperCase();
+  return NOMENCLATURA[key] ? { ini: key, ...NOMENCLATURA[key] } : null;
+}
+
+// Distribuir horas en días hábiles entre inicio y fin
+function distribuirHoras(horasTotal, fechaInicio, fechaFin, pais) {
+  if(!horasTotal || !fechaInicio || !fechaFin) return [];
+  const feriados = FERIADOS[pais] || new Set();
+  const dias = [];
+  const cur = new Date(fechaInicio + 'T12:00:00');
+  const end = new Date(fechaFin   + 'T12:00:00');
+  while(cur <= end){
+    const dow = cur.getDay();
+    const iso = cur.toISOString().slice(0,10);
+    if(dow !== 0 && dow !== 6 && !feriados.has(iso)) dias.push(iso);
+    cur.setDate(cur.getDate()+1);
+  }
+  if(!dias.length) return [];
+  const hPorDia = +(horasTotal / dias.length).toFixed(2);
+  return dias.map(fecha => ({ fecha, horas: hPorDia }));
+}
+
 let capacityLoaded = false;
-let capRows = [];         // filas planas: {fecha, persona, horas, subtarea, comentario}
+let capRows = [];         // filas planas: {fecha, persona, horas, subtarea, comentario, esPlaneado}
 let capSortCol = 'fecha', capSortDir = -1; // más reciente primero por defecto
 
 // ── Registro del tab en el listener central ────────────────
@@ -1020,26 +1115,52 @@ async function loadCapacity(){
     if(!resp.ok) throw new Error('HTTP ' + resp.status);
     const j = await resp.json();
 
-    // Aplanar: por cada subtarea, por cada worklog → una fila
+    // Aplanar: por cada subtarea → worklogs reales, o distribución planificada si no hay logs
     capRows = [];
     (j.issues || []).forEach(sub => {
       const f = sub.fields || {};
       const subtareaNom = f.summary || sub.key;
       const logs = f._worklogs || [];
-      logs.forEach(wl => {
-        // timeSpentSeconds → horas redondeadas a 2 decimales
-        const horas = wl.timeSpentSeconds ? +(wl.timeSpentSeconds / 3600).toFixed(2) : 0;
-        // started: "2026-06-10T14:00:00.000+0000"
-        const fechaIso = wl.started ? wl.started.slice(0,10) : null;
-        const persona  = wl.author?.displayName || wl.updateAuthor?.displayName || '—';
-        // comentario: puede ser ADF o texto plano
-        let comentario = '';
-        if(wl.comment){
-          if(typeof wl.comment === 'string') comentario = wl.comment;
-          else if(wl.comment.content) comentario = adfToText(wl.comment).trim();
+
+      if(logs.length > 0){
+        // ── Caso A: tiene worklogs reales ──────────────────
+        logs.forEach(wl => {
+          const horas    = wl.timeSpentSeconds ? +(wl.timeSpentSeconds / 3600).toFixed(2) : 0;
+          const fechaIso = wl.started ? wl.started.slice(0,10) : null;
+          const persona  = wl.author?.displayName || wl.updateAuthor?.displayName || '—';
+          let comentario = '';
+          if(wl.comment){
+            if(typeof wl.comment === 'string') comentario = wl.comment;
+            else if(wl.comment.content) comentario = adfToText(wl.comment).trim();
+          }
+          capRows.push({ fecha: fechaIso, persona, horas, subtarea: subtareaNom, comentario, esPlaneado: false });
+        });
+      } else {
+        // ── Caso B: sin worklogs → distribución planificada ─
+        const horasEst   = f.customfield_11136 || 0;
+        const fechaInicio= f.customfield_10015 || null;
+        const fechaFin   = f.duedate           || null;
+        if(!horasEst || !fechaInicio || !fechaFin) return;
+
+        // Identificar recurso: primero por displayName, luego por iniciales en summary
+        const assigneeDisplay = f.assignee?.displayName || '';
+        let rec = resolveNombreDesdeJira(assigneeDisplay);
+        if(!rec){
+          // Intentar por iniciales: el campo assignee en Jira puede traer las iniciales
+          const ini = (f.assignee?.key || f.assignee?.accountId || '').toUpperCase();
+          rec = resolveNombreDesdeIni(ini);
         }
-        capRows.push({ fecha: fechaIso, persona, horas, subtarea: subtareaNom, comentario });
-      });
+        if(!rec && assigneeDisplay){
+          // Fallback: usar el displayName tal cual con país Perú por defecto
+          rec = { nombre: assigneeDisplay, pais: 'Peru', ini: '' };
+        }
+        if(!rec) return;
+
+        const diasDist = distribuirHoras(horasEst, fechaInicio, fechaFin, rec.pais);
+        diasDist.forEach(({ fecha, horas }) => {
+          capRows.push({ fecha, persona: rec.nombre, horas, subtarea: subtareaNom, comentario: '(planificado)', esPlaneado: true });
+        });
+      }
     });
 
     // Poblar selector de personas
@@ -1063,11 +1184,14 @@ function getCapFiltered(){
   const desde   = document.getElementById('cap-desde')?.value || '';
   const hasta   = document.getElementById('cap-hasta')?.value || '';
   const persona = document.getElementById('cap-persona')?.value || '';
+  const tipo    = document.getElementById('cap-tipo')?.value || '';
   return capRows.filter(r => {
-    if(search && !r.persona.toLowerCase().includes(search) && !r.subtarea.toLowerCase().includes(search) && !r.comentario.toLowerCase().includes(search)) return false;
+    if(search && !r.persona.toLowerCase().includes(search) && !r.subtarea.toLowerCase().includes(search) && !(r.comentario||'').toLowerCase().includes(search)) return false;
     if(desde && r.fecha && r.fecha < desde) return false;
     if(hasta && r.fecha && r.fecha > hasta) return false;
     if(persona && r.persona !== persona) return false;
+    if(tipo === 'real'     &&  r.esPlaneado) return false;
+    if(tipo === 'planeado' && !r.esPlaneado) return false;
     return true;
   });
 }
@@ -1108,7 +1232,8 @@ function renderCapacity(){
     const horasCls = r.horas >= 8 ? 'cap-horas-high' : r.horas >= 4 ? 'cap-horas-med' : 'cap-horas-low';
     const fechaFmt = r.fecha ? fmtD(r.fecha) : '—';
     const coment   = r.comentario ? `<span style="color:var(--text-muted);max-width:300px;display:inline-block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(r.comentario)}">${esc(r.comentario)}</span>` : '<span style="color:var(--text-dim)">—</span>';
-    return `<tr>
+    const rowStyle = r.esPlaneado ? 'opacity:.75;font-style:italic' : '';
+    return `<tr style="${rowStyle}">
       <td style="color:var(--text-muted);white-space:nowrap">${fechaFmt}</td>
       <td><span style="font-weight:600">${esc(r.persona)}</span></td>
       <td><span class="cap-horas-badge ${horasCls}">${r.horas}h</span></td>
@@ -1119,7 +1244,7 @@ function renderCapacity(){
 }
 
 // ── Filtros listeners ──────────────────────────────────────
-['cap-search','cap-desde','cap-hasta','cap-persona'].forEach(id => {
+['cap-search','cap-desde','cap-hasta','cap-persona','cap-tipo'].forEach(id => {
   const el = document.getElementById(id);
   if(el) el.addEventListener('input',  renderCapacity);
   if(el) el.addEventListener('change', renderCapacity);
@@ -1129,6 +1254,7 @@ document.getElementById('cap-limpiar')?.addEventListener('click', () => {
   document.getElementById('cap-desde').value  = '';
   document.getElementById('cap-hasta').value  = '';
   document.getElementById('cap-persona').value = '';
+  const capTipo = document.getElementById('cap-tipo'); if(capTipo) capTipo.value = '';
   capSortCol = 'fecha'; capSortDir = -1;
   document.querySelectorAll('#panel-capacity thead th').forEach(t => { if(t.querySelector('.sort-icon')) t.querySelector('.sort-icon').textContent = ''; });
   renderCapacity();
@@ -1151,7 +1277,7 @@ document.getElementById('btn-export-cap')?.addEventListener('click', () => {
     const va = a[capSortCol]||'', vb = b[capSortCol]||'';
     return (va < vb ? -1 : va > vb ? 1 : 0) * capSortDir;
   });
-  const hdr  = ['Fecha','Persona','Horas','Actividad (Subtarea)','Comentario'];
-  const rows = filtered.map(r => [r.fecha||'', r.persona, r.horas, r.subtarea, r.comentario]);
+  const hdr  = ['Fecha','Persona','Horas','Actividad (Subtarea)','Comentario','Tipo'];
+  const rows = filtered.map(r => [r.fecha||'', r.persona, r.horas, r.subtarea, r.comentario, r.esPlaneado?'Planificado':'Real']);
   downloadCSV([hdr,...rows], `capacity_${new Date().toISOString().slice(0,10)}.csv`);
 });
