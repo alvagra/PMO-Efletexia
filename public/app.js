@@ -1142,23 +1142,45 @@ async function loadCapacity(){
         const fechaFin   = f.duedate           || null;
         if(!horasEst || !fechaInicio || !fechaFin) return;
 
-        // Identificar recurso: primero por displayName, luego por iniciales en summary
-        const assigneeDisplay = f.assignee?.displayName || '';
-        let rec = resolveNombreDesdeJira(assigneeDisplay);
-        if(!rec){
-          // Intentar por iniciales: el campo assignee en Jira puede traer las iniciales
-          const ini = (f.assignee?.key || f.assignee?.accountId || '').toUpperCase();
-          rec = resolveNombreDesdeIni(ini);
-        }
-        if(!rec && assigneeDisplay){
-          // Fallback: usar el displayName tal cual con país Perú por defecto
-          rec = { nombre: assigneeDisplay, pais: 'Peru', ini: '' };
-        }
-        if(!rec) return;
+        // Obtener lista de iniciales desde el campo custom "Asignado" (ej: "RP, AA, EN")
+        // customfield_11037 o customfield_11070 contienen texto con iniciales separadas por coma
+        const asignadoRaw = f.customfield_11037 || f.customfield_11070 || '';
+        const asignadoStr = typeof asignadoRaw === 'string' ? asignadoRaw
+                          : (asignadoRaw?.value || asignadoRaw?.name || '');
 
-        const diasDist = distribuirHoras(horasEst, fechaInicio, fechaFin, rec.pais);
-        diasDist.forEach(({ fecha, horas }) => {
-          capRows.push({ fecha, persona: rec.nombre, horas, subtarea: subtareaNom, comentario: '(planificado)', esPlaneado: true });
+        // Parsear iniciales: "RP, AA, EN" → ['RP','AA','EN']
+        let iniciales = asignadoStr
+          .split(/[,;]+/)
+          .map(s => s.trim().toUpperCase())
+          .filter(Boolean);
+
+        // Si no hay campo custom, intentar con assignee estándar
+        if(!iniciales.length){
+          const assigneeDisplay = f.assignee?.displayName || '';
+          const recFallback = resolveNombreDesdeJira(assigneeDisplay);
+          if(recFallback) iniciales = [recFallback.ini];
+          else if(assigneeDisplay) {
+            // Usar displayName directamente
+            const diasDist = distribuirHoras(horasEst, fechaInicio, fechaFin, 'Peru');
+            diasDist.forEach(({ fecha, horas }) => {
+              capRows.push({ fecha, persona: assigneeDisplay, horas: +(horas/1).toFixed(2), subtarea: subtareaNom, comentario: '(planificado)', esPlaneado: true });
+            });
+            return;
+          } else return;
+        }
+
+        // Resolver cada inicial → recurso → distribuir horas equitativamente
+        const recs = iniciales.map(ini => resolveNombreDesdeIni(ini)).filter(Boolean);
+        if(!recs.length) return;
+
+        // Horas se dividen equitativamente entre los recursos asignados
+        const horasPorRec = +(horasEst / recs.length).toFixed(2);
+
+        recs.forEach(rec => {
+          const diasDist = distribuirHoras(horasPorRec, fechaInicio, fechaFin, rec.pais);
+          diasDist.forEach(({ fecha, horas }) => {
+            capRows.push({ fecha, persona: rec.nombre, horas, subtarea: subtareaNom, comentario: '(planificado)', esPlaneado: true });
+          });
         });
       }
     });
