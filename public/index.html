@@ -324,36 +324,6 @@ a.jlink:hover{text-decoration:underline}
 @media(max-width:900px){.kpis,.rec-kpis{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:600px){.kpis,.rec-kpis{grid-template-columns:repeat(2,1fr)}.modal-panel.w-gantt,.modal-panel.w-detail,.rec-modal-panel{width:100vw}}
 </style>
-</head>
-<body>
-
-<div class="loading-screen" id="loading-screen">
-  <div class="loading-spinner"></div>
-  <div class="loading-title">PMO Dashboard — Efletexia</div>
-  <div class="loading-text" id="loading-text">Conectando con Jira...</div>
-</div>
-<div class="error-screen hidden" id="error-screen">
-  <div style="font-size:32px">⚠️</div>
-  <div class="loading-title">Error al cargar datos</div>
-  <div class="error-msg" id="error-msg"></div>
-  <button class="btn-retry" onclick="loadData()">Reintentar</button>
-</div>
-
-<header class="header">
-  <div class="header-left">
-    <div class="header-icon">P</div>
-    <span class="header-title">PMO Dashboard — Efletexia</span>
-  </div>
-  <div style="display:flex;align-items:center;gap:10px">
-    <div class="header-meta" id="hdr-meta">PMO TI · cargando...</div>
-    <span class="last-update" id="last-update"></span>
-    <button class="refresh-btn" id="refresh-btn" onclick="loadData(true)" title="Actualizar desde Jira">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
-      Actualizar
-    </button>
-  </div>
-</header>
-
 <style>
 /* ── DASHBOARD TAB ──────────────────────────────────── */
 #panel-dashboard { padding: 0 }
@@ -395,21 +365,56 @@ a.jlink:hover{text-decoration:underline}
 .ven-table tbody tr:hover { background: var(--bg-surface) }
 .ven-table tbody td { padding: 9px 12px; color: var(--text-primary); vertical-align: middle; white-space: nowrap }
 .ven-empty { text-align: center; padding: 40px; color: var(--text-dim) }
+
+/* ── CAPACITY TAB ─────────────────────────────────────── */
+.cap-filters { display:flex; flex-wrap:wrap; align-items:flex-end; gap:10px; padding:12px 20px; background:var(--bg-surface); border-bottom:1px solid var(--border) }
+.cap-table-info { padding:8px 20px; font-size:11px; color:var(--text-muted); background:var(--bg-base); border-bottom:1px solid var(--border-light); display:flex; align-items:center; gap:12px }
+.cap-table-wrap { overflow-x:auto }
+.cap-table { width:100%; border-collapse:collapse; font-size:12px }
+.cap-table thead tr { background:var(--bg-surface); border-bottom:2px solid var(--border); position:sticky; top:0; z-index:10 }
+.cap-table thead th { padding:9px 12px; text-align:left; color:var(--text-muted); font-weight:500; font-size:10px; text-transform:uppercase; letter-spacing:.4px; white-space:nowrap; cursor:pointer; user-select:none }
+.cap-table thead th:hover { color:var(--text-primary) }
+.cap-table tbody tr { border-bottom:1px solid var(--border-light); transition:background .1s }
+.cap-table tbody tr:hover { background:var(--bg-surface) }
+.cap-table tbody td { padding:9px 12px; color:var(--text-primary); vertical-align:middle; white-space:nowrap }
+.cap-empty { text-align:center; padding:40px; color:var(--text-dim) }
+.cap-horas-badge { display:inline-block; padding:2px 8px; border-radius:10px; font-weight:700; font-size:11px }
+.cap-horas-high { background:rgba(239,68,68,.15); color:var(--red) }
+.cap-horas-med  { background:rgba(245,158,11,.15); color:var(--yellow) }
+.cap-horas-low  { background:rgba(16,185,129,.15);  color:var(--green) }
+.cap-kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:12px; padding:16px 20px; background:var(--bg-base); border-bottom:1px solid var(--border) }
 </style>
 </head>
 <body>
-<header class="topbar">
-  <div class="brand">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
-    PMO Dashboard · Efletexia
+
+
+<div class="loading-screen" id="loading-screen">
+  <div class="loading-spinner"></div>
+  <div class="loading-title">PMO Dashboard — Efletexia</div>
+  <div class="loading-text" id="loading-text">Conectando con Jira...</div>
+</div>
+<div class="error-screen hidden" id="error-screen">
+  <div style="font-size:32px">⚠️</div>
+  <div class="loading-title">Error al cargar datos</div>
+  <div class="error-msg" id="error-msg"></div>
+  <button class="btn-retry" onclick="loadData()">Reintentar</button>
+</div>
+
+<header class="header">
+  <div class="header-left">
+    <div class="header-icon">P</div>
+    <span class="header-title">PMO Dashboard — Efletexia</span>
   </div>
-  <div class="topbar-right">
+  <div style="display:flex;align-items:center;gap:10px">
+    <div class="header-meta" id="hdr-meta">PMO TI · cargando...</div>
     <span class="last-update" id="last-update"></span>
-    <button class="btn-refresh" id="btn-refresh" title="Recargar datos">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>Actualizar
+    <button class="refresh-btn" id="refresh-btn" onclick="loadData(true)" title="Actualizar desde Jira">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+      Actualizar
     </button>
   </div>
 </header>
+
 
 <nav class="tabs" role="tablist">
   <div class="tab" data-tab="dashboard">
@@ -458,7 +463,6 @@ a.jlink:hover{text-decoration:underline}
   </div>
 </div>
 
-<!-- ══ PORTAFOLIO ══ -->
 <div class="tab-panel active" id="panel-portafolio">
   <div class="kpis" id="kpis-section"></div>
   <div class="filters">
@@ -529,6 +533,8 @@ a.jlink:hover{text-decoration:underline}
   </div>
 </div>
 
+
+<!-- ══ RECURSOS ══ -->
 <!-- ══ VENTAS ══ -->
 <div class="tab-panel" id="panel-ventas">
   <div class="ven-kpis" id="ven-kpis">
@@ -655,68 +661,6 @@ a.jlink:hover{text-decoration:underline}
 </div>
 
 
-<!-- MODAL PORTAFOLIO -->
-<div class="modal-overlay" id="modal-overlay">
-  <div class="modal-panel w-gantt" id="modal-panel">
-    <div class="modal-hdr">
-      <div class="modal-hdr-info">
-        <div class="modal-key" id="modal-key"></div>
-        <div class="modal-title" id="modal-title"></div>
-      </div>
-      <button class="modal-close" id="modal-close" type="button">✕</button>
-    </div>
-    <div class="modal-tabs">
-      <div class="modal-tab active" data-mtab="gantt">📅 Cronograma</div>
-      <div class="modal-tab" data-mtab="detail">📋 Detalles</div>
-    </div>
-    <div class="modal-body" id="modal-body"></div>
-  </div>
-</div>
-
-<!-- RECURSO DETAIL MODAL + DETALLE DE PROYECTO -->
-<div class="rec-modal-overlay" id="rec-modal-overlay">
-  <div class="det-panel" id="det-panel">
-    <div class="det-hdr">
-      <div class="det-hdr-sup">Detalle de proyecto</div>
-      <div class="det-hdr-row">
-        <div class="det-hdr-title" id="det-title">—</div>
-        <button class="det-close" id="det-close" type="button" aria-label="Cerrar detalle">&#x2715;</button>
-      </div>
-    </div>
-    <div class="det-body" id="det-body"></div>
-  </div>
-  <div class="rec-modal-panel">
-    <div class="rec-modal-hdr">
-      <div class="rec-modal-hdr-info">
-        <div class="rec-modal-name" id="rec-modal-name">&#x2014;</div>
-        <div class="rec-modal-area" id="rec-modal-area">&#x2014;</div>
-      </div>
-      <button class="rec-modal-close" id="rec-modal-close">&#x2715;</button>
-    </div>
-    <div class="rec-modal-body" id="rec-modal-body"></div>
-  </div>
-</div>
-
-<style>
-/* ── CAPACITY TAB ─────────────────────────────────────── */
-.cap-filters { display:flex; flex-wrap:wrap; align-items:flex-end; gap:10px; padding:12px 20px; background:var(--bg-surface); border-bottom:1px solid var(--border) }
-.cap-table-info { padding:8px 20px; font-size:11px; color:var(--text-muted); background:var(--bg-base); border-bottom:1px solid var(--border-light); display:flex; align-items:center; gap:12px }
-.cap-table-wrap { overflow-x:auto }
-.cap-table { width:100%; border-collapse:collapse; font-size:12px }
-.cap-table thead tr { background:var(--bg-surface); border-bottom:2px solid var(--border); position:sticky; top:0; z-index:10 }
-.cap-table thead th { padding:9px 12px; text-align:left; color:var(--text-muted); font-weight:500; font-size:10px; text-transform:uppercase; letter-spacing:.4px; white-space:nowrap; cursor:pointer; user-select:none }
-.cap-table thead th:hover { color:var(--text-primary) }
-.cap-table tbody tr { border-bottom:1px solid var(--border-light); transition:background .1s }
-.cap-table tbody tr:hover { background:var(--bg-surface) }
-.cap-table tbody td { padding:9px 12px; color:var(--text-primary); vertical-align:middle; white-space:nowrap }
-.cap-empty { text-align:center; padding:40px; color:var(--text-dim) }
-.cap-horas-badge { display:inline-block; padding:2px 8px; border-radius:10px; font-weight:700; font-size:11px }
-.cap-horas-high { background:rgba(239,68,68,.15); color:var(--red) }
-.cap-horas-med  { background:rgba(245,158,11,.15); color:var(--yellow) }
-.cap-horas-low  { background:rgba(16,185,129,.15);  color:var(--green) }
-.cap-kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:12px; padding:16px 20px; background:var(--bg-base); border-bottom:1px solid var(--border) }
-</style>
-
 <!-- ══ CAPACITY ══ -->
 <div class="tab-panel" id="panel-capacity">
   <div class="cap-kpis">
@@ -763,6 +707,48 @@ a.jlink:hover{text-decoration:underline}
       </thead>
       <tbody id="cap-table-body"><tr><td colspan="5" class="cap-empty">Los datos de capacity se cargarán al abrir esta pestaña</td></tr></tbody>
     </table>
+  </div>
+</div>
+
+<!-- MODAL PORTAFOLIO -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal-panel w-gantt" id="modal-panel">
+    <div class="modal-hdr">
+      <div class="modal-hdr-info">
+        <div class="modal-key" id="modal-key"></div>
+        <div class="modal-title" id="modal-title"></div>
+      </div>
+      <button class="modal-close" id="modal-close" type="button">✕</button>
+    </div>
+    <div class="modal-tabs">
+      <div class="modal-tab active" data-mtab="gantt">📅 Cronograma</div>
+      <div class="modal-tab" data-mtab="detail">📋 Detalles</div>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<!-- RECURSO DETAIL MODAL + DETALLE DE PROYECTO -->
+<div class="rec-modal-overlay" id="rec-modal-overlay">
+  <div class="det-panel" id="det-panel">
+    <div class="det-hdr">
+      <div class="det-hdr-sup">Detalle de proyecto</div>
+      <div class="det-hdr-row">
+        <div class="det-hdr-title" id="det-title">—</div>
+        <button class="det-close" id="det-close" type="button" aria-label="Cerrar detalle">&#x2715;</button>
+      </div>
+    </div>
+    <div class="det-body" id="det-body"></div>
+  </div>
+  <div class="rec-modal-panel">
+    <div class="rec-modal-hdr">
+      <div class="rec-modal-hdr-info">
+        <div class="rec-modal-name" id="rec-modal-name">&#x2014;</div>
+        <div class="rec-modal-area" id="rec-modal-area">&#x2014;</div>
+      </div>
+      <button class="rec-modal-close" id="rec-modal-close">&#x2715;</button>
+    </div>
+    <div class="rec-modal-body" id="rec-modal-body"></div>
   </div>
 </div>
 
