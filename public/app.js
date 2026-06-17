@@ -1120,6 +1120,7 @@ async function loadCapacity(){
     (j.issues || []).forEach(sub => {
       const f = sub.fields || {};
       const subtareaNom = f.summary || sub.key;
+      const proyectoNom = f.parent?.fields?.summary || f.parent?.key || '';
       const logs = f._worklogs || [];
 
       if(logs.length > 0){
@@ -1133,7 +1134,7 @@ async function loadCapacity(){
             if(typeof wl.comment === 'string') comentario = wl.comment;
             else if(wl.comment.content) comentario = adfToText(wl.comment).trim();
           }
-          capRows.push({ fecha: fechaIso, persona, horas, subtarea: subtareaNom, comentario, esPlaneado: false });
+          capRows.push({ fecha: fechaIso, persona, horas, proyecto: proyectoNom, subtarea: subtareaNom, comentario, esPlaneado: false });
         });
       } else {
         // ── Caso B: sin worklogs → distribución planificada ─
@@ -1163,7 +1164,7 @@ async function loadCapacity(){
             // Usar displayName directamente
             const diasDist = distribuirHoras(horasEst, fechaInicio, fechaFin, 'Peru');
             diasDist.forEach(({ fecha, horas }) => {
-              capRows.push({ fecha, persona: assigneeDisplay, horas: +(horas/1).toFixed(2), subtarea: subtareaNom, comentario: '(planificado)', esPlaneado: true });
+              capRows.push({ fecha, persona: assigneeDisplay, horas: +(horas/1).toFixed(2), proyecto: proyectoNom, subtarea: subtareaNom, comentario: '(planificado)', esPlaneado: true });
             });
             return;
           } else return;
@@ -1179,7 +1180,7 @@ async function loadCapacity(){
         recs.forEach(rec => {
           const diasDist = distribuirHoras(horasPorRec, fechaInicio, fechaFin, rec.pais);
           diasDist.forEach(({ fecha, horas }) => {
-            capRows.push({ fecha, persona: rec.nombre, horas, subtarea: subtareaNom, comentario: '(planificado)', esPlaneado: true });
+            capRows.push({ fecha, persona: rec.nombre, horas, proyecto: proyectoNom, subtarea: subtareaNom, comentario: '(planificado)', esPlaneado: true });
           });
         });
       }
@@ -1246,7 +1247,7 @@ function renderCapacity(){
   if(!tb) return;
 
   if(!filtered.length){
-    tb.innerHTML = `<tr><td colspan="5" class="cap-empty">${capRows.length === 0 ? 'Sin registros de actividad encontrados' : 'Sin resultados para los filtros aplicados'}</td></tr>`;
+    tb.innerHTML = `<tr><td colspan="6" class="cap-empty">${capRows.length === 0 ? 'Sin registros de actividad encontrados' : 'Sin resultados para los filtros aplicados'}</td></tr>`;
     return;
   }
 
@@ -1259,6 +1260,7 @@ function renderCapacity(){
       <td style="color:var(--text-muted);white-space:nowrap">${fechaFmt}</td>
       <td><span style="font-weight:600">${esc(r.persona)}</span></td>
       <td><span class="cap-horas-badge ${horasCls}">${r.horas}h</span></td>
+      <td style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-muted)" title="${esc(r.proyecto||'')}">${esc(r.proyecto||'—')}</td>
       <td style="max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(r.subtarea)}">${esc(r.subtarea)}</td>
       <td>${coment}</td>
     </tr>`;
@@ -1299,7 +1301,7 @@ document.getElementById('btn-export-cap')?.addEventListener('click', () => {
     const va = a[capSortCol]||'', vb = b[capSortCol]||'';
     return (va < vb ? -1 : va > vb ? 1 : 0) * capSortDir;
   });
-  const hdr  = ['Fecha','Persona','Horas','Actividad (Subtarea)','Comentario','Tipo'];
-  const rows = filtered.map(r => [r.fecha||'', r.persona, r.horas, r.subtarea, r.comentario, r.esPlaneado?'Planificado':'Real']);
+  const hdr  = ['Fecha','Persona','Horas','Proyecto','Actividad (Subtarea)','Comentario','Tipo'];
+  const rows = filtered.map(r => [r.fecha||'', r.persona, r.horas, r.proyecto||'', r.subtarea, r.comentario, r.esPlaneado?'Planificado':'Real']);
   downloadCSV([hdr,...rows], `capacity_${new Date().toISOString().slice(0,10)}.csv`);
 });
