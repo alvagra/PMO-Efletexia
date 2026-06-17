@@ -172,6 +172,42 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ stories: storiesFinal, total: storiesFinal.length, type: 'stories' });
 
 
+    } else if (type === 'capacity') {
+      // Subtareas + worklogs por fecha
+      // 1. Traer todas las subtareas (mínimo de campos necesarios)
+      const CAP_FIELDS = [
+        'summary', 'assignee', 'parent',
+        'customfield_10015', // Fecha inicio
+        'duedate',
+        'customfield_10930', // Área
+        'customfield_11136', // Horas Estimadas
+        'customfield_11137', // Horas Pendientes
+      ];
+      const subtareas = await fetchAllPages(
+        auth, JIRA_CLOUD,
+        'project = PTS AND issuetype = Subtarea ORDER BY created ASC',
+        CAP_FIELDS
+      );
+
+      // 2. Por cada subtarea, traer su worklog via REST
+      //    GET /rest/api/3/issue/{key}/worklog
+      //    Limitamos a 100 entradas por issue (suficiente para registros de actividad)
+      async function fetchWorklog(key) {
+        const result = await jiraGet(auth, JIRA_CLOUD, `/rest/api/3/issue/${key}/worklog?maxResults=100`);
+        if (result.status !== 200) return [];
+        return result.body.worklogs || [];
+      }
+
+      // Fetch worklogs en lotes de 10 en paralelo para no saturar la API
+      const BATCH = 10;
+      for (let i = 0; i < subtareas.length; i += BATCH) {
+        const batch = subtareas.slice(i, i + BATCH);
+        const logs = await Promise.all(batch.map(s => fetchWorklog(s.key)));
+        batch.forEach((s, idx) => { s.fields._worklogs = logs[idx]; });
+      }
+
+      return res.status(200).json({ issues: subtareas, total: subtareas.length, type: 'capacity' });
+
     } else {
       // Default: fetch Epics
       const { jql, fields } = req.body || {};
