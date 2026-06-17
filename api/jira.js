@@ -182,6 +182,8 @@ module.exports = async function handler(req, res) {
         'customfield_10930', // Área
         'customfield_11136', // Horas Estimadas
         'customfield_11137', // Horas Pendientes
+        'customfield_11037', // Asignado (iniciales múltiples, ej: RP, AA, EN)
+        'customfield_11070', // Asignado alternativo
       ];
       const subtareas = await fetchAllPages(
         auth, JIRA_CLOUD,
