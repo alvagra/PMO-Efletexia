@@ -1,12 +1,11 @@
 // ═══════════════════════════════════════════════════════════
-//  PMO Dashboard — Efletexia  |  app.js  v3
+//  PMO Dashboard — Efletexia  |  app.js  v2
 // ═══════════════════════════════════════════════════════════
 const JIRA_BASE = "https://efletexia.atlassian.net/browse/";
 const TODAY = new Date(); TODAY.setHours(0,0,0,0);
 
 // Data stores
 let epics    = [];
-let ventas   = [];
 let recursos = [];
 let activeRecIdx = -1;
 
@@ -96,21 +95,266 @@ function exportPortafolioCSV(){
   downloadCSV([hdr,...rows], `portafolio_${new Date().toISOString().slice(0,10)}.csv`);
 }
 
-function exportVentasCSV(){
-  const data = sortedVentas(getVentasFiltered());
-  const hdr  = ['Clave','Código','Proyecto','Área','País','Sponsor','Estado',
-                 'Plan%','Real%','Desvío%','FechaInicio','FechaFin','Bloqueante'];
-  const rows = data.map(e => [
-    e.key, e.codigo, e.summary, e.area, e.pais, e.sponsor, e.status,
-    e.planPct!==null?Math.round(e.planPct*100):'',
-    e.realPct!==null?Math.round(e.realPct*100):'',
-    e.desvioPct!==null?Math.round(e.desvioPct*100):'',
-    e.fechaInicio||'', e.duedate||'', e.bloqueante||''
-  ]);
-  downloadCSV([hdr,...rows], `ventas_${new Date().toISOString().slice(0,10)}.csv`);
+document.getElementById('btn-export-port').addEventListener('click', exportPortafolioCSV);
+
+
+// ── TABS ───────────────────────────────────────────────────
+let recursosLoaded = false;
+
+document.querySelectorAll('.tabs .tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tabs .tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    const panel = document.getElementById('panel-'+tab.dataset.tab);
+    if(panel) panel.classList.add('active');
+    if(tab.dataset.tab==='recursos' && !recursosLoaded) loadRecursos();
+  });
+    if(tab.dataset.tab==='capacity' && !capacityLoaded) loadCapacity();
+  });
+}););
+
+
+// ── PORTAFOLIO: parse & render ─────────────────────────────
+const JIRA_FIELDS = [
+  "summary","status","assignee","reporter","labels","duedate",
+  "customfield_10015","customfield_10592","customfield_10659",
+  "customfield_10725","customfield_10726","customfield_10759",
+  "customfield_10895","customfield_10928","customfield_10929",
+  "customfield_10930","customfield_10931","customfield_10934",
+  "customfield_10829","customfield_10862","customfield_10969",
+  "customfield_10970","customfield_11003","customfield_11004",
+  "customfield_11037","customfield_11070"
+];
+
+function parseIssue(i){
+  const f=i.fields, rep=f.reporter;
+  let bit=f.customfield_10829, prox=f.customfield_10862;
+  if(bit&&typeof bit==='object') bit=adfToText(bit).trim();
+  if(prox&&typeof prox==='object') prox=adfToText(prox).trim();
+  return{
+    key:i.key,
+    codigo:f.customfield_10934||null,
+    summary:f.summary,
+    status:f.status.name,
+    assignee:f.assignee?f.assignee.displayName:null,
+    asignado:f.customfield_10970||null,
+    responsableDF:f.customfield_10969||null,
+    reporter:rep?rep.displayName:null,
+    labels:f.labels||[],
+    duedate:f.duedate||null,
+    fechaInicio:f.customfield_10015||null,
+    pais:f.customfield_10592?f.customfield_10592.value:null,
+    area:f.customfield_10930?f.customfield_10930.value:null,
+    categoria:f.customfield_10659?f.customfield_10659.value:null,
+    planPct:f.customfield_10725!==undefined?f.customfield_10725:null,
+    realPct:f.customfield_10726!==undefined?f.customfield_10726:null,
+    desvioPct:f.customfield_10759!==undefined?f.customfield_10759:null,
+    pctAnalisis:f.customfield_10895!==undefined?f.customfield_10895:null,
+    pctDesarrollo:f.customfield_10928!==undefined?f.customfield_10928:null,
+    pctPruebas:f.customfield_10929!==undefined?f.customfield_10929:null,
+    docFuncional:f.customfield_10931?f.customfield_10931.value:null,
+    bloqueante:f.customfield_11003?f.customfield_11003.value:null,
+    conformidad:f.customfield_11004?f.customfield_11004.value:null,
+    prioridad:f.customfield_11037?f.customfield_11037.value:null,
+    sponsor:f.customfield_11070?f.customfield_11070.value:null,
+    bitacora:bit||null,
+    proximosPasos:prox||null,
+  };
 }
 
-function exportRecursosCSV(){
+function updateKpis(data){
+  const t=data.length;
+  const crit=data.filter(e=>e.desvioPct!==null&&Math.abs(e.desvioPct)>0.17).length;
+  const tol =data.filter(e=>e.desvioPct!==null&&Math.abs(e.desvioPct)>=0.05&&Math.abs(e.desvioPct)<=0.17).length;
+  const onT =data.filter(e=>e.desvioPct!==null&&Math.abs(e.desvioPct)<0.05).length;
+  const avgs=data.map(e=>e.realPct!==null?e.realPct:null).filter(v=>v!==null);
+  const avg =avgs.length?Math.round(avgs.reduce((a,b)=>a+b,0)/avgs.length*100):0;
+  const cj  =data.filter(e=>e.duedate&&e.duedate.startsWith('2026-06')).length;
+  const isFiltered=data.length<epics.length;
+  function setKpi(id,val){
+    const el=document.getElementById(id); if(!el) return;
+    const prev=el.dataset.val;
+    if(prev!==String(val)){
+      el.style.transition='opacity .15s'; el.style.opacity='0.3';
+      setTimeout(()=>{ el.textContent=val; el.dataset.val=String(val); el.style.opacity='1'; },150);
+    }
+  }
+  setKpi('kpi-total',isFiltered?`${t}`:t);
+  setKpi('kpi-crit', crit);
+  setKpi('kpi-tol',  tol);
+  setKpi('kpi-ont',  onT);
+  setKpi('kpi-avg',  avg+'%');
+  setKpi('kpi-cj',   cj);
+  document.getElementById('hdr-meta').textContent=isFiltered
+    ?`PMO TI · ${t} de ${epics.length} épicas`
+    :`PMO TI · ${epics.length} épicas`;
+}
+
+function renderTable(data){
+  updateKpis(data);
+  const info=document.getElementById('table-info');
+  if(info) info.innerHTML=`Mostrando <strong>${data.length}</strong> de ${epics.length} épicas`;
+  const tb=document.getElementById('table-body');
+  if(!data.length){ tb.innerHTML='<tr><td colspan="15" style="text-align:center;padding:40px;color:var(--text-muted)">Sin resultados</td></tr>'; return; }
+  tb.innerHTML=data.map(e=>`
+    <tr data-key="${e.key}">
+      <td style="text-align:center;font-weight:600;color:var(--text-primary)">${e.prioridad||'—'}</td>
+      <td class="code"><a class="jlink" href="${JIRA_BASE}${e.key}" target="_blank" onclick="event.stopPropagation()">${esc(e.codigo||e.key)}</a></td>
+      <td class="proj" title="${esc(e.summary)}">${esc(e.summary)}</td>
+      <td class="cat">${esc(e.categoria)||'<span style="color:var(--text-muted)">—</span>'}</td>
+      <td class="muted">${e.area?`<span class="pill">${esc(e.area)}</span>`:'—'}</td>
+      <td class="muted">${esc(e.sponsor)||'—'}</td>
+      <td><span class="badge badge-${sbClass(e.status)}">${e.status}</span></td>
+      <td class="muted">${e.planPct!==null?Math.round(e.planPct*100)+'% / '+(e.realPct!==null?Math.round(e.realPct*100)+'%':'—'):'—'}</td>
+      <td class="muted" style="color:${e.desvioPct!==null?(Math.abs(e.desvioPct)>0.17?'var(--red)':Math.abs(e.desvioPct)>=0.05?'var(--yellow)':'var(--green)'):'var(--text-muted)'}">
+        ${e.desvioPct!==null?Math.round(e.desvioPct*100)+'%':'—'}</td>
+      <td class="muted">${e.pctDesarrollo!==null?Math.round(e.pctDesarrollo*100)+'% / '+(e.pctPruebas!==null?Math.round(e.pctPruebas*100)+'%':'—'):'—'}</td>
+      <td class="muted">${fmtD(e.fechaInicio)||'—'}</td>
+      <td class="muted">${fmtD(e.duedate)||'—'}</td>
+      <td class="muted">${e.conformidad==='Si'?'<span style="color:var(--green);font-size:15px">✓</span>':'—'}</td>
+      <td class="muted">${e.docFuncional==='Si'?'<span style="color:var(--green);font-size:15px">✓</span>':e.docFuncional==='No'?'<span style="color:var(--red);font-size:15px">✕</span>':'—'}</td>
+      <td><button class="btn-action" type="button" title="Cronograma y detalles" onclick="openModal('${e.key}');event.stopPropagation()">···</button></td>
+    </tr>
+  `).join('');
+}
+
+
+// ── PORTAFOLIO FILTERS ────────────────────────────────────
+let sortCol=null, sortDir=1;
+
+function getFiltered(){
+  const s  = document.getElementById('s-search').value.toLowerCase();
+  const sp = document.getElementById('s-sponsor').value;
+  const p  = document.getElementById('s-pais').value;
+  const c  = document.getElementById('s-cat').value;
+  const a  = document.getElementById('s-area').value;
+  const ck = [...document.querySelectorAll('.estados-grid input:checked')].map(x=>x.value);
+  return epics.filter(e=>{
+    if(s && !(e.codigo||'').toLowerCase().includes(s) && !e.summary.toLowerCase().includes(s) && !e.key.toLowerCase().includes(s)) return false;
+    if(sp && e.sponsor!==sp) return false;
+    if(p  && e.pais!==p)    return false;
+    if(c  && e.categoria!==c) return false;
+    if(a  && e.area!==a)    return false;
+    if(ck.length && !ck.includes(e.status)) return false;
+    return true;
+  });
+}
+
+function sortedData(data){
+  if(!sortCol) return data;
+  return [...data].sort((a,b)=>{
+    let av=a[sortCol], bv=b[sortCol];
+    if(av===null||av===undefined) return 1;
+    if(bv===null||bv===undefined) return -1;
+    if(typeof av==='number'&&typeof bv==='number') return (av-bv)*sortDir;
+    return String(av).localeCompare(String(bv),'es',{sensitivity:'base'})*sortDir;
+  });
+}
+
+['s-search','s-sponsor','s-pais','s-cat','s-area'].forEach(id=>{
+  const el=document.getElementById(id);
+  if(el) el.addEventListener('input',()=>renderTable(sortedData(getFiltered())));
+});
+document.querySelectorAll('.estados-grid input').forEach(cb=>{
+  cb.addEventListener('change',()=>renderTable(sortedData(getFiltered())));
+});
+document.getElementById('btn-limpiar').addEventListener('click',()=>{
+  document.getElementById('s-search').value='';
+  ['s-sponsor','s-pais','s-cat','s-area'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  document.querySelectorAll('.estados-grid input').forEach(cb=>cb.checked=false);
+  sortCol=null; sortDir=1;
+  document.querySelectorAll('#panel-portafolio thead th').forEach(t=>{
+    t.classList.remove('sort-asc','sort-desc');
+    const si=t.querySelector('.sort-icon'); if(si) si.textContent='';
+  });
+  renderTable(epics);
+});
+
+document.querySelectorAll('#panel-portafolio thead th[data-col]').forEach(th=>{
+  th.addEventListener('click',()=>{
+    const col=th.dataset.col;
+    if(sortCol===col){ sortDir*=-1; } else { sortCol=col; sortDir=1; }
+    document.querySelectorAll('#panel-portafolio thead th').forEach(t=>{
+      t.classList.remove('sort-asc','sort-desc');
+      const si=t.querySelector('.sort-icon'); if(si) si.textContent='';
+    });
+    th.classList.add(sortDir===1?'sort-asc':'sort-desc');
+    renderTable(sortedData(getFiltered()));
+  });
+});
+
+
+// ── LOAD PORTAFOLIO ────────────────────────────────────────
+async function fetchAllEpics(){
+  const resp = await fetch('/api/jira',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ jql:'project = PTS AND issuetype = Epic ORDER BY created ASC', fields:JIRA_FIELDS })
+  });
+  if(!resp.ok){ const err=await resp.text(); throw new Error(`Jira ${resp.status}: ${err}`); }
+  return resp.json();
+}
+
+async function loadData(manual=false){
+  const loading    = document.getElementById('loading-screen');
+  const errorScr   = document.getElementById('error-screen');
+  const refreshBtn = document.getElementById('btn-refresh');
+  if(manual){ refreshBtn.classList.add('spinning'); }
+  else { loading.classList.remove('hidden'); errorScr.classList.add('hidden'); }
+  document.getElementById('loading-text').textContent='Cargando épicas desde Jira...';
+  try{
+    const data   = await fetchAllEpics();
+    const issues = data.issues||[];
+    document.getElementById('loading-text').textContent=`Procesando ${issues.length} épicas...`;
+    epics = issues.map(parseIssue);
+
+    function populateSelect(id,values,allLabel){
+      const sel=document.getElementById(id); if(!sel) return;
+      const cur=sel.value;
+      sel.innerHTML=`<option value="">${allLabel}</option>`+
+        [...new Set(values)].sort().map(v=>`<option${v===cur?' selected':''}>${v}</option>`).join('');
+    }
+    populateSelect('s-sponsor', epics.map(e=>e.sponsor).filter(Boolean),'Todos');
+    populateSelect('s-pais',    epics.map(e=>e.pais).filter(Boolean),'Todos');
+    populateSelect('s-cat',     epics.map(e=>e.categoria).filter(Boolean),'Todas');
+    populateSelect('s-area',    epics.map(e=>e.area).filter(Boolean),'Todas');
+
+    document.getElementById('last-update').textContent='Actualizado '+new Date().toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'});
+    loading.classList.add('hidden');
+    errorScr.classList.add('hidden');
+    refreshBtn.classList.remove('spinning');
+
+    document.getElementById('kpis-section').innerHTML=`
+      <div class="kpi"><div class="kpi-label">Total</div><div class="kpi-value c-white" id="kpi-total"></div></div>
+      <div class="kpi"><div class="kpi-label">Críticos</div><div class="kpi-value c-red" id="kpi-crit"></div><div class="kpi-sub">Desv &gt;17%</div></div>
+      <div class="kpi"><div class="kpi-label">Tolerancia</div><div class="kpi-value c-yellow" id="kpi-tol"></div><div class="kpi-sub">Desv 5–17%</div></div>
+      <div class="kpi"><div class="kpi-label">On Track</div><div class="kpi-value c-blue" id="kpi-ont"></div><div class="kpi-sub">Desv &lt;5%</div></div>
+      <div class="kpi"><div class="kpi-label">Avance prom.</div><div class="kpi-value c-cyan" id="kpi-avg"></div></div>
+      <div class="kpi"><div class="kpi-label">Cierre junio</div><div class="kpi-value c-green" id="kpi-cj"></div></div>
+    `;
+    sortCol=null; sortDir=1;
+    renderTable(epics);
+    updateKpis(epics);
+  }catch(err){
+    console.error(err);
+    loading.classList.add('hidden');
+    refreshBtn.classList.remove('spinning');
+    if(!manual){
+      errorScr.classList.remove('hidden');
+      document.getElementById('error-msg').textContent=err.message;
+    } else {
+      document.getElementById('last-update').textContent='⚠ Error al actualizar';
+    }
+  }
+}
+
+loadData();
+
+
+loadData();
+
+document.getElementById('btn-export-rec')?.addEventListener('click', () => {
   const _s=(document.getElementById('rec-search')?.value||'').toLowerCase();
   const _ab=document.querySelector('.rec-area-btn.active');
   const _ar=_ab?_ab.dataset.area:'';
@@ -121,488 +365,10 @@ function exportRecursosCSV(){
     if(_pa&&r.pais!==_pa) return false;
     return true;
   });
-  const hdr = ['Recurso','Área','País','Proyectos','Horas Pendientes','Horas Total','Horas Cerradas','Horas Libres','Entregas Pend.','Bloqueantes','Ocupación%'];
-  const rows = filtered.map(r => {
-    const totalH = r.horasCerr + r.horasPend + r.horasLibre;
-    const ocup = totalH > 0 ? Math.round((r.horasCerr+r.horasPend)/totalH*100) : 0;
-    return [r.nombre, r.area||'', r.pais||'', r.proyectos, r.horasPend, r.horasTotal, r.horasCerr, r.horasLibre, r.entregasPend, r.bloqueantes, ocup+'%'];
-  });
-  downloadCSV([hdr,...rows], `recursos_${new Date().toISOString().slice(0,10)}.csv`);
-}
-
-document.getElementById('btn-export-port').addEventListener('click', exportPortafolioCSV);
-document.getElementById('btn-export-ven').addEventListener('click', exportVentasCSV);
-document.getElementById('btn-export-rec').addEventListener('click', exportRecursosCSV);
-
-// ── TABS ───────────────────────────────────────────────────
-let recursosLoaded = false;
-let ventasLoaded   = false;
-
-document.querySelectorAll('.tabs .tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    document.querySelectorAll('.tabs .tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-    tab.classList.add('active');
-    const panel = document.getElementById('panel-'+tab.dataset.tab);
-    if(panel) panel.classList.add('active');
-    if(tab.dataset.tab==='recursos' && !recursosLoaded) loadRecursos();
-    if(tab.dataset.tab==='ventas'   && !ventasLoaded)   loadVentas();
-    if(tab.dataset.tab==='dashboard' && epics.length)   renderDashboard();
-  });
+  const hdr=['Recurso','Área','País','Proyectos','Horas Pend.','Horas Total','Horas Cerradas','Horas Libres','Entregas Pend.','Bloqueantes'];
+  const rows=filtered.map(r=>[r.nombre,r.area||'',r.pais||'',r.proyectos,r.horasPend,r.horasTotal,r.horasCerr,r.horasLibre,r.entregasPend,r.bloqueantes]);
+  downloadCSV([hdr,...rows],`recursos_${new Date().toISOString().slice(0,10)}.csv`);
 });
-
-// ── PORTAFOLIO: parse & render ─────────────────────────────
-function parseIssue(i){
-  const f=i.fields||{};
-  const planPct  = f.customfield_10725!=null ? parseFloat(f.customfield_10725) : null;
-  const realPct  = f.customfield_10726!=null ? parseFloat(f.customfield_10726) : null;
-  const desvioPct= f.customfield_10759!=null ? parseFloat(f.customfield_10759) : null;
-  return {
-    key        : i.key,
-    summary    : f.summary||'',
-    status     : f.status?.name||'',
-    area       : f.customfield_10930||'',
-    pais       : f.customfield_10592||'',
-    sponsor    : f.customfield_10931||'',
-    categoria  : f.customfield_10929||'',
-    fechaInicio: f.customfield_10015||null,
-    duedate    : f.duedate||null,
-    planPct, realPct, desvioPct,
-    pctAnalisis   : f.customfield_10895!=null?parseFloat(f.customfield_10895):null,
-    pctDesarrollo : f.customfield_10928!=null?parseFloat(f.customfield_10928):null,
-    pctPruebas    : f.customfield_10969!=null?parseFloat(f.customfield_10969):null,
-    conformidad   : (()=>{ const v=f.customfield_10970; if(!v) return ''; if(typeof v==='string') return v; if(typeof v==='object'&&v.content) return adfToText(v).trim(); return String(v); })(),
-    docFuncional  : (()=>{ const v=f.customfield_10934; if(!v) return ''; if(typeof v==='string') return v; if(typeof v==='object'&&v.content) return adfToText(v).trim(); return String(v); })(),
-    bloqueante    : (()=>{ const v=f.customfield_11003; if(!v) return ''; if(typeof v==='string') return v; if(typeof v==='object'&&v.content) return adfToText(v).trim(); return String(v); })(),
-    codigo        : f.customfield_10659||f.customfield_10829||'',
-    prioridad     : f.customfield_11004!=null?parseFloat(f.customfield_11004):null,
-    descripcion   : f.description||null,
-    assignee      : f.assignee?.displayName||'',
-    reporter      : f.reporter?.displayName||'',
-  };
-}
-
-function updateKpis(data){
-  const total=data.length;
-  const enCurso=data.filter(e=>['Desarrollo','Pruebas','Análisis'].includes(e.status)).length;
-  const produc =data.filter(e=>e.status==='Producción').length;
-  const desvio =data.filter(e=>e.desvioPct!=null&&Math.abs(e.desvioPct)>0.17).length;
-  const bloq   =data.filter(e=>e.bloqueante&&e.bloqueante.toLowerCase()!=='no'&&e.bloqueante!=='').length;
-  const conBloq=data.filter(e=>['Sí','Si','sí','si','YES','Yes'].includes(e.bloqueante)).length;
-  function setKpi(id,val){
-    const el=document.getElementById(id);
-    if(el) el.textContent=val;
-  }
-  setKpi('kpi-total',total); setKpi('kpi-encurso',enCurso);
-  setKpi('kpi-produccion',produc); setKpi('kpi-desvio',desvio); setKpi('kpi-bloqueantes',conBloq||bloq);
-}
-
-function renderTable(data){
-  const total=epics.length;
-  const info=document.getElementById('table-info');
-  if(info) info.textContent=`Mostrando ${data.length} de ${total} proyectos`;
-  const tb=document.getElementById('table-body');
-  if(!tb) return;
-  if(!data.length){
-    tb.innerHTML=`<tr><td colspan="15" style="padding:40px;text-align:center;color:var(--text-dim)">Sin resultados</td></tr>`;
-    return;
-  }
-  tb.innerHTML=data.map(e=>{
-    const desvC=e.desvioPct===null?'var(--text-muted)':Math.abs(e.desvioPct)>0.17?'var(--red)':Math.abs(e.desvioPct)>=0.05?'var(--yellow)':'var(--green)';
-    const desvV=e.desvioPct!==null?Math.round(e.desvioPct*100)+'%':'—';
-    const sbCls=sbClass(e.status);
-    const codLink=e.codigo?`<a href="${JIRA_BASE}${e.key}" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:none" onclick="event.stopPropagation()">${esc(e.codigo)}</a>`:'—';
-    return `<tr data-key="${esc(e.key)}">
-      <td style="text-align:center;color:var(--text-muted)">${e.prioridad!=null?e.prioridad:'—'}</td>
-      <td>${codLink}</td>
-      <td style="max-width:240px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(e.summary)}">${esc(e.summary)}</td>
-      <td>${pill(e.categoria)}</td>
-      <td>${esc(e.area)||'—'}</td>
-      <td style="color:var(--text-muted)">${esc(e.sponsor)||'—'}</td>
-      <td><span class="badge badge-${sbCls}">${esc(e.status)}</span></td>
-      <td>${progCell(e.planPct)} ${progCell(e.realPct)}</td>
-      <td style="font-weight:600;color:${desvC}">${desvV}</td>
-      <td>${progCell(e.pctDesarrollo)} ${progCell(e.pctPruebas)}</td>
-      <td style="color:var(--text-muted)">${fmtD(e.fechaInicio)||'—'}</td>
-      <td style="color:var(--text-muted)">${fmtD(e.duedate)||'—'}</td>
-      <td>${pill(e.conformidad)}</td>
-      <td>${pill(e.docFuncional)}</td>
-      <td><button class="btn-ver" onclick="openModal('${esc(e.key)}');event.stopPropagation()">···</button></td>
-    </tr>`;
-  }).join('');
-}
-
-// ── PORTAFOLIO FILTERS ────────────────────────────────────
-let sortCol='', sortDir=1;
-
-function getFiltered(){
-  const search=(document.getElementById('s-search')?.value||'').toLowerCase();
-  const pais  =document.getElementById('s-pais')?.value||'';
-  const area  =document.getElementById('s-area')?.value||'';
-  const spon  =document.getElementById('s-sponsor')?.value||'';
-  const cat   =document.getElementById('s-cat')?.value||'';
-  const checked=[...document.querySelectorAll('#panel-portafolio .estados-grid input:checked')].map(c=>c.value);
-  return epics.filter(e=>{
-    if(search && !e.summary.toLowerCase().includes(search) && !e.codigo.toLowerCase().includes(search)) return false;
-    if(pais && e.pais!==pais) return false;
-    if(area && e.area!==area) return false;
-    if(spon && e.sponsor!==spon) return false;
-    if(cat  && e.categoria!==cat) return false;
-    if(checked.length && !checked.includes(e.status)) return false;
-    return true;
-  });
-}
-
-function sortedData(data){
-  if(!sortCol) return data;
-  return [...data].sort((a,b)=>{
-    let va=a[sortCol],vb=b[sortCol];
-    if(va===null||va===undefined) va=''; if(vb===null||vb===undefined) vb='';
-    return (va<vb?-1:va>vb?1:0)*sortDir;
-  });
-}
-
-['s-search','s-pais','s-area','s-sponsor','s-cat'].forEach(id=>{
-  const el=document.getElementById(id);
-  if(el) el.addEventListener('input',()=>renderTable(sortedData(getFiltered())));
-  if(el) el.addEventListener('change',()=>renderTable(sortedData(getFiltered())));
-});
-document.querySelectorAll('#panel-portafolio .estados-grid input').forEach(cb=>{
-  cb.addEventListener('change',()=>renderTable(sortedData(getFiltered())));
-});
-document.getElementById('btn-limpiar')?.addEventListener('click',()=>{
-  document.querySelectorAll('#panel-portafolio .filter-input').forEach(el=>{ if(el.tagName==='INPUT') el.value=''; else el.value=''; });
-  document.querySelectorAll('#panel-portafolio .estados-grid input').forEach(c=>c.checked=false);
-  document.querySelectorAll('#panel-portafolio thead th').forEach(t=>{ sortCol=''; sortDir=1; t.querySelector('.sort-icon')&&(t.querySelector('.sort-icon').textContent=''); });
-  renderTable(epics);
-});
-
-document.querySelectorAll('#panel-portafolio thead th[data-col]').forEach(th=>{
-  th.addEventListener('click',()=>{
-    const col=th.dataset.col;
-    if(sortCol===col) sortDir*=-1; else { sortCol=col; sortDir=1; }
-    document.querySelectorAll('#panel-portafolio thead th').forEach(t=>{ if(t.querySelector('.sort-icon')) t.querySelector('.sort-icon').textContent=''; });
-    if(th.querySelector('.sort-icon')) th.querySelector('.sort-icon').textContent=sortDir===1?' ↑':' ↓';
-    renderTable(sortedData(getFiltered()));
-  });
-});
-
-// ── LOAD PORTAFOLIO ────────────────────────────────────────
-async function fetchAllEpics(){
-  const resp=await fetch('/api/jira',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'epics'})});
-  if(!resp.ok) throw new Error('HTTP '+resp.status);
-  const j=await resp.json();
-  return (j.issues||[]).map(parseIssue);
-}
-
-async function loadData(manual=false){
-  const loadingScr = document.getElementById('loading-screen');
-  const errorScr   = document.getElementById('error-screen');
-  const loadingTxt = document.getElementById('loading-text');
-  const refreshBtn = document.getElementById('btn-refresh');
-  const info       = document.getElementById('table-info');
-
-  if(manual){
-    if(refreshBtn) refreshBtn.classList.add('spinning');
-  } else {
-    if(loadingScr) loadingScr.classList.remove('hidden');
-    if(errorScr)   errorScr.classList.add('hidden');
-  }
-  if(loadingTxt) loadingTxt.textContent='Cargando épicas desde Jira...';
-
-  try{
-    epics=await fetchAllEpics();
-    if(loadingTxt) loadingTxt.textContent=`Procesando ${epics.length} épicas...`;
-
-    const now=new Date();
-    const el=document.getElementById('last-update');
-    if(el) el.textContent='Actualizado: '+now.toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'});
-
-    function populateSelect(id,values,allLabel){
-      const sel=document.getElementById(id);
-      if(!sel) return;
-      const cur=sel.value;
-      sel.innerHTML=`<option value="">${allLabel}</option>`+[...new Set(values.filter(Boolean))].sort().map(v=>`<option>${v}</option>`).join('');
-      sel.value=cur||'';
-    }
-    populateSelect('s-pais',   epics.map(e=>e.pais),     'Todos');
-    populateSelect('s-area',   epics.map(e=>e.area),     'Todas');
-    populateSelect('s-sponsor',epics.map(e=>e.sponsor),  'Todos');
-    populateSelect('s-cat',    epics.map(e=>e.categoria),'Todas');
-
-    if(loadingScr) loadingScr.classList.add('hidden');
-    if(errorScr)   errorScr.classList.add('hidden');
-    if(refreshBtn) refreshBtn.classList.remove('spinning');
-
-    updateKpis(epics);
-    renderTable(epics);
-
-    const dashTab = document.querySelector('.tab[data-tab="dashboard"]');
-    if(dashTab && dashTab.classList.contains('active')) renderDashboard();
-
-  }catch(err){
-    console.error('Error portafolio:',err);
-    if(loadingScr) loadingScr.classList.add('hidden');
-    if(refreshBtn) refreshBtn.classList.remove('spinning');
-    if(!manual){
-      if(errorScr) errorScr.classList.remove('hidden');
-      const errMsg=document.getElementById('error-msg');
-      if(errMsg) errMsg.textContent=err.message;
-    } else {
-      const el=document.getElementById('last-update');
-      if(el) el.textContent='⚠ Error al actualizar';
-    }
-    if(info) info.textContent='Error al cargar: '+err.message;
-  }
-}
-
-document.getElementById('btn-refresh')?.addEventListener('click',()=>loadData(true));
-loadData();
-
-// ── VENTAS: parse & render ─────────────────────────────────
-function parseVenta(i){ return parseIssue(i); } // misma estructura
-
-let ventaSortCol='', ventaSortDir=1;
-
-function getVentasFiltered(){
-  const search=(document.getElementById('ven-search')?.value||'').toLowerCase();
-  const pais  =document.getElementById('ven-pais')?.value||'';
-  const area  =document.getElementById('ven-area')?.value||'';
-  const spon  =document.getElementById('ven-sponsor')?.value||'';
-  const status=document.getElementById('ven-status')?.value||'';
-  return ventas.filter(v=>{
-    if(search && !v.summary.toLowerCase().includes(search) && !v.codigo.toLowerCase().includes(search)) return false;
-    if(pais   && v.pais!==pais)     return false;
-    if(area   && v.area!==area)     return false;
-    if(spon   && v.sponsor!==spon)  return false;
-    if(status && v.status!==status) return false;
-    return true;
-  });
-}
-
-function sortedVentas(data){
-  if(!ventaSortCol) return data;
-  return [...data].sort((a,b)=>{
-    let va=a[ventaSortCol],vb=b[ventaSortCol];
-    if(va===null||va===undefined) va=''; if(vb===null||vb===undefined) vb='';
-    return (va<vb?-1:va>vb?1:0)*ventaSortDir;
-  });
-}
-
-function renderVentas(data){
-  const total=ventas.length;
-  const info=document.getElementById('ven-table-info');
-  if(info) info.textContent=`Mostrando ${data.length} de ${total} ventas`;
-
-  // KPIs
-  const sk=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
-  const activas =data.filter(v=>!['Producción','Desestimado'].includes(v.status)).length;
-  const ganadas =data.filter(v=>v.status==='Producción').length;
-  const perdidas=data.filter(v=>v.status==='Desestimado').length;
-  const desvCount=data.filter(v=>v.desvioPct!=null&&Math.abs(v.desvioPct)>0.17).length;
-  const bloqCount=data.filter(v=>v.bloqueante&&v.bloqueante.toLowerCase()!=='no'&&v.bloqueante!=='').length;
-  sk('ven-kpi-total',   total);
-  sk('ven-kpi-activas', activas);
-  sk('ven-kpi-ganadas', ganadas);
-  sk('ven-kpi-perdidas',perdidas);
-  sk('ven-kpi-desvio',  desvCount);
-  sk('ven-kpi-bloq',    bloqCount);
-
-  const tb=document.getElementById('ven-table-body');
-  if(!tb) return;
-  if(!data.length){
-    tb.innerHTML=`<tr><td colspan="11" class="ven-empty">Sin resultados para los filtros aplicados</td></tr>`;
-    return;
-  }
-  tb.innerHTML=data.map(v=>{
-    const desvC=v.desvioPct===null?'var(--text-muted)':Math.abs(v.desvioPct)>0.17?'var(--red)':Math.abs(v.desvioPct)>=0.05?'var(--yellow)':'var(--green)';
-    const desvV=v.desvioPct!==null?Math.round(v.desvioPct*100)+'%':'—';
-    const sbCls=sbClass(v.status);
-    const bloqColor=v.bloqueante&&v.bloqueante.toLowerCase()!=='no'?'var(--red)':'var(--green)';
-    const bloqLabel=v.bloqueante&&v.bloqueante.toLowerCase()!=='no'?'⚠ Sí':'✓ No';
-    return `<tr>
-      <td><a href="${JIRA_BASE}${v.key}" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:none">${esc(v.codigo||v.key)}</a></td>
-      <td style="max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(v.summary)}">${esc(v.summary)}</td>
-      <td>${esc(v.area)||'—'}</td>
-      <td>${esc(v.pais)||'—'}</td>
-      <td style="color:var(--text-muted)">${esc(v.sponsor)||'—'}</td>
-      <td><span class="badge badge-${sbCls}">${esc(v.status)}</span></td>
-      <td>${progCell(v.planPct)} ${progCell(v.realPct)}</td>
-      <td style="font-weight:600;color:${desvC}">${desvV}</td>
-      <td style="color:var(--text-muted)">${fmtD(v.fechaInicio)||'—'}</td>
-      <td style="color:var(--text-muted)">${fmtD(v.duedate)||'—'}</td>
-      <td style="font-weight:600;color:${bloqColor}">${bloqLabel}</td>
-    </tr>`;
-  }).join('');
-}
-
-// Ventas filter listeners
-['ven-search','ven-pais','ven-area','ven-sponsor','ven-status'].forEach(id=>{
-  const el=document.getElementById(id);
-  if(el) el.addEventListener('input',()=>renderVentas(sortedVentas(getVentasFiltered())));
-  if(el) el.addEventListener('change',()=>renderVentas(sortedVentas(getVentasFiltered())));
-});
-document.getElementById('ven-limpiar')?.addEventListener('click',()=>{
-  document.querySelectorAll('#panel-ventas .filter-input').forEach(el=>{el.value='';});
-  document.getElementById('ven-search').value='';
-  ventaSortCol=''; ventaSortDir=1;
-  document.querySelectorAll('#panel-ventas thead th').forEach(t=>{ if(t.querySelector('.sort-icon')) t.querySelector('.sort-icon').textContent=''; });
-  renderVentas(ventas);
-});
-document.querySelectorAll('#panel-ventas thead th[data-vcol]').forEach(th=>{
-  th.addEventListener('click',()=>{
-    const col=th.dataset.vcol;
-    if(ventaSortCol===col) ventaSortDir*=-1; else { ventaSortCol=col; ventaSortDir=1; }
-    document.querySelectorAll('#panel-ventas thead th').forEach(t=>{ if(t.querySelector('.sort-icon')) t.querySelector('.sort-icon').textContent=''; });
-    if(th.querySelector('.sort-icon')) th.querySelector('.sort-icon').textContent=ventaSortDir===1?' ↑':' ↓';
-    renderVentas(sortedVentas(getVentasFiltered()));
-  });
-});
-
-async function loadVentas(){
-  ventasLoaded=true;
-  const info=document.getElementById('ven-table-info');
-  if(info) info.textContent='Cargando ventas desde Jira…';
-  try{
-    const resp=await fetch('/api/jira',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'ventas'})});
-    if(!resp.ok) throw new Error('HTTP '+resp.status);
-    const j=await resp.json();
-    ventas=(j.issues||[]).map(parseVenta);
-
-    function populateSelect(id,values,allLabel){
-      const sel=document.getElementById(id);
-      if(!sel) return;
-      sel.innerHTML=`<option value="">${allLabel}</option>`+[...new Set(values.filter(Boolean))].sort().map(v=>`<option>${v}</option>`).join('');
-    }
-    populateSelect('ven-pais',   ventas.map(v=>v.pais),    'Todos');
-    populateSelect('ven-area',   ventas.map(v=>v.area),    'Todas');
-    populateSelect('ven-sponsor',ventas.map(v=>v.sponsor), 'Todos');
-    populateSelect('ven-status', ventas.map(v=>v.status),  'Todos');
-
-    renderVentas(ventas);
-  }catch(err){
-    console.error('Error ventas:',err);
-    if(info) info.textContent='Error al cargar ventas: '+err.message;
-    const tb=document.getElementById('ven-table-body');
-    if(tb) tb.innerHTML=`<tr><td colspan="11" class="ven-empty">Error: ${esc(err.message)}</td></tr>`;
-  }
-}
-
-// ── DASHBOARD ──────────────────────────────────────────────
-const STATE_COLORS={
-  'Backlog'    :'#6B7280',
-  'Análisis'   :'#3B82F6',
-  'Desarrollo' :'#8B5CF6',
-  'Pruebas'    :'#F59E0B',
-  'Producción' :'#10B981',
-  'Planificado':'#06B6D4',
-  'Stand by'   :'#EF4444',
-  'Desestimado':'#374151',
-};
-
-function renderDashboard(){
-  if(!epics.length) return;
-
-  // ── Donut: por estado ──
-  const stateCounts={};
-  epics.forEach(e=>{ stateCounts[e.status]=(stateCounts[e.status]||0)+1; });
-  const stateEntries=Object.entries(stateCounts).sort((a,b)=>b[1]-a[1]);
-  const total=epics.length;
-  const canvas=document.getElementById('dash-donut');
-  if(canvas){
-    const ctx=canvas.getContext('2d');
-    ctx.clearRect(0,0,120,120);
-    let angle=-Math.PI/2;
-    stateEntries.forEach(([st,cnt])=>{
-      const slice=(cnt/total)*Math.PI*2;
-      ctx.beginPath();
-      ctx.moveTo(60,60);
-      ctx.arc(60,60,54,angle,angle+slice);
-      ctx.closePath();
-      ctx.fillStyle=STATE_COLORS[st]||'#6B7280';
-      ctx.fill();
-      angle+=slice;
-    });
-    // inner hole
-    ctx.beginPath();
-    ctx.arc(60,60,30,0,Math.PI*2);
-    ctx.fillStyle='var(--bg-surface, #1e2025)';
-    ctx.fill();
-    // center count
-    ctx.fillStyle='#f1f5f9';
-    ctx.font='bold 18px system-ui';
-    ctx.textAlign='center';
-    ctx.textBaseline='middle';
-    ctx.fillText(total,60,60);
-  }
-  const legend=document.getElementById('dash-donut-legend');
-  if(legend) legend.innerHTML=stateEntries.map(([st,cnt])=>`
-    <div class="dash-legend-item">
-      <span class="dash-legend-dot" style="background:${STATE_COLORS[st]||'#6B7280'}"></span>
-      <span class="dash-legend-lbl">${esc(st)}</span>
-      <span class="dash-legend-val" style="margin-left:8px">${cnt}</span>
-    </div>`).join('');
-
-  // ── KPI grid ──
-  const enCurso=epics.filter(e=>['Desarrollo','Pruebas','Análisis'].includes(e.status)).length;
-  const produc =epics.filter(e=>e.status==='Producción').length;
-  const conDesvio=epics.filter(e=>e.desvioPct!=null&&Math.abs(e.desvioPct)>0.17).length;
-  const sinFechas=epics.filter(e=>!e.fechaInicio&&!e.duedate).length;
-  const conBloq  =epics.filter(e=>e.bloqueante&&e.bloqueante.toLowerCase()!=='no'&&e.bloqueante!=='').length;
-  const conConf  =epics.filter(e=>e.conformidad&&e.conformidad.toLowerCase()!=='no'&&e.conformidad!=='').length;
-  const grid=document.getElementById('dash-kpi-grid');
-  if(grid) grid.innerHTML=[
-    [total,          'Total',          'var(--text-primary)'],
-    [enCurso,        'En Curso',       'var(--cyan)'],
-    [produc,         'Producción',     'var(--green)'],
-    [conDesvio,      'Con Desvío>17%', 'var(--red)'],
-    [conBloq,        'Bloqueantes',    'var(--yellow)'],
-    [sinFechas,      'Sin Fechas',     'var(--text-muted)'],
-  ].map(([v,l,c])=>`<div class="dash-stat"><div class="dash-stat-val" style="color:${c}">${v}</div><div class="dash-stat-lbl">${l}</div></div>`).join('');
-
-  // ── Barras por Área ──
-  const areaCounts={};
-  epics.forEach(e=>{ if(e.area) areaCounts[e.area]=(areaCounts[e.area]||0)+1; });
-  const areaMax=Math.max(...Object.values(areaCounts),1);
-  const areaBars=document.getElementById('dash-area-bars');
-  if(areaBars) areaBars.innerHTML=Object.entries(areaCounts).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([a,n])=>`
-    <div class="dash-prog-row">
-      <span class="dash-prog-lbl" title="${esc(a)}">${esc(a)}</span>
-      <div class="dash-prog-bar-wrap"><div class="dash-prog-fill" style="width:${Math.round(n/areaMax*100)}%;background:var(--blue)"></div></div>
-      <span class="dash-prog-pct">${n}</span>
-    </div>`).join('');
-
-  // ── Proyectos desviados ──
-  const desviados=epics.filter(e=>e.desvioPct!=null&&Math.abs(e.desvioPct)>0.17)
-    .sort((a,b)=>Math.abs(b.desvioPct)-Math.abs(a.desvioPct)).slice(0,8);
-  const desvEl=document.getElementById('dash-desviados');
-  if(desvEl) desvEl.innerHTML=desviados.length
-    ? desviados.map(e=>`<div class="dash-row">
-        <span class="dash-row-lbl" title="${esc(e.summary)}" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(e.codigo||e.key)} — ${esc(e.summary)}</span>
-        <span class="dash-row-val" style="color:var(--red)">${Math.round(e.desvioPct*100)}%</span>
-      </div>`).join('')
-    : '<div class="dash-empty">✓ Sin proyectos con desvío crítico</div>';
-
-  // ── Próximos a vencer 30 días ──
-  const in30=new Date(TODAY); in30.setDate(in30.getDate()+30);
-  const vencen=epics.filter(e=>{
-    if(!e.duedate||['Producción','Desestimado'].includes(e.status)) return false;
-    const d=new Date(e.duedate+'T12:00:00');
-    return d>=TODAY && d<=in30;
-  }).sort((a,b)=>new Date(a.duedate)-new Date(b.duedate));
-  const vencenEl=document.getElementById('dash-vencen');
-  if(vencenEl) vencenEl.innerHTML=vencen.length
-    ? vencen.map(e=>{
-        const d=new Date(e.duedate+'T12:00:00');
-        const dias=diffD(TODAY,d);
-        const urg=dias<=7?'var(--red)':dias<=14?'var(--yellow)':'var(--cyan)';
-        return `<div class="dash-row">
-          <span class="dash-row-lbl">${esc(e.codigo||e.key)} — ${esc(e.summary)}</span>
-          <span class="dash-row-val" style="color:${urg}">${dias}d · ${fmtD(e.duedate)}</span>
-        </div>`;
-      }).join('')
-    : '<div class="dash-empty">✓ No hay proyectos por vencer en los próximos 30 días</div>';
-}
 
 // ── VENTAS: parse & render ─────────────────────────────────
 
@@ -1222,11 +988,6 @@ document.getElementById('table-body').addEventListener('click', ev=>{
   const tr=ev.target.closest('tr[data-key]');
   if(tr&&!ev.target.closest('a,button')) openModal(tr.dataset.key);
 });
-
-// ── getRecursosFiltered helper (used by exportRecursosCSV) ─
-// NOTE: renderRecursos already has inline filter logic;
-// this just exposes the same logic for CSV export.
-// (added at end so no conflict with inline version above)
 
 // ═══════════════════════════════════════════════════════════
 //  CAPACITY TAB  — worklogs por fecha/persona
