@@ -109,10 +109,9 @@ document.querySelectorAll('.tabs .tab').forEach(tab => {
     const panel = document.getElementById('panel-'+tab.dataset.tab);
     if(panel) panel.classList.add('active');
     if(tab.dataset.tab==='recursos' && !recursosLoaded) loadRecursos();
-  });
     if(tab.dataset.tab==='capacity' && !capacityLoaded) loadCapacity();
   });
-}););
+});
 
 
 // ── PORTAFOLIO: parse & render ─────────────────────────────
