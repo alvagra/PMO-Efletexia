@@ -524,34 +524,56 @@ a.jlink:hover{text-decoration:underline}
 
 <!-- ══ CAPACITY ══ -->
 <div class="tab-panel" id="panel-capacity">
+  <!-- KPIs -->
   <div class="cap-kpis">
-    <div class="kpi"><div class="kpi-label">Registros</div><div class="kpi-value c-white" id="cap-kpi-registros">—</div></div>
-    <div class="kpi"><div class="kpi-label">Horas Registradas</div><div class="kpi-value c-cyan" id="cap-kpi-horas">—</div></div>
     <div class="kpi"><div class="kpi-label">Personas</div><div class="kpi-value c-white" id="cap-kpi-personas">—</div></div>
-    <div class="kpi"><div class="kpi-label">Subtareas con log</div><div class="kpi-value c-green" id="cap-kpi-subtareas">—</div></div>
+    <div class="kpi"><div class="kpi-label">Horas Registradas</div><div class="kpi-value c-cyan" id="cap-kpi-horas">—</div></div>
+    <div class="kpi"><div class="kpi-label">Horas Planificadas</div><div class="kpi-value c-blue" id="cap-kpi-planeadas">—</div></div>
+    <div class="kpi"><div class="kpi-label">Utilización Prom.</div><div class="kpi-value c-green" id="cap-kpi-util">—</div></div>
   </div>
-  <div class="cap-filters">
-    <div class="filter-group"><label class="filter-label" for="cap-search">Buscar</label><input id="cap-search" class="filter-input" placeholder="Persona o actividad..." autocomplete="off"/></div>
-    <div class="filter-group"><label class="filter-label" for="cap-desde">Desde</label><input id="cap-desde" type="date" class="filter-input"/></div>
-    <div class="filter-group"><label class="filter-label" for="cap-hasta">Hasta</label><input id="cap-hasta" type="date" class="filter-input"/></div>
-    <div class="filter-group"><label class="filter-label" for="cap-persona">Persona</label><select id="cap-persona" class="filter-input"><option value="">Todas</option></select></div>
+  <!-- View toggle + filters -->
+  <div class="cap-view-btns">
+    <button class="cap-view-btn active" id="cap-btn-cal">📅 Calendario</button>
+    <div style="flex:1"></div>
+    <div class="filter-group"><label class="filter-label" for="cap-persona">Persona</label><select id="cap-persona" class="filter-input" style="min-width:130px"><option value="">Todas</option></select></div>
     <div class="filter-group"><label class="filter-label" for="cap-tipo">Tipo</label><select id="cap-tipo" class="filter-input"><option value="">Todos</option><option value="real">Real</option><option value="planeado">Planificado</option></select></div>
     <button class="btn-limpiar" id="cap-limpiar" type="button"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l10 10M13 3L3 13"/></svg>Limpiar</button>
     <button class="btn-export" id="btn-export-cap" type="button"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>CSV</button>
   </div>
-  <div class="cap-table-info" id="cap-table-info">Los datos se cargarán al abrir esta pestaña</div>
-  <div class="cap-table-wrap">
-    <table class="cap-table">
-      <thead><tr>
-        <th data-ccol="fecha">Fecha<span class="sort-icon"></span></th>
-        <th data-ccol="persona">Persona<span class="sort-icon"></span></th>
-        <th data-ccol="horas">Horas<span class="sort-icon"></span></th>
-        <th data-ccol="proyecto">Proyecto<span class="sort-icon"></span></th>
-        <th data-ccol="subtarea">Actividad (Subtarea)<span class="sort-icon"></span></th>
-        <th data-ccol="comentario">Comentario<span class="sort-icon"></span></th>
-      </tr></thead>
-      <tbody id="cap-table-body"><tr><td colspan="6" class="cap-empty">Los datos de capacity se cargarán al abrir esta pestaña</td></tr></tbody>
-    </table>
+  <!-- Calendar nav -->
+  <div class="cap-cal-nav" id="cap-cal-nav">
+    <button id="cap-cal-prev">&#8249;</button>
+    <span class="cap-cal-nav-title" id="cap-cal-title">—</span>
+    <button id="cap-cal-next">&#8250;</button>
+    <div class="cap-cal-nav-jump">
+      <select id="cap-cal-month"></select>
+      <select id="cap-cal-year"></select>
+    </div>
+  </div>
+  <!-- Calendar grid -->
+  <div class="cap-cal-wrap" id="cap-cal-wrap">
+    <div class="cap-empty" style="padding:40px;text-align:center;color:var(--text-dim)">Cargando calendario…</div>
+  </div>
+</div>
+
+<!-- CAPACITY DETAIL DRAWER -->
+<div id="cap-detail-overlay" style="display:none" class="cap-detail-overlay" onclick="closeCapDetail(event)">
+  <div class="cap-detail-panel" onclick="event.stopPropagation()">
+    <div class="cap-detail-hdr">
+      <div>
+        <div class="cap-detail-title" id="cap-detail-title">—</div>
+        <div class="cap-detail-sub" id="cap-detail-sub">—</div>
+      </div>
+      <button class="cap-detail-close" onclick="closeCapDetail()">✕</button>
+    </div>
+    <div class="cap-detail-body">
+      <table class="cap-detail-table">
+        <thead><tr>
+          <th>Fecha</th><th>Horas</th><th>Proyecto</th><th>Actividad</th><th>Comentario</th>
+        </tr></thead>
+        <tbody id="cap-detail-body"></tbody>
+      </table>
+    </div>
   </div>
 </div>
 <!-- MODAL PORTAFOLIO -->
