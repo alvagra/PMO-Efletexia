@@ -257,7 +257,7 @@ module.exports = async function handler(req, res) {
         'customfield_10930','customfield_10931','customfield_10934',
         'customfield_10829','customfield_10862','customfield_10969',
         'customfield_10970','customfield_11003','customfield_11004',
-        'customfield_11037','customfield_11070'
+        'customfield_11037','customfield_11070','customfield_11136'
       ];
       const issues = await fetchAllPages(auth, JIRA_CLOUD, jqlStr, EPIC_FIELDS);
       return res.status(200).json({ issues, total: issues.length, isLast: true });
