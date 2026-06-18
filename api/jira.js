@@ -207,18 +207,13 @@ module.exports = async function handler(req, res) {
           const batch = storyKeys.slice(i, i + STORY_BATCH);
           const jqlStories = `key in (${batch.join(',')})`;
           const stories = await fetchAllPages(auth, JIRA_CLOUD, jqlStories,
-            ['parent','summary','customfield_10659','customfield_10829']);
+            ['parent','summary','customfield_10934']);
           stories.forEach(story => {
             // story.fields.parent es la épica (nombre)
             const epicSummary = story.fields?.parent?.fields?.summary || story.fields?.parent?.key || '';
             epicNameMap[story.key] = epicSummary;
-            // Código del proyecto desde la historia misma (heredado de la épica vía epic link)
-            // o desde el parent si viene con campos expandidos
-            const epicCodigo =
-              story.fields?.customfield_10659 ||
-              story.fields?.customfield_10829 ||
-              story.fields?.parent?.fields?.customfield_10659 ||
-              story.fields?.parent?.fields?.customfield_10829 || '';
+            // Código del proyecto: customfield_10934 en la historia (ej: CEFU-007)
+            const epicCodigo = story.fields?.customfield_10934 || '';
             epicCodigoMap[story.key] = epicCodigo;
           });
         }
