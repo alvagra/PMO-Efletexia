@@ -989,7 +989,7 @@ document.getElementById('table-body').addEventListener('click', ev=>{
 });
 
 // ═══════════════════════════════════════════════════════════
-//  CAPACITY TAB  — worklogs por fecha/persona
+//  CAPACITY TAB  — Calendario de capacidad por recurso
 // ═══════════════════════════════════════════════════════════
 
 const NOMENCLATURA = {
@@ -1017,7 +1017,6 @@ const NOMENCLATURA = {
   'JC3': { nombre: 'Jesus Castillon',   pais: 'Peru' },
 };
 
-// Feriados por país (YYYY-MM-DD)
 const FERIADOS = {
   'Peru': new Set([
     '2025-01-01','2025-04-17','2025-04-18','2025-05-01','2025-06-07',
@@ -1051,24 +1050,18 @@ const FERIADOS = {
   ]),
 };
 
-// Obtener nombre completo desde displayName de Jira (match por iniciales en nomenclatura)
 function resolveNombreDesdeJira(displayName) {
   if(!displayName) return null;
-  // Buscar coincidencia exacta en nombres
   for(const [ini, rec] of Object.entries(NOMENCLATURA)){
     if(rec.nombre.toLowerCase() === displayName.toLowerCase()) return { ini, ...rec };
   }
   return null;
 }
-
-// Obtener país desde nomenclatura (iniciales en el campo assignee)
 function resolveNombreDesdeIni(ini) {
   if(!ini) return null;
   const key = ini.trim().toUpperCase();
   return NOMENCLATURA[key] ? { ini: key, ...NOMENCLATURA[key] } : null;
 }
-
-// Distribuir horas en días hábiles entre inicio y fin
 function distribuirHoras(horasTotal, fechaInicio, fechaFin, pais) {
   if(!horasTotal || !fechaInicio || !fechaFin) return [];
   const feriados = FERIADOS[pais] || new Set();
@@ -1086,13 +1079,13 @@ function distribuirHoras(horasTotal, fechaInicio, fechaFin, pais) {
   return dias.map(fecha => ({ fecha, horas: hPorDia }));
 }
 
+// ── State ──────────────────────────────────────────────────
 let capacityLoaded = false;
-let capRows = [];         // filas planas: {fecha, persona, horas, subtarea, comentario, esPlaneado}
-let capSortCol = 'fecha', capSortDir = -1; // más reciente primero por defecto
+let capRows = [];  // {fecha, persona, horas, proyecto, subtarea, comentario, esPlaneado}
+let capCalYear  = TODAY.getFullYear();
+let capCalMonth = TODAY.getMonth(); // 0-based
 
-// ── Registro del tab en el listener central ────────────────
-// El listener de tabs ya maneja la activación del panel;
-// solo necesitamos enganchar la carga lazy:
+// ── Tab lazy load ──────────────────────────────────────────
 document.querySelectorAll('.tabs .tab').forEach(tab => {
   if(tab.dataset.tab === 'capacity') {
     tab.addEventListener('click', () => {
@@ -1101,11 +1094,11 @@ document.querySelectorAll('.tabs .tab').forEach(tab => {
   }
 });
 
-// ── Carga desde API ────────────────────────────────────────
+// ── Load from API ──────────────────────────────────────────
 async function loadCapacity(){
   capacityLoaded = true;
-  const info = document.getElementById('cap-table-info');
-  if(info) info.textContent = 'Cargando registros de actividad desde Jira…';
+  const wrap = document.getElementById('cap-cal-wrap');
+  if(wrap) wrap.innerHTML = '<div class="cap-empty" style="padding:40px;text-align:center;color:var(--text-dim)">Cargando desde Jira…</div>';
   try {
     const resp = await fetch('/api/jira', {
       method: 'POST',
@@ -1115,7 +1108,6 @@ async function loadCapacity(){
     if(!resp.ok) throw new Error('HTTP ' + resp.status);
     const j = await resp.json();
 
-    // Aplanar: por cada subtarea → worklogs reales, o distribución planificada si no hay logs
     capRows = [];
     (j.issues || []).forEach(sub => {
       const f = sub.fields || {};
@@ -1124,7 +1116,6 @@ async function loadCapacity(){
       const logs = f._worklogs || [];
 
       if(logs.length > 0){
-        // ── Caso A: tiene worklogs reales ──────────────────
         logs.forEach(wl => {
           const horas    = wl.timeSpentSeconds ? +(wl.timeSpentSeconds / 3600).toFixed(2) : 0;
           const fechaIso = wl.started ? wl.started.slice(0,10) : null;
@@ -1137,81 +1128,106 @@ async function loadCapacity(){
           capRows.push({ fecha: fechaIso, persona, horas, proyecto: proyectoNom, subtarea: subtareaNom, comentario, esPlaneado: false });
         });
       } else {
-        // ── Caso B: sin worklogs → distribución planificada ─
-        const horasEst   = f.customfield_11136 || 0;
-        const fechaInicio= f.customfield_10015 || null;
-        const fechaFin   = f.duedate           || null;
+        const horasEst    = f.customfield_11136 || 0;
+        const fechaInicio = f.customfield_10015 || null;
+        const fechaFin    = f.duedate           || null;
         if(!horasEst || !fechaInicio || !fechaFin) return;
 
-        // Obtener lista de iniciales desde el campo custom "Asignado" (ej: "RP, AA, EN")
-        // customfield_11037 o customfield_11070 contienen texto con iniciales separadas por coma
         const asignadoRaw = f.customfield_11037 || f.customfield_11070 || '';
-        const asignadoStr = typeof asignadoRaw === 'string' ? asignadoRaw
-                          : (asignadoRaw?.value || asignadoRaw?.name || '');
+        const asignadoStr = typeof asignadoRaw === 'string' ? asignadoRaw : (asignadoRaw?.value || asignadoRaw?.name || '');
+        let iniciales = asignadoStr.split(/[,;]+/).map(s => s.trim().toUpperCase()).filter(Boolean);
 
-        // Parsear iniciales: "RP, AA, EN" → ['RP','AA','EN']
-        let iniciales = asignadoStr
-          .split(/[,;]+/)
-          .map(s => s.trim().toUpperCase())
-          .filter(Boolean);
-
-        // Si no hay campo custom, intentar con assignee estándar
         if(!iniciales.length){
           const assigneeDisplay = f.assignee?.displayName || '';
           const recFallback = resolveNombreDesdeJira(assigneeDisplay);
           if(recFallback) iniciales = [recFallback.ini];
           else if(assigneeDisplay) {
-            // Usar displayName directamente
-            const diasDist = distribuirHoras(horasEst, fechaInicio, fechaFin, 'Peru');
-            diasDist.forEach(({ fecha, horas }) => {
-              capRows.push({ fecha, persona: assigneeDisplay, horas: +(horas/1).toFixed(2), proyecto: proyectoNom, subtarea: subtareaNom, comentario: '(planificado)', esPlaneado: true });
+            distribuirHoras(horasEst, fechaInicio, fechaFin, 'Peru').forEach(({ fecha, horas }) => {
+              capRows.push({ fecha, persona: assigneeDisplay, horas, proyecto: proyectoNom, subtarea: subtareaNom, comentario: '(planificado)', esPlaneado: true });
             });
             return;
           } else return;
         }
 
-        // Resolver cada inicial → recurso → distribuir horas equitativamente
         const recs = iniciales.map(ini => resolveNombreDesdeIni(ini)).filter(Boolean);
         if(!recs.length) return;
-
-        // Horas se dividen equitativamente entre los recursos asignados
         const horasPorRec = +(horasEst / recs.length).toFixed(2);
-
         recs.forEach(rec => {
-          const diasDist = distribuirHoras(horasPorRec, fechaInicio, fechaFin, rec.pais);
-          diasDist.forEach(({ fecha, horas }) => {
+          distribuirHoras(horasPorRec, fechaInicio, fechaFin, rec.pais).forEach(({ fecha, horas }) => {
             capRows.push({ fecha, persona: rec.nombre, horas, proyecto: proyectoNom, subtarea: subtareaNom, comentario: '(planificado)', esPlaneado: true });
           });
         });
       }
     });
 
-    // Poblar selector de personas
+    // Populate persona selector
     const personas = [...new Set(capRows.map(r => r.persona).filter(Boolean))].sort();
     const sel = document.getElementById('cap-persona');
     if(sel) sel.innerHTML = '<option value="">Todas</option>' + personas.map(p => `<option>${esc(p)}</option>`).join('');
 
+    // Set calendar to month with most data
+    if(capRows.length){
+      const fechas = capRows.map(r => r.fecha).filter(Boolean).sort();
+      const mid = fechas[Math.floor(fechas.length/2)];
+      const d = new Date(mid + 'T12:00:00');
+      capCalYear  = d.getFullYear();
+      capCalMonth = d.getMonth();
+    }
+
+    initCalNav();
     renderCapacity();
   } catch(err) {
     console.error('Error capacity:', err);
-    const info = document.getElementById('cap-table-info');
-    if(info) info.textContent = 'Error al cargar registros: ' + err.message;
-    const tb = document.getElementById('cap-table-body');
-    if(tb) tb.innerHTML = `<tr><td colspan="5" class="cap-empty">Error: ${esc(err.message)}</td></tr>`;
+    const wrap = document.getElementById('cap-cal-wrap');
+    if(wrap) wrap.innerHTML = `<div class="cap-empty" style="padding:40px;text-align:center;color:var(--red)">Error: ${esc(err.message)}</div>`;
   }
 }
 
-// ── Render ─────────────────────────────────────────────────
+// ── Calendar navigation ────────────────────────────────────
+function initCalNav(){
+  // Populate month/year selectors
+  const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const mSel = document.getElementById('cap-cal-month');
+  const ySel = document.getElementById('cap-cal-year');
+  if(mSel) mSel.innerHTML = MONTHS.map((m,i) => `<option value="${i}">${m}</option>`).join('');
+  if(ySel){
+    const years = [...new Set(capRows.map(r => r.fecha?.slice(0,4)).filter(Boolean))].sort();
+    if(!years.length) years.push(String(TODAY.getFullYear()));
+    ySel.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
+  }
+  syncCalNav();
+
+  document.getElementById('cap-cal-prev')?.addEventListener('click', () => {
+    capCalMonth--; if(capCalMonth < 0){ capCalMonth=11; capCalYear--; }
+    syncCalNav(); renderCapacity();
+  });
+  document.getElementById('cap-cal-next')?.addEventListener('click', () => {
+    capCalMonth++; if(capCalMonth > 11){ capCalMonth=0; capCalYear++; }
+    syncCalNav(); renderCapacity();
+  });
+  document.getElementById('cap-cal-month')?.addEventListener('change', e => {
+    capCalMonth = +e.target.value; renderCapacity();
+  });
+  document.getElementById('cap-cal-year')?.addEventListener('change', e => {
+    capCalYear = +e.target.value; renderCapacity();
+  });
+}
+
+function syncCalNav(){
+  const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const title = document.getElementById('cap-cal-title');
+  if(title) title.textContent = `${MONTHS[capCalMonth]} ${capCalYear}`;
+  const mSel = document.getElementById('cap-cal-month');
+  const ySel = document.getElementById('cap-cal-year');
+  if(mSel) mSel.value = capCalMonth;
+  if(ySel) ySel.value = capCalYear;
+}
+
+// ── Filters ────────────────────────────────────────────────
 function getCapFiltered(){
-  const search  = (document.getElementById('cap-search')?.value || '').toLowerCase();
-  const desde   = document.getElementById('cap-desde')?.value || '';
-  const hasta   = document.getElementById('cap-hasta')?.value || '';
   const persona = document.getElementById('cap-persona')?.value || '';
   const tipo    = document.getElementById('cap-tipo')?.value || '';
   return capRows.filter(r => {
-    if(search && !r.persona.toLowerCase().includes(search) && !r.subtarea.toLowerCase().includes(search) && !(r.comentario||'').toLowerCase().includes(search)) return false;
-    if(desde && r.fecha && r.fecha < desde) return false;
-    if(hasta && r.fecha && r.fecha > hasta) return false;
     if(persona && r.persona !== persona) return false;
     if(tipo === 'real'     &&  r.esPlaneado) return false;
     if(tipo === 'planeado' && !r.esPlaneado) return false;
@@ -1219,88 +1235,259 @@ function getCapFiltered(){
   });
 }
 
-function renderCapacity(){
-  let filtered = getCapFiltered();
-
-  // Ordenar
-  filtered = [...filtered].sort((a,b) => {
-    let va = a[capSortCol], vb = b[capSortCol];
-    if(va === null || va === undefined) va = '';
-    if(vb === null || vb === undefined) vb = '';
-    return (va < vb ? -1 : va > vb ? 1 : 0) * capSortDir;
-  });
-
-  // KPIs
-  const totalHoras   = filtered.reduce((s,r) => s + r.horas, 0);
-  const personas     = new Set(filtered.map(r => r.persona)).size;
-  const subtareasSet = new Set(filtered.map(r => r.subtarea)).size;
-  const sk = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
-  sk('cap-kpi-registros',  filtered.length || '—');
-  sk('cap-kpi-horas',      totalHoras ? totalHoras.toFixed(1)+'h' : '—');
-  sk('cap-kpi-personas',   personas   || '—');
-  sk('cap-kpi-subtareas',  subtareasSet || '—');
-
-  const info = document.getElementById('cap-table-info');
-  if(info) info.textContent = `Mostrando ${filtered.length} de ${capRows.length} registros`;
-
-  const tb = document.getElementById('cap-table-body');
-  if(!tb) return;
-
-  if(!filtered.length){
-    tb.innerHTML = `<tr><td colspan="6" class="cap-empty">${capRows.length === 0 ? 'Sin registros de actividad encontrados' : 'Sin resultados para los filtros aplicados'}</td></tr>`;
-    return;
-  }
-
-  tb.innerHTML = filtered.map(r => {
-    const horasCls = r.horas >= 8 ? 'cap-horas-high' : r.horas >= 4 ? 'cap-horas-med' : 'cap-horas-low';
-    const fechaFmt = r.fecha ? fmtD(r.fecha) : '—';
-    const coment   = r.comentario ? `<span style="color:var(--text-muted);max-width:300px;display:inline-block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(r.comentario)}">${esc(r.comentario)}</span>` : '<span style="color:var(--text-dim)">—</span>';
-    const rowStyle = r.esPlaneado ? 'opacity:.75;font-style:italic' : '';
-    return `<tr style="${rowStyle}">
-      <td style="color:var(--text-muted);white-space:nowrap">${fechaFmt}</td>
-      <td><span style="font-weight:600">${esc(r.persona)}</span></td>
-      <td><span class="cap-horas-badge ${horasCls}">${r.horas}h</span></td>
-      <td style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-muted)" title="${esc(r.proyecto||'')}">${esc(r.proyecto||'—')}</td>
-      <td style="max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(r.subtarea)}">${esc(r.subtarea)}</td>
-      <td>${coment}</td>
-    </tr>`;
-  }).join('');
-}
-
-// ── Filtros listeners ──────────────────────────────────────
-['cap-search','cap-desde','cap-hasta','cap-persona','cap-tipo'].forEach(id => {
+['cap-persona','cap-tipo'].forEach(id => {
   const el = document.getElementById(id);
-  if(el) el.addEventListener('input',  renderCapacity);
   if(el) el.addEventListener('change', renderCapacity);
 });
 document.getElementById('cap-limpiar')?.addEventListener('click', () => {
-  document.getElementById('cap-search').value = '';
-  document.getElementById('cap-desde').value  = '';
-  document.getElementById('cap-hasta').value  = '';
-  document.getElementById('cap-persona').value = '';
-  const capTipo = document.getElementById('cap-tipo'); if(capTipo) capTipo.value = '';
-  capSortCol = 'fecha'; capSortDir = -1;
-  document.querySelectorAll('#panel-capacity thead th').forEach(t => { if(t.querySelector('.sort-icon')) t.querySelector('.sort-icon').textContent = ''; });
+  const p = document.getElementById('cap-persona'); if(p) p.value='';
+  const t = document.getElementById('cap-tipo');    if(t) t.value='';
   renderCapacity();
 });
 
-// ── Ordenamiento de columnas ───────────────────────────────
-document.querySelectorAll('#panel-capacity thead th[data-ccol]').forEach(th => {
-  th.addEventListener('click', () => {
-    const col = th.dataset.ccol;
-    if(capSortCol === col) capSortDir *= -1; else { capSortCol = col; capSortDir = 1; }
-    document.querySelectorAll('#panel-capacity thead th').forEach(t => { if(t.querySelector('.sort-icon')) t.querySelector('.sort-icon').textContent = ''; });
-    if(th.querySelector('.sort-icon')) th.querySelector('.sort-icon').textContent = capSortDir === 1 ? ' ↑' : ' ↓';
-    renderCapacity();
-  });
-});
+// ── Main render: calendar ──────────────────────────────────
+function renderCapacity(){
+  const filtered = getCapFiltered();
 
-// ── Exportar CSV ───────────────────────────────────────────
-document.getElementById('btn-export-cap')?.addEventListener('click', () => {
-  const filtered = getCapFiltered().sort((a,b) => {
-    const va = a[capSortCol]||'', vb = b[capSortCol]||'';
-    return (va < vb ? -1 : va > vb ? 1 : 0) * capSortDir;
+  // Global KPIs
+  const totalReal = filtered.filter(r => !r.esPlaneado).reduce((s,r) => s+r.horas, 0);
+  const totalPlan = filtered.filter(r =>  r.esPlaneado).reduce((s,r) => s+r.horas, 0);
+  const personas  = [...new Set(filtered.map(r => r.persona))];
+
+  // Weekly utilization per persona (all time)
+  // group rows by persona → by ISO week → sum horas
+  function isoWeek(iso){
+    if(!iso) return null;
+    const d = new Date(iso+'T12:00:00');
+    const jan1 = new Date(d.getFullYear(),0,1);
+    const wk = Math.ceil(((d - jan1)/864e5 + jan1.getDay()+1)/7);
+    return `${d.getFullYear()}-W${String(wk).padStart(2,'0')}`;
+  }
+
+  const weeksByPersona = {};
+  filtered.forEach(r => {
+    if(!r.fecha) return;
+    const wk = isoWeek(r.fecha);
+    if(!weeksByPersona[r.persona]) weeksByPersona[r.persona] = {};
+    if(!weeksByPersona[r.persona][wk]) weeksByPersona[r.persona][wk] = 0;
+    weeksByPersona[r.persona][wk] += r.horas;
   });
+
+  // Avg weekly util per persona
+  const avgUtils = {};
+  personas.forEach(p => {
+    const wks = Object.values(weeksByPersona[p] || {});
+    avgUtils[p] = wks.length ? +(wks.reduce((a,b)=>a+b,0)/wks.length/40*100).toFixed(1) : 0;
+  });
+  const avgUtilTotal = personas.length ? +(personas.reduce((s,p) => s + avgUtils[p], 0) / personas.length).toFixed(1) : 0;
+
+  const sk = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
+  sk('cap-kpi-personas', personas.length || '—');
+  sk('cap-kpi-horas',    totalReal ? totalReal.toFixed(1)+'h' : '—');
+  sk('cap-kpi-planeadas',totalPlan ? totalPlan.toFixed(1)+'h' : '—');
+  sk('cap-kpi-util',     avgUtilTotal ? avgUtilTotal+'%' : '—');
+
+  // Build calendar for capCalYear / capCalMonth
+  renderCalendar(filtered, personas, weeksByPersona);
+}
+
+// ── Calendar grid render ───────────────────────────────────
+function renderCalendar(filtered, personas, weeksByPersona){
+  const wrap = document.getElementById('cap-cal-wrap');
+  if(!wrap) return;
+
+  const year = capCalYear, month = capCalMonth;
+  const firstDay = new Date(year, month, 1);
+  const lastDay  = new Date(year, month+1, 0);
+  const DOW_LABELS = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+
+  // Build array of all days in month
+  const days = [];
+  const cur = new Date(firstDay);
+  while(cur <= lastDay){
+    days.push(cur.toISOString().slice(0,10));
+    cur.setDate(cur.getDate()+1);
+  }
+
+  // Index filtered rows by persona+date
+  const idx = {}; // idx[persona][fecha] = [rows]
+  filtered.forEach(r => {
+    if(!r.fecha || !r.fecha.startsWith(`${year}-${String(month+1).padStart(2,'0')}`)) return;
+    if(!idx[r.persona]) idx[r.persona] = {};
+    if(!idx[r.persona][r.fecha]) idx[r.persona][r.fecha] = [];
+    idx[r.persona][r.fecha].push(r);
+  });
+
+  // Personas in this month (those with data OR all if no filter)
+  const personasInMonth = personas.length
+    ? personas
+    : [...new Set(filtered.map(r=>r.persona))].sort();
+
+  if(!personasInMonth.length){
+    wrap.innerHTML = '<div class="cap-empty" style="padding:40px;text-align:center;color:var(--text-dim)">Sin datos para este período</div>';
+    return;
+  }
+
+  // Weekly util for month: persona → week → horas
+  function isoWeek(iso){
+    const d = new Date(iso+'T12:00:00');
+    // Simple week key: Monday-based
+    const dayOfWeek = (d.getDay() + 6) % 7; // Mon=0
+    const mon = new Date(d); mon.setDate(d.getDate() - dayOfWeek);
+    return mon.toISOString().slice(0,10);
+  }
+
+  // Compute weekly totals per persona for THIS month
+  const weekTotals = {}; // persona → weekStartIso → horas
+  const weekSet = new Set();
+  filtered.forEach(r => {
+    if(!r.fecha) return;
+    const d = new Date(r.fecha+'T12:00:00');
+    if(d.getFullYear() !== year || d.getMonth() !== month) return;
+    const wk = isoWeek(r.fecha);
+    weekSet.add(wk);
+    if(!weekTotals[r.persona]) weekTotals[r.persona] = {};
+    if(!weekTotals[r.persona][wk]) weekTotals[r.persona][wk] = 0;
+    weekTotals[r.persona][wk] += r.horas;
+  });
+  // Also collect weeks that span into this month from days array
+  days.forEach(d => weekSet.add(isoWeek(d)));
+  const sortedWeeks = [...weekSet].sort();
+
+  // Group days by week
+  const daysByWeek = {};
+  days.forEach(d => {
+    const wk = isoWeek(d);
+    if(!daysByWeek[wk]) daysByWeek[wk] = [];
+    daysByWeek[wk].push(d);
+  });
+
+  // ── Build table HTML ──────────────────────────────────────
+  // Header row 1: week labels spanning their days
+  let hdr1 = '<tr class="row-month"><th class="col-persona">Recurso</th>';
+  sortedWeeks.forEach((wk, wi) => {
+    const wdays = daysByWeek[wk] || [];
+    const wkDate = new Date(wk+'T12:00:00');
+    const wkLabel = `Sem ${wkDate.toLocaleDateString('es-PE',{day:'2-digit',month:'short'})}`;
+    hdr1 += `<th colspan="${wdays.length}" class="col-week-sep">${wkLabel}</th>`;
+    hdr1 += `<th class="col-total">Total</th><th class="col-util">Util%</th>`;
+  });
+  hdr1 += '</tr>';
+
+  // Header row 2: day numbers + DOW
+  let hdr2 = '<tr class="row-dow"><th class="col-persona"></th>';
+  sortedWeeks.forEach(wk => {
+    const wdays = daysByWeek[wk] || [];
+    wdays.forEach(d => {
+      const dt = new Date(d+'T12:00:00');
+      const dow = dt.getDay(); // 0=Sun,6=Sat
+      const dayNum = dt.getDate();
+      const isWE = dow===0||dow===6;
+      hdr2 += `<th style="${isWE?'color:var(--text-dim)':''}">${dayNum}<br><span style="font-size:8px">${DOW_LABELS[dow]}</span></th>`;
+    });
+    hdr2 += '<th class="col-total"></th><th class="col-util"></th>';
+  });
+  hdr2 += '</tr>';
+
+  // Body rows: one per persona
+  let body = '';
+  personasInMonth.forEach(persona => {
+    const pRec = Object.values(NOMENCLATURA).find(n => n.nombre === persona);
+    const pais = pRec?.pais || 'Peru';
+    const ferPais = FERIADOS[pais] || new Set();
+
+    body += `<tr><td class="col-persona">${esc(persona)}</td>`;
+    sortedWeeks.forEach(wk => {
+      const wdays = daysByWeek[wk] || [];
+      let weekTotal = 0;
+      wdays.forEach(d => {
+        const dt = new Date(d+'T12:00:00');
+        const dow = dt.getDay();
+        const isWE = dow===0||dow===6;
+        const isFer = ferPais.has(d);
+        const rows = (idx[persona] && idx[persona][d]) || [];
+        const hTotal = rows.reduce((s,r)=>s+r.horas,0);
+        weekTotal += hTotal;
+
+        let cellClass, cellLabel;
+        if(isWE){
+          cellClass = 'c-weekend'; cellLabel = '—';
+        } else if(isFer){
+          cellClass = 'c-holiday'; cellLabel = 'F';
+        } else if(!rows.length){
+          cellClass = 'c-empty'; cellLabel = '-';
+        } else if(hTotal === 0){
+          cellClass = 'c-zero'; cellLabel = '0';
+        } else if(hTotal <= 4){
+          cellClass = 'c-low'; cellLabel = hTotal % 1 === 0 ? hTotal : hTotal.toFixed(1);
+        } else if(hTotal <= 8){
+          cellClass = 'c-med'; cellLabel = hTotal % 1 === 0 ? hTotal : hTotal.toFixed(1);
+        } else {
+          cellClass = 'c-over'; cellLabel = hTotal % 1 === 0 ? hTotal : hTotal.toFixed(1);
+        }
+
+        const clickable = !isWE && !isFer && rows.length > 0;
+        const cellAttr = clickable
+          ? `onclick="openCapDetail('${esc(persona)}','${d}')"  title="${hTotal}h — clic para ver detalle"`
+          : '';
+        const weekSepClass = wdays[0] === d ? 'week-sep' : '';
+        body += `<td class="${weekSepClass}"><div class="cap-cal-cell ${cellClass}" ${cellAttr}>${cellLabel}</div></td>`;
+      });
+
+      // Week total + util %
+      const wt = weekTotals[persona] ? (weekTotals[persona][wk]||0) : 0;
+      const util = wt > 0 ? +(wt/40*100).toFixed(1) : 0;
+      const utilCls = util === 0 ? '' : util > 100 ? 'cap-util-over' : util >= 70 ? 'cap-util-ok' : 'cap-util-warn';
+      body += `<td class="col-total">${wt > 0 ? wt.toFixed(1) : '—'}</td>`;
+      body += `<td class="col-util"><span class="${utilCls}">${util > 0 ? util+'%' : '—'}</span></td>`;
+    });
+    body += '</tr>';
+  });
+
+  wrap.innerHTML = `
+    <table class="cap-cal-table">
+      <thead>${hdr1}${hdr2}</thead>
+      <tbody>${body}</tbody>
+    </table>`;
+}
+
+// ── Detail drawer ──────────────────────────────────────────
+function openCapDetail(persona, fecha){
+  const rows = capRows.filter(r => r.persona === persona && r.fecha === fecha);
+  if(!rows.length) return;
+
+  const dt = new Date(fecha+'T12:00:00');
+  const fechaFmt = dt.toLocaleDateString('es-PE',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+  const totalH = rows.reduce((s,r)=>s+r.horas,0);
+
+  document.getElementById('cap-detail-title').textContent = persona;
+  document.getElementById('cap-detail-sub').textContent   = `${fechaFmt} · ${totalH.toFixed(2)}h total`;
+
+  const tb = document.getElementById('cap-detail-body');
+  tb.innerHTML = rows.map(r => {
+    const horasCls = r.horas >= 8 ? 'cap-horas-high' : r.horas >= 4 ? 'cap-horas-med' : 'cap-horas-low';
+    const rowStyle = r.esPlaneado ? 'opacity:.8;font-style:italic' : '';
+    const comentario = r.comentario || '—';
+    return `<tr style="${rowStyle}">
+      <td style="color:var(--text-muted);white-space:nowrap">${fmtD(r.fecha)||'—'}</td>
+      <td><span class="cap-horas-badge ${horasCls}">${r.horas}h</span></td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-muted)" title="${esc(r.proyecto||'')}">${esc(r.proyecto||'—')}</td>
+      <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.subtarea)}">${esc(r.subtarea)}</td>
+      <td style="color:var(--text-muted);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(comentario)}">${esc(comentario)}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('cap-detail-overlay').style.display = 'flex';
+}
+
+function closeCapDetail(event){
+  if(event && event.target !== document.getElementById('cap-detail-overlay')) return;
+  document.getElementById('cap-detail-overlay').style.display = 'none';
+}
+
+// ── CSV export ─────────────────────────────────────────────
+document.getElementById('btn-export-cap')?.addEventListener('click', () => {
+  const filtered = getCapFiltered();
   const hdr  = ['Fecha','Persona','Horas','Proyecto','Actividad (Subtarea)','Comentario','Tipo'];
   const rows = filtered.map(r => [r.fecha||'', r.persona, r.horas, r.proyecto||'', r.subtarea, r.comentario, r.esPlaneado?'Planificado':'Real']);
   downloadCSV([hdr,...rows], `capacity_${new Date().toISOString().slice(0,10)}.csv`);
