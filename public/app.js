@@ -993,28 +993,26 @@ document.getElementById('table-body').addEventListener('click', ev=>{
 // ═══════════════════════════════════════════════════════════
 
 const NOMENCLATURA = {
-  'DV':  { nombre: 'Daniel Valencia',   pais: 'Peru' },
-  'AA':  { nombre: 'Abel Alva',         pais: 'Peru' },
-  'RP':  { nombre: 'Roxana Peralta',    pais: 'Peru' },
-  'HS':  { nombre: 'Henry S.',          pais: 'Colombia' },
-  'CC':  { nombre: 'Cesar C.',          pais: 'Peru' },
-  'AM':  { nombre: 'Andres Medina',     pais: 'Mexico' },
-  'EC':  { nombre: 'Eric Cacho',        pais: 'Mexico' },
-  'HR':  { nombre: 'Soporte Efletexia', pais: 'Peru' },
-  'SD':  { nombre: 'Stiven D',          pais: 'Colombia' },
-  'AR':  { nombre: 'Alexander R.',      pais: 'Peru' },
-  'JC':  { nombre: 'Javier Carrillo',   pais: 'Mexico' },
-  'FF':  { nombre: 'Farah Fidel',       pais: 'Mexico' },
-  'EN':  { nombre: 'Edgar Noriegua',    pais: 'Colombia' },
-  'LE':  { nombre: 'Lucia Escobar',     pais: 'Colombia' },
-  'MG':  { nombre: 'Manuel Gonzalez',   pais: 'Mexico' },
-  'DV2': { nombre: 'Daniela Velarde',   pais: 'Peru' },
-  'JC2': { nombre: 'Jose Cuautle',      pais: 'Mexico' },
-  'ALL': { nombre: 'Alberto Llosa',     pais: 'Peru' },
-  'NB':  { nombre: 'Natalia Blanco',    pais: 'Peru' },
-  'JM':  { nombre: 'Juan Menco',        pais: 'Colombia' },
-  'MA':  { nombre: 'Maria Aguilar',     pais: 'Guatemala' },
-  'JC3': { nombre: 'Jesus Castillon',   pais: 'Peru' },
+  'AM':  { nombre: 'Andrés Medina',      pais: 'Mexico',    area: 'Desarrollo' },
+  'JC':  { nombre: 'Javier Carrillo',    pais: 'Mexico',    area: 'Desarrollo' },
+  'EC':  { nombre: 'Eric Cacho',         pais: 'Mexico',    area: 'Desarrollo' },
+  'HS':  { nombre: 'Henry Salazar',      pais: 'Colombia',  area: 'Desarrollo' },
+  'DV':  { nombre: 'Daniel Valencia',    pais: 'Colombia',  area: 'Desarrollo' },
+  'SD':  { nombre: 'Steven Díaz',        pais: 'Colombia',  area: 'Desarrollo' },
+  'AR':  { nombre: 'Alexander Romero',   pais: 'Peru',      area: 'Desarrollo' },
+  'HR':  { nombre: 'Hamhner Remuzgo',    pais: 'Peru',      area: 'Soporte TI' },
+  'AA':  { nombre: 'Abel Alva',          pais: 'Peru',      area: 'PMO' },
+  'RP':  { nombre: 'Roxana Peralta',     pais: 'Peru',      area: 'PM' },
+  'ALL': { nombre: 'Alberto Llosa',      pais: 'Peru',      area: 'PM' },
+  'FF':  { nombre: 'Farah Fidel',        pais: 'Mexico',    area: 'Comercial' },
+  'JM':  { nombre: 'Juan Menco',         pais: 'Colombia',  area: 'Comercial' },
+  'CC':  { nombre: 'Cesar Castañeda',    pais: 'Peru',      area: 'TC' },
+  'EN':  { nombre: 'Edgar Noriega',      pais: 'Peru',      area: 'TC' },
+  'JC2': { nombre: 'Jose Carlos Cautle', pais: 'Mexico',    area: 'TC' },
+  'MA':  { nombre: 'Maria Aguilar',      pais: 'Guatemala', area: 'TC' },
+  'NB':  { nombre: 'Nalia Blanco',       pais: 'Peru',      area: 'Comercial' },
+  'DV2': { nombre: 'Daniela Velarde',    pais: 'Peru',      area: 'Data' },
+  'LE':  { nombre: 'Lucia Escobar',      pais: 'Colombia',  area: 'Operación' },
 };
 
 const FERIADOS = {
@@ -1125,7 +1123,8 @@ async function loadCapacity(){
             if(typeof wl.comment === 'string') comentario = wl.comment;
             else if(wl.comment.content) comentario = adfToText(wl.comment).trim();
           }
-          capRows.push({ fecha: fechaIso, persona, horas, proyecto: proyectoNom, subtarea: subtareaNom, comentario, esPlaneado: false });
+          const recReal = resolveNombreDesdeJira(persona);
+          capRows.push({ fecha: fechaIso, persona, horas, proyecto: proyectoNom, subKey: sub.key, subtarea: subtareaNom, comentario, esPlaneado: false, area: recReal?.area||'' });
         });
       } else {
         const horasEst    = f.customfield_11136 || 0;
@@ -1143,7 +1142,7 @@ async function loadCapacity(){
           if(recFallback) iniciales = [recFallback.ini];
           else if(assigneeDisplay) {
             distribuirHoras(horasEst, fechaInicio, fechaFin, 'Peru').forEach(({ fecha, horas }) => {
-              capRows.push({ fecha, persona: assigneeDisplay, horas, proyecto: proyectoNom, subtarea: subtareaNom, comentario: '(planificado)', esPlaneado: true });
+              capRows.push({ fecha, persona: assigneeDisplay, horas, proyecto: proyectoNom, subKey: sub.key, subtarea: subtareaNom, comentario: '(planificado)', esPlaneado: true, area: '' });
             });
             return;
           } else return;
@@ -1154,11 +1153,16 @@ async function loadCapacity(){
         const horasPorRec = +(horasEst / recs.length).toFixed(2);
         recs.forEach(rec => {
           distribuirHoras(horasPorRec, fechaInicio, fechaFin, rec.pais).forEach(({ fecha, horas }) => {
-            capRows.push({ fecha, persona: rec.nombre, horas, proyecto: proyectoNom, subtarea: subtareaNom, comentario: '(planificado)', esPlaneado: true });
+            capRows.push({ fecha, persona: rec.nombre, horas, proyecto: proyectoNom, subKey: sub.key, subtarea: subtareaNom, comentario: '(planificado)', esPlaneado: true, area: rec.area||'' });
           });
         });
       }
     });
+
+    // Populate área selector
+    const areas = [...new Set(Object.values(NOMENCLATURA).map(r => r.area).filter(Boolean))].sort();
+    const selA = document.getElementById('cap-area');
+    if(selA) selA.innerHTML = '<option value="">Todas</option>' + areas.map(a => `<option>${esc(a)}</option>`).join('');
 
     // Populate persona selector
     const personas = [...new Set(capRows.map(r => r.persona).filter(Boolean))].sort();
@@ -1227,19 +1231,22 @@ function syncCalNav(){
 function getCapFiltered(){
   const persona = document.getElementById('cap-persona')?.value || '';
   const tipo    = document.getElementById('cap-tipo')?.value || '';
+  const area    = document.getElementById('cap-area')?.value || '';
   return capRows.filter(r => {
     if(persona && r.persona !== persona) return false;
+    if(area    && r.area    !== area)    return false;
     if(tipo === 'real'     &&  r.esPlaneado) return false;
     if(tipo === 'planeado' && !r.esPlaneado) return false;
     return true;
   });
 }
 
-['cap-persona','cap-tipo'].forEach(id => {
+['cap-area','cap-persona','cap-tipo'].forEach(id => {
   const el = document.getElementById(id);
   if(el) el.addEventListener('change', renderCapacity);
 });
 document.getElementById('cap-limpiar')?.addEventListener('click', () => {
+  const a = document.getElementById('cap-area');    if(a) a.value='';
   const p = document.getElementById('cap-persona'); if(p) p.value='';
   const t = document.getElementById('cap-tipo');    if(t) t.value='';
   renderCapacity();
@@ -1452,32 +1459,76 @@ function renderCalendar(filtered, personas, weeksByPersona){
 }
 
 // ── Detail drawer ──────────────────────────────────────────
-function openCapDetail(persona, fecha){
-  const rows = capRows.filter(r => r.persona === persona && r.fecha === fecha);
-  if(!rows.length) return;
+// State for current detail
+let _detPersona = '', _detFecha = '';
 
+function openCapDetail(persona, fecha){
+  _detPersona = persona; _detFecha = fecha;
   const dt = new Date(fecha+'T12:00:00');
   const fechaFmt = dt.toLocaleDateString('es-PE',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
-  const totalH = rows.reduce((s,r)=>s+r.horas,0);
+  const allRows = capRows.filter(r => r.persona === persona && r.fecha === fecha);
+  if(!allRows.length) return;
+  const totalH = allRows.reduce((s,r)=>s+r.horas,0);
 
   document.getElementById('cap-detail-title').textContent = persona;
   document.getElementById('cap-detail-sub').textContent   = `${fechaFmt} · ${totalH.toFixed(2)}h total`;
 
+  // Reset detail filters
+  const dTipo = document.getElementById('det-tipo'); if(dTipo) dTipo.value='';
+  const dSort = document.getElementById('det-sort'); if(dSort) dSort.value='fecha';
+  const dDir  = document.getElementById('det-dir');  if(dDir)  dDir.value='asc';
+
+  // Wire detail filter listeners (safe to re-add)
+  ['det-tipo','det-sort','det-dir'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el){ el.onchange = renderDetailBody; }
+  });
+
+  renderDetailBody();
+  document.getElementById('cap-detail-overlay').style.display = 'flex';
+}
+
+function renderDetailBody(){
+  const tipo = document.getElementById('det-tipo')?.value || '';
+  const sort = document.getElementById('det-sort')?.value || 'fecha';
+  const dir  = document.getElementById('det-dir')?.value  || 'asc';
+
+  let rows = capRows.filter(r => r.persona === _detPersona && r.fecha === _detFecha);
+  if(tipo === 'real')     rows = rows.filter(r => !r.esPlaneado);
+  if(tipo === 'planeado') rows = rows.filter(r =>  r.esPlaneado);
+
+  rows = [...rows].sort((a,b) => {
+    let va = a[sort]||'', vb = b[sort]||'';
+    if(typeof va==='number'||typeof vb==='number'){ va=va||0; vb=vb||0; }
+    return (va<vb?-1:va>vb?1:0) * (dir==='asc'?1:-1);
+  });
+
   const tb = document.getElementById('cap-detail-body');
+  if(!tb) return;
+  if(!rows.length){
+    tb.innerHTML='<tr><td colspan="7" style="padding:20px;text-align:center;color:var(--text-dim)">Sin registros</td></tr>';
+    return;
+  }
   tb.innerHTML = rows.map(r => {
     const horasCls = r.horas >= 8 ? 'cap-horas-high' : r.horas >= 4 ? 'cap-horas-med' : 'cap-horas-low';
     const rowStyle = r.esPlaneado ? 'opacity:.8;font-style:italic' : '';
     const comentario = r.comentario || '—';
+    const tipoLabel  = r.esPlaneado
+      ? '<span style="font-size:10px;color:var(--text-dim)">Planif.</span>'
+      : '<span style="font-size:10px;color:var(--cyan)">Real</span>';
+    const subKeyLink = r.subKey
+      ? `<a href="${JIRA_BASE}${esc(r.subKey)}" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:none;font-size:11px">${esc(r.subKey)}</a>`
+      : '—';
     return `<tr style="${rowStyle}">
       <td style="color:var(--text-muted);white-space:nowrap">${fmtD(r.fecha)||'—'}</td>
       <td><span class="cap-horas-badge ${horasCls}">${r.horas}h</span></td>
-      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-muted)" title="${esc(r.proyecto||'')}">${esc(r.proyecto||'—')}</td>
-      <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.subtarea)}">${esc(r.subtarea)}</td>
-      <td style="color:var(--text-muted);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(comentario)}">${esc(comentario)}</td>
+      <td style="white-space:nowrap">${subKeyLink}</td>
+      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-muted)" title="${esc(r.proyecto||'')}">${esc(r.proyecto||'—')}</td>
+      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.subtarea)}">${esc(r.subtarea)}</td>
+      <td style="color:var(--text-muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(comentario)}">${esc(comentario)}</td>
+      <td>${tipoLabel}</td>
     </tr>`;
   }).join('');
-
-  document.getElementById('cap-detail-overlay').style.display = 'flex';
 }
 
 function closeCapDetail(event){
