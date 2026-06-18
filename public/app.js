@@ -1,1528 +1,306 @@
-// ═══════════════════════════════════════════════════════════
-//  PMO Dashboard — Efletexia  |  app.js  v2
-// ═══════════════════════════════════════════════════════════
-const JIRA_BASE = "https://efletexia.atlassian.net/browse/";
-const TODAY = new Date(); TODAY.setHours(0,0,0,0);
+const https = require('https');
 
-// Data stores
-let epics    = [];
-let recursos = [];
-let activeRecIdx = -1;
-
-// ── UTILS ──────────────────────────────────────────────────
-function sbClass(s){
-  if(!s) return 'backlog';
-  const map={
-    "backlog":"backlog","análisis":"analisis","analisis":"analisis",
-    "desarrollo":"desarrollo","pruebas":"pruebas",
-    "producción":"produccion","produccion":"produccion",
-    "planificado":"planificado","stand by":"standby","desestimado":"desestimado",
-    "tareas por hacer":"backlog",
-    "en curso":"en-curso","review":"en-curso",
-    "blocked":"bloqueado","bloqueado":"bloqueado","bloqued":"bloqueado",
-    "finalizada":"produccion"
-  };
-  return map[s.toLowerCase()]||'backlog';
-}
-function fmtD(iso){
-  if(!iso) return null;
-  const d = new Date(iso+'T12:00:00');
-  if(isNaN(d.getTime())) return null;
-  return d.toLocaleDateString('es-PE',{day:'2-digit',month:'short',year:'numeric'});
-}
-function diffD(a,b){ return Math.round((b-a)/864e5); }
-function workDays(a,b){
-  if(b<=a) return 0;
-  let count=0;
-  const d=new Date(a); d.setHours(0,0,0,0);
-  const end=new Date(b); end.setHours(0,0,0,0);
-  while(d<end){ const dow=d.getDay(); if(dow!==0&&dow!==6) count++; d.setDate(d.getDate()+1); }
-  return count;
-}
-function progCell(pct){
-  if(pct===null||pct===undefined) return '<span style="color:var(--text-muted)">—</span>';
-  const w=Math.min(100,Math.round(pct*100)), cls=w>=100?" full":"";
-  return `<div class="prog-cell"><div class="prog-bar"><div class="prog-fill${cls}" style="width:${w}%"></div></div><span class="prog-pct">${w}%</span></div>`;
-}
-function pill(v){ return v?`<span class="pill">${v}</span>`:'<span style="color:var(--text-muted)">—</span>'; }
-function esc(s){ if(!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-
-function adfToText(node){
-  if(!node) return '';
-  if(typeof node==='string') return node;
-  const t=node.type||'', c=node.content||[];
-  if(t==='text') return node.text||'';
-  if(t==='hardBreak') return '\n';
-  if(t==='paragraph') return c.map(adfToText).join('')+'\n';
-  if(t==='bulletList'||t==='orderedList')
-    return c.map((item,i)=>(t==='orderedList'?(i+1)+'. ':'• ')+adfToText(item).trim()).join('\n')+'\n';
-  if(t==='listItem') return c.map(adfToText).join('');
-  return c.map(adfToText).join('');
-}
-
-// ── CSV EXPORT ─────────────────────────────────────────────
-function downloadCSV(rows, filename){
-  const escape = v => {
-    if(v===null||v===undefined) return '';
-    const s = String(v);
-    return s.includes(',') || s.includes('"') || s.includes('\n')
-      ? '"'+s.replace(/"/g,'""')+'"'
-      : s;
-  };
-  const csv = rows.map(r => r.map(escape).join(',')).join('\n');
-  const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href=url; a.download=filename; a.click();
-  URL.revokeObjectURL(url);
-}
-
-function exportPortafolioCSV(){
-  const data = sortedData(getFiltered());
-  const hdr  = ['Clave','Código','Proyecto','Categoría','Área','Sponsor','Estado',
-                 'Plan%','Real%','Desvío%','Des%','Pru%','FechaInicio','FechaFin',
-                 'COND.','Conformidad','DocFuncional','Bloqueante'];
-  const rows = data.map(e => [
-    e.key, e.codigo, e.summary, e.categoria, e.area, e.sponsor, e.status,
-    e.planPct!==null?Math.round(e.planPct*100):'',
-    e.realPct!==null?Math.round(e.realPct*100):'',
-    e.desvioPct!==null?Math.round(e.desvioPct*100):'',
-    e.pctDesarrollo!==null?Math.round(e.pctDesarrollo*100):'',
-    e.pctPruebas!==null?Math.round(e.pctPruebas*100):'',
-    e.fechaInicio||'', e.duedate||'',
-    e.condicion||'', e.conformidad||'', e.docFuncional||'', e.bloqueante||''
-  ]);
-  downloadCSV([hdr,...rows], `portafolio_${new Date().toISOString().slice(0,10)}.csv`);
-}
-
-document.getElementById('btn-export-port').addEventListener('click', exportPortafolioCSV);
-
-
-// ── TABS ───────────────────────────────────────────────────
-let recursosLoaded = false;
-
-document.querySelectorAll('.tabs .tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    document.querySelectorAll('.tabs .tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-    tab.classList.add('active');
-    const panel = document.getElementById('panel-'+tab.dataset.tab);
-    if(panel) panel.classList.add('active');
-    if(tab.dataset.tab==='recursos' && !recursosLoaded) loadRecursos();
-    if(tab.dataset.tab==='capacity' && !capacityLoaded) loadCapacity();
-  });
-});
-
-
-// ── PORTAFOLIO: parse & render ─────────────────────────────
-const JIRA_FIELDS = [
-  "summary","status","assignee","reporter","labels","duedate",
-  "customfield_10015","customfield_10592","customfield_10659",
-  "customfield_10725","customfield_10726","customfield_10759",
-  "customfield_10895","customfield_10928","customfield_10929",
-  "customfield_10930","customfield_10931","customfield_10934",
-  "customfield_10829","customfield_10862","customfield_10969",
-  "customfield_10970","customfield_11003","customfield_11004",
-  "customfield_11037","customfield_11070"
-];
-
-function parseIssue(i){
-  const f=i.fields, rep=f.reporter;
-  let bit=f.customfield_10829, prox=f.customfield_10862;
-  if(bit&&typeof bit==='object') bit=adfToText(bit).trim();
-  if(prox&&typeof prox==='object') prox=adfToText(prox).trim();
-  return{
-    key:i.key,
-    codigo:f.customfield_10934||null,
-    summary:f.summary,
-    status:f.status.name,
-    assignee:f.assignee?f.assignee.displayName:null,
-    asignado:f.customfield_10970||null,
-    responsableDF:f.customfield_10969||null,
-    reporter:rep?rep.displayName:null,
-    labels:f.labels||[],
-    duedate:f.duedate||null,
-    fechaInicio:f.customfield_10015||null,
-    pais:f.customfield_10592?f.customfield_10592.value:null,
-    area:f.customfield_10930?f.customfield_10930.value:null,
-    categoria:f.customfield_10659?f.customfield_10659.value:null,
-    planPct:f.customfield_10725!==undefined?f.customfield_10725:null,
-    realPct:f.customfield_10726!==undefined?f.customfield_10726:null,
-    desvioPct:f.customfield_10759!==undefined?f.customfield_10759:null,
-    pctAnalisis:f.customfield_10895!==undefined?f.customfield_10895:null,
-    pctDesarrollo:f.customfield_10928!==undefined?f.customfield_10928:null,
-    pctPruebas:f.customfield_10929!==undefined?f.customfield_10929:null,
-    docFuncional:f.customfield_10931?f.customfield_10931.value:null,
-    bloqueante:f.customfield_11003?f.customfield_11003.value:null,
-    conformidad:f.customfield_11004?f.customfield_11004.value:null,
-    prioridad:f.customfield_11037?f.customfield_11037.value:null,
-    sponsor:f.customfield_11070?f.customfield_11070.value:null,
-    condicion:(()=>{
-      // Auto-detect COND. field: short text between pctAnalisis and pctDesarrollo
-      // Try known candidates in likely order
-      const candidates = [
-        'customfield_10896','customfield_10897','customfield_10898','customfield_10899',
-        'customfield_10900','customfield_10901','customfield_10902','customfield_10903',
-        'customfield_10904','customfield_10905','customfield_10906','customfield_10907',
-        'customfield_10908','customfield_10909','customfield_10910','customfield_10911',
-        'customfield_10912','customfield_10913','customfield_10914','customfield_10915',
-        'customfield_10916','customfield_10917','customfield_10918','customfield_10919',
-        'customfield_10920','customfield_10921','customfield_10922','customfield_10923',
-        'customfield_10924','customfield_10925','customfield_10926','customfield_10927',
-        'customfield_10932','customfield_10933','customfield_11136'
-      ];
-      for(const cf of candidates){
-        const v = f[cf];
-        if(!v) continue;
-        if(typeof v==='string' && v.length>0 && v.length<=50) return v;
-        if(v.content) { const t=adfToText(v).trim(); if(t&&t.length<=50) return t; }
-        if(v.value && typeof v.value==='string' && v.value.length<=50) return v.value;
-      }
-      return null;
-    })(),
-    bitacora:bit||null,
-    proximosPasos:prox||null,
-  };
-}
-
-function updateKpis(data){
-  const t=data.length;
-  const crit=data.filter(e=>e.desvioPct!==null&&Math.abs(e.desvioPct)>0.17).length;
-  const tol =data.filter(e=>e.desvioPct!==null&&Math.abs(e.desvioPct)>=0.05&&Math.abs(e.desvioPct)<=0.17).length;
-  const onT =data.filter(e=>e.desvioPct!==null&&Math.abs(e.desvioPct)<0.05).length;
-  const avgs=data.map(e=>e.realPct!==null?e.realPct:null).filter(v=>v!==null);
-  const avg =avgs.length?Math.round(avgs.reduce((a,b)=>a+b,0)/avgs.length*100):0;
-  const cj  =data.filter(e=>e.duedate&&e.duedate.startsWith('2026-06')).length;
-  const isFiltered=data.length<epics.length;
-  function setKpi(id,val){
-    const el=document.getElementById(id); if(!el) return;
-    const prev=el.dataset.val;
-    if(prev!==String(val)){
-      el.style.transition='opacity .15s'; el.style.opacity='0.3';
-      setTimeout(()=>{ el.textContent=val; el.dataset.val=String(val); el.style.opacity='1'; },150);
-    }
-  }
-  setKpi('kpi-total',isFiltered?`${t}`:t);
-  setKpi('kpi-crit', crit);
-  setKpi('kpi-tol',  tol);
-  setKpi('kpi-ont',  onT);
-  setKpi('kpi-avg',  avg+'%');
-  setKpi('kpi-cj',   cj);
-  document.getElementById('hdr-meta').textContent=isFiltered
-    ?`PMO TI · ${t} de ${epics.length} épicas`
-    :`PMO TI · ${epics.length} épicas`;
-}
-
-function renderTable(data){
-  updateKpis(data);
-  const info=document.getElementById('table-info');
-  if(info) info.innerHTML=`Mostrando <strong>${data.length}</strong> de ${epics.length} épicas`;
-  const tb=document.getElementById('table-body');
-  if(!data.length){ tb.innerHTML='<tr><td colspan="15" style="text-align:center;padding:40px;color:var(--text-muted)">Sin resultados</td></tr>'; return; }
-  tb.innerHTML=data.map(e=>`
-    <tr data-key="${e.key}">
-      <td style="text-align:center;font-weight:600;color:var(--text-primary)">${e.prioridad||'—'}</td>
-      <td class="code"><a class="jlink" href="${JIRA_BASE}${e.key}" target="_blank" onclick="event.stopPropagation()">${esc(e.codigo||e.key)}</a></td>
-      <td class="proj" title="${esc(e.summary)}">${esc(e.summary)}</td>
-      <td class="cat">${esc(e.categoria)||'<span style="color:var(--text-muted)">—</span>'}</td>
-      <td class="muted">${e.area?`<span class="pill">${esc(e.area)}</span>`:'—'}</td>
-      <td class="muted">${esc(e.sponsor)||'—'}</td>
-      <td><span class="badge badge-${sbClass(e.status)}">${e.status}</span></td>
-      <td class="muted">${e.planPct!==null?Math.round(e.planPct*100)+'% / '+(e.realPct!==null?Math.round(e.realPct*100)+'%':'—'):'—'}</td>
-      <td class="muted" style="color:${e.desvioPct!==null?(Math.abs(e.desvioPct)>0.17?'var(--red)':Math.abs(e.desvioPct)>=0.05?'var(--yellow)':'var(--green)'):'var(--text-muted)'}">
-        ${e.desvioPct!==null?Math.round(e.desvioPct*100)+'%':'—'}</td>
-      <td class="muted">${e.pctDesarrollo!==null?Math.round(e.pctDesarrollo*100)+'% / '+(e.pctPruebas!==null?Math.round(e.pctPruebas*100)+'%':'—'):'—'}</td>
-      <td class="muted">${fmtD(e.fechaInicio)||'—'}</td>
-      <td class="muted">${fmtD(e.duedate)||'—'}</td>
-      <td style="max-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-muted)" title="${esc(e.condicion||'')}">${esc(e.condicion||'—')}</td>
-      <td class="muted">${e.conformidad==='Si'?'<span style="color:var(--green);font-size:15px">✓</span>':'—'}</td>
-      <td class="muted">${e.docFuncional==='Si'?'<span style="color:var(--green);font-size:15px">✓</span>':e.docFuncional==='No'?'<span style="color:var(--red);font-size:15px">✕</span>':'—'}</td>
-      <td><button class="btn-action" type="button" title="Cronograma y detalles" onclick="openModal('${e.key}');event.stopPropagation()">···</button></td>
-    </tr>
-  `).join('');
-}
-
-
-// ── PORTAFOLIO FILTERS ────────────────────────────────────
-let sortCol=null, sortDir=1;
-
-function getFiltered(){
-  const s  = document.getElementById('s-search').value.toLowerCase();
-  const sp = document.getElementById('s-sponsor').value;
-  const p  = document.getElementById('s-pais').value;
-  const c  = document.getElementById('s-cat').value;
-  const a  = document.getElementById('s-area').value;
-  const ck = [...document.querySelectorAll('.estados-grid input:checked')].map(x=>x.value);
-  return epics.filter(e=>{
-    if(s && !(e.codigo||'').toLowerCase().includes(s) && !e.summary.toLowerCase().includes(s) && !e.key.toLowerCase().includes(s)) return false;
-    if(sp && e.sponsor!==sp) return false;
-    if(p  && e.pais!==p)    return false;
-    if(c  && e.categoria!==c) return false;
-    if(a  && e.area!==a)    return false;
-    if(ck.length && !ck.includes(e.status)) return false;
-    return true;
-  });
-}
-
-function sortedData(data){
-  if(!sortCol) return data;
-  return [...data].sort((a,b)=>{
-    let av=a[sortCol], bv=b[sortCol];
-    if(av===null||av===undefined) return 1;
-    if(bv===null||bv===undefined) return -1;
-    if(typeof av==='number'&&typeof bv==='number') return (av-bv)*sortDir;
-    return String(av).localeCompare(String(bv),'es',{sensitivity:'base'})*sortDir;
-  });
-}
-
-['s-search','s-sponsor','s-pais','s-cat','s-area'].forEach(id=>{
-  const el=document.getElementById(id);
-  if(el) el.addEventListener('input',()=>renderTable(sortedData(getFiltered())));
-});
-document.querySelectorAll('.estados-grid input').forEach(cb=>{
-  cb.addEventListener('change',()=>renderTable(sortedData(getFiltered())));
-});
-document.getElementById('btn-limpiar').addEventListener('click',()=>{
-  document.getElementById('s-search').value='';
-  ['s-sponsor','s-pais','s-cat','s-area'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
-  document.querySelectorAll('.estados-grid input').forEach(cb=>cb.checked=false);
-  sortCol=null; sortDir=1;
-  document.querySelectorAll('#panel-portafolio thead th').forEach(t=>{
-    t.classList.remove('sort-asc','sort-desc');
-    const si=t.querySelector('.sort-icon'); if(si) si.textContent='';
-  });
-  renderTable(epics);
-});
-
-document.querySelectorAll('#panel-portafolio thead th[data-col]').forEach(th=>{
-  th.addEventListener('click',()=>{
-    const col=th.dataset.col;
-    if(sortCol===col){ sortDir*=-1; } else { sortCol=col; sortDir=1; }
-    document.querySelectorAll('#panel-portafolio thead th').forEach(t=>{
-      t.classList.remove('sort-asc','sort-desc');
-      const si=t.querySelector('.sort-icon'); if(si) si.textContent='';
-    });
-    th.classList.add(sortDir===1?'sort-asc':'sort-desc');
-    renderTable(sortedData(getFiltered()));
-  });
-});
-
-
-// ── LOAD PORTAFOLIO ────────────────────────────────────────
-async function fetchAllEpics(){
-  const resp = await fetch('/api/jira',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ jql:'project = PTS AND issuetype = Epic ORDER BY created ASC', fields:JIRA_FIELDS })
-  });
-  if(!resp.ok){ const err=await resp.text(); throw new Error(`Jira ${resp.status}: ${err}`); }
-  return resp.json();
-}
-
-async function loadData(manual=false){
-  const loading    = document.getElementById('loading-screen');
-  const errorScr   = document.getElementById('error-screen');
-  const refreshBtn = document.getElementById('btn-refresh');
-  if(manual){ refreshBtn.classList.add('spinning'); }
-  else { loading.classList.remove('hidden'); errorScr.classList.add('hidden'); }
-  document.getElementById('loading-text').textContent='Cargando épicas desde Jira...';
-  try{
-    const data   = await fetchAllEpics();
-    const issues = data.issues||[];
-    document.getElementById('loading-text').textContent=`Procesando ${issues.length} épicas...`;
-    epics = issues.map(parseIssue);
-
-    function populateSelect(id,values,allLabel){
-      const sel=document.getElementById(id); if(!sel) return;
-      const cur=sel.value;
-      sel.innerHTML=`<option value="">${allLabel}</option>`+
-        [...new Set(values)].sort().map(v=>`<option${v===cur?' selected':''}>${v}</option>`).join('');
-    }
-    populateSelect('s-sponsor', epics.map(e=>e.sponsor).filter(Boolean),'Todos');
-    populateSelect('s-pais',    epics.map(e=>e.pais).filter(Boolean),'Todos');
-    populateSelect('s-cat',     epics.map(e=>e.categoria).filter(Boolean),'Todas');
-    populateSelect('s-area',    epics.map(e=>e.area).filter(Boolean),'Todas');
-
-    document.getElementById('last-update').textContent='Actualizado '+new Date().toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'});
-    loading.classList.add('hidden');
-    errorScr.classList.add('hidden');
-    refreshBtn.classList.remove('spinning');
-
-    document.getElementById('kpis-section').innerHTML=`
-      <div class="kpi"><div class="kpi-label">Total</div><div class="kpi-value c-white" id="kpi-total"></div></div>
-      <div class="kpi"><div class="kpi-label">Críticos</div><div class="kpi-value c-red" id="kpi-crit"></div><div class="kpi-sub">Desv &gt;17%</div></div>
-      <div class="kpi"><div class="kpi-label">Tolerancia</div><div class="kpi-value c-yellow" id="kpi-tol"></div><div class="kpi-sub">Desv 5–17%</div></div>
-      <div class="kpi"><div class="kpi-label">On Track</div><div class="kpi-value c-blue" id="kpi-ont"></div><div class="kpi-sub">Desv &lt;5%</div></div>
-      <div class="kpi"><div class="kpi-label">Avance prom.</div><div class="kpi-value c-cyan" id="kpi-avg"></div></div>
-      <div class="kpi"><div class="kpi-label">Cierre junio</div><div class="kpi-value c-green" id="kpi-cj"></div></div>
-    `;
-    sortCol=null; sortDir=1;
-    renderTable(epics);
-    updateKpis(epics);
-  }catch(err){
-    console.error(err);
-    loading.classList.add('hidden');
-    refreshBtn.classList.remove('spinning');
-    if(!manual){
-      errorScr.classList.remove('hidden');
-      document.getElementById('error-msg').textContent=err.message;
-    } else {
-      document.getElementById('last-update').textContent='⚠ Error al actualizar';
-    }
-  }
-}
-
-loadData();
-
-
-loadData();
-
-document.getElementById('btn-export-rec')?.addEventListener('click', () => {
-  const _s=(document.getElementById('rec-search')?.value||'').toLowerCase();
-  const _ab=document.querySelector('.rec-area-btn.active');
-  const _ar=_ab?_ab.dataset.area:'';
-  const _pa=document.getElementById('rec-pais-sel')?.value||'';
-  const filtered=recursos.filter(r=>{
-    if(_s&&!r.nombre.toLowerCase().includes(_s)&&!r.proyectosDetalle.some(p=>p.nombre.toLowerCase().includes(_s))) return false;
-    if(_ar&&r.area!==_ar) return false;
-    if(_pa&&r.pais!==_pa) return false;
-    return true;
-  });
-  const hdr=['Recurso','Área','País','Proyectos','Horas Pend.','Horas Total','Horas Cerradas','Horas Libres','Entregas Pend.','Bloqueantes'];
-  const rows=filtered.map(r=>[r.nombre,r.area||'',r.pais||'',r.proyectos,r.horasPend,r.horasTotal,r.horasCerr,r.horasLibre,r.entregasPend,r.bloqueantes]);
-  downloadCSV([hdr,...rows],`recursos_${new Date().toISOString().slice(0,10)}.csv`);
-});
-
-// ── VENTAS: parse & render ─────────────────────────────────
-
-// ── GANTT & DETAIL (Portafolio) ────────────────────────────
-function buildGantt(e, stories){
-  if(!e.fechaInicio&&!e.duedate){
-    return `<div class="gno-dates"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="margin-bottom:10px;opacity:.4;display:block;margin-left:auto;margin-right:auto"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Sin fechas definidas en Jira.</div>`;
-  }
-  const sRaw=e.fechaInicio||e.duedate, eRaw=e.duedate||e.fechaInicio;
-  const pS=new Date(sRaw+'T12:00:00'), pE=new Date(eRaw+'T12:00:00');
-  let aS=new Date(pS.getFullYear(),pS.getMonth(),1);
-  let aE=new Date(pE.getFullYear(),pE.getMonth()+1,0);
-  if(TODAY>aE) aE=new Date(TODAY.getFullYear(),TODAY.getMonth()+1,0);
-  if(TODAY<aS) aS=new Date(aS.getFullYear(),aS.getMonth()-1,1);
-  const total=diffD(aS,aE)+1;
-  const months=[];
-  let cur=new Date(aS);
-  while(cur<=aE){
-    const mS=new Date(cur.getFullYear(),cur.getMonth(),1);
-    const mE=new Date(cur.getFullYear(),cur.getMonth()+1,0);
-    const vS=mS<aS?aS:mS, vE=mE>aE?aE:mE;
-    months.push({ label:cur.toLocaleDateString('es-PE',{month:'short',year:'2-digit'}).toUpperCase(), lp:(diffD(aS,vS)/total)*100, wp:((diffD(vS,vE)+1)/total)*100 });
-    cur=new Date(cur.getFullYear(),cur.getMonth()+1,1);
-  }
-  const grid=months.map(m=>`<div class="g-grid" style="left:${m.lp}%"></div>`).join('');
-  const tp=(diffD(aS,TODAY)/total)*100;
-  const tl=tp>=0&&tp<=100?`<div class="g-today" style="left:${tp.toFixed(2)}%"><div class="g-today-lbl">hoy</div></div>`:'';
-  function barPos(s,en){
-    if(!s||!en) return null;
-    const ds=new Date(s+'T12:00:00'), de=new Date(en+'T12:00:00');
-    if(isNaN(ds.getTime())||isNaN(de.getTime())) return null;
-    const l=Math.max(0,(diffD(aS,ds)/total)*100);
-    const r=Math.min(100,(diffD(aS,de)/total)*100);
-    return {l, w:Math.max(0.5,r-l)};
-  }
-  function pctHtml(plan,real){
-    if(plan===null&&real===null) return `<span style="color:var(--text-dim)">—</span>`;
-    const p=plan!==null?Math.round(plan*100):null;
-    const r=real!==null?Math.round(real*100):null;
-    const rColor=r===null?'var(--text-dim)':r>=100?'var(--green)':r>=50?'var(--yellow)':'var(--red)';
-    const pStr=p!==null?`<span style="color:var(--text-muted)">${p}%</span>`:'—';
-    const rStr=r!==null?`<span style="color:${rColor};font-weight:700">${r}%</span>`:'<span style="color:var(--text-dim)">0%</span>';
-    return `${pStr} / ${rStr}`;
-  }
-  const bL=Math.max(0,(diffD(aS,pS)/total)*100);
-  const bR=Math.min(100,(diffD(aS,pE)/total)*100);
-  const bW=Math.max(.5,bR-bL);
-  const bc='gb-'+sbClass(e.status);
-  const dur=diffD(pS,pE);
-  const durWork=workDays(pS,pE);
-  const elapsed=workDays(pS,TODAY);
-  const remaining=workDays(TODAY,pE);
-  const pctT=durWork>0?Math.min(100,Math.round((elapsed/durWork)*100)):0;
-  const pctDev=e.pctDesarrollo!==null?Math.round(e.pctDesarrollo*100):null;
-  const advColor=pctDev===null?'var(--text-muted)':pctDev>=pctT?'var(--green)':pctDev>=pctT-15?'var(--yellow)':'var(--red)';
-  const epicRow=`<div class="grow g-epic-row">
-    <div class="grow-lbl" title="${esc(e.summary)}">${esc(e.summary)}</div>
-    <div class="grow-track">${grid}${tl}<div class="g-bar ${bc}" style="left:${bL.toFixed(2)}%;width:${bW.toFixed(2)}%"></div></div>
-    <div class="g-row-pct">${pctHtml(e.planPct,e.realPct)}</div>
-  </div>`;
-  let storyRows='';
-  if(stories===undefined||stories===null){
-    storyRows=`<div class="grow"><div class="grow-lbl" style="color:var(--text-dim);font-size:11px;font-style:italic">Cargando historias…</div><div class="grow-track">${grid}${tl}</div><div class="g-row-pct"></div></div>`;
-  } else if(!stories.length){
-    storyRows=`<div class="grow"><div class="grow-lbl" style="color:var(--text-dim);font-size:11px;font-style:italic">Sin historias con fechas</div><div class="grow-track">${grid}${tl}</div><div class="g-row-pct"></div></div>`;
-  } else {
-    // Helper: "Roxana Peralta" → "RP"
-    function initials(name){
-      if(!name) return '';
-      return name.trim().split(/\s+/).map(w=>w[0]||'').join('').toUpperCase();
-    }
-    // Helper: "2026-06-04" → "04/06"
-    function fmtShort(iso){
-      if(!iso) return null;
-      const d=new Date(iso+'T12:00:00');
-      if(isNaN(d.getTime())) return null;
-      return String(d.getDate()).padStart(2,'0')+'/'+(d.getMonth()+1).toString().padStart(2,'0');
-    }
-    // Build right-column: "IN · dd/mm → dd/mm" — single line
-    function metaCol(assigneeName, startIso, endIso){
-      const ini   = initials(assigneeName);
-      const start = fmtShort(startIso);
-      const end   = fmtShort(endIso);
-      const dateRange = [start, end].filter(Boolean).join(' → ');
-      const parts = [];
-      if(ini)       parts.push(`<span style="color:var(--blue);font-weight:700;letter-spacing:.3px">${esc(ini)}</span>`);
-      if(dateRange) parts.push(`<span style="color:var(--text-muted)">${dateRange}</span>`);
-      return parts.join(' ');
-    }
-
-    stories.forEach(story=>{
-      const sf=story.fields;
-      const sNom=sf.summary||story.key;
-      const sStatus=sf.status?sf.status.name:'', sCls='gb-'+sbClass(sStatus);
-      const sStart=sf.customfield_10015||null, sEnd=sf.duedate||null;
-      const sPos=barPos(sStart, sEnd);
-      const sBarHtml=sPos?`<div class="g-bar ${sCls}" style="left:${sPos.l.toFixed(2)}%;width:${sPos.w.toFixed(2)}%"></div>`:'';
-
-      // Historia: iniciales = union de asignados de subtareas (únicos, en orden de aparición)
-      // Fechas = min(inicio subtareas) → max(fin subtareas)
-      const subItems = sf._subtasks||[];
-      let sRightCol;
-      if(subItems.length){
-        // Iniciales únicas preservando orden
-        const seenIni = new Set();
-        const subInits = [];
-        subItems.forEach(sub=>{
-          const name = sub.fields?.assignee?.displayName||'';
-          const ini  = initials(name);
-          if(ini && !seenIni.has(ini)){ seenIni.add(ini); subInits.push(ini); }
-        });
-        // Rango de fechas de subtareas
-        const subStarts = subItems.map(s=>s.fields?.customfield_10015).filter(Boolean);
-        const subEnds   = subItems.map(s=>s.fields?.duedate).filter(Boolean);
-        const minStart  = subStarts.length ? subStarts.reduce((a,b)=>a<b?a:b) : sStart;
-        const maxEnd    = subEnds.length   ? subEnds.reduce((a,b)=>a>b?a:b)   : sEnd;
-        const inisHtml  = subInits.length
-          ? `<span style="color:var(--blue);font-weight:700;letter-spacing:.3px">${subInits.join(', ')}</span>`
-          : '';
-        const dateRange = [fmtShort(minStart), fmtShort(maxEnd)].filter(Boolean).join(' → ');
-        const dateHtml  = dateRange ? `<span style="color:var(--text-muted)">${dateRange}</span>` : '';
-        sRightCol = [inisHtml, dateHtml].filter(Boolean).join(' ');
-      } else {
-        // Sin subtareas: usar asignado e fechas de la historia
-        sRightCol = metaCol(sf.assignee?sf.assignee.displayName:'', sStart, sEnd);
-      }
-      storyRows+=`<div class="grow g-story-row">
-        <div class="grow-lbl g-lbl-story" title="${esc(sNom)}">${esc(sNom)}</div>
-        <div class="grow-track">${grid}${tl}${sBarHtml}</div>
-        <div class="g-row-pct g-row-meta">${sRightCol}</div>
-      </div>`;
-      (sf._subtasks||[]).forEach(sub=>{
-        const tf=sub.fields, tNom=tf.summary||sub.key, tAsig=tf.assignee?tf.assignee.displayName:'';
-        const tStatus=tf.status?tf.status.name:'', tCls='gb-'+sbClass(tStatus);
-        const tStart=tf.customfield_10015||null, tEnd=tf.duedate||null;
-        const tPos=barPos(tStart, tEnd);
-        const tBarHtml=tPos?`<div class="g-bar ${tCls}" style="left:${tPos.l.toFixed(2)}%;width:${tPos.w.toFixed(2)}%"></div>`:'';
-        const tRightCol=metaCol(tAsig, tStart, tEnd);
-        storyRows+=`<div class="grow g-subtask-row">
-          <div class="grow-lbl g-lbl-subtask" title="${esc(tNom)}">${esc(tNom)}</div>
-          <div class="grow-track">${grid}${tl}${tBarHtml}</div>
-          <div class="g-row-pct g-row-meta">${tRightCol}</div>
-        </div>`;
+function jiraGet(auth, cloud, path) {
+  return new Promise((resolve, reject) => {
+    const options = {
+      hostname: `${cloud}.atlassian.net`,
+      path,
+      method: 'GET',
+      headers: { 'Authorization': `Basic ${auth}`, 'Accept': 'application/json' },
+    };
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', chunk => { data += chunk; });
+      res.on('end', () => {
+        try { resolve({ status: res.statusCode, body: JSON.parse(data) }); }
+        catch(e) { reject(new Error('Parse error: ' + data.slice(0,200))); }
       });
     });
-  }
-  return `
-    <div class="gantt-meta">
-      <div class="gm-item"><span class="gm-lbl">Fecha inicio</span><span class="gm-val">${fmtD(e.fechaInicio)||'—'}</span></div>
-      <div class="gm-item"><span class="gm-lbl">Fecha vencimiento</span><span class="gm-val">${fmtD(e.duedate)||'—'}</span></div>
-      <div class="gm-item"><span class="gm-lbl">Duración</span><span class="gm-val">${dur>=0?dur+' días':'—'}</span></div>
-      <div class="gm-item"><span class="gm-lbl">Estado</span><span class="gm-val"><span class="badge badge-${sbClass(e.status)}">${e.status}</span></span></div>
-    </div>
-    <div style="overflow-x:auto"><div class="gc">
-      <div class="g-hdr">
-        <div class="g-lc"></div>
-        <div class="g-months">${months.map(m=>`<div class="g-month" style="left:${m.lp.toFixed(2)}%;width:${m.wp.toFixed(2)}%">${m.label}</div>`).join('')}</div>
-        <div class="g-rc" style="text-align:right;font-size:10px;color:var(--text-dim);padding-left:8px">Recursos · Fechas</div>
-      </div>
-      ${epicRow}
-      ${storyRows}
-    </div></div>
-    ${dur>0?`<div class="g-prog-row"><div class="g-prog-lbl"><span>Tiempo transcurrido</span><span>${pctT}%</span></div><div class="g-prog-track"><div class="g-prog-fill" style="width:${pctT}%;background:var(--text-dim)"></div></div></div>`:''}
-    <div class="g-stats">
-      <div class="g-stat"><div class="g-stat-lbl">Días transcurridos</div><div class="g-stat-val" style="color:var(--text-muted)">${elapsed}</div></div>
-      <div class="g-stat"><div class="g-stat-lbl">Días restantes</div><div class="g-stat-val" style="color:${remaining===0?'var(--red)':'var(--blue)'}">${remaining}</div></div>
-      <div class="g-stat"><div class="g-stat-lbl">% Desarrollo</div><div class="g-stat-val" style="color:${advColor}">${pctDev!==null?pctDev+'%':'—'}</div></div>
-    </div>
-    <div class="g-legend">
-      <div class="g-legend-item"><div class="g-legend-dot" style="background:var(--green)"></div>Completado</div>
-      <div class="g-legend-item"><div class="g-legend-dot" style="background:#b8860b"></div>En curso</div>
-      <div class="g-legend-item"><div class="g-legend-dot" style="background:var(--text-dim)"></div>Pendiente</div>
-      <div class="g-legend-item"><div class="g-legend-dot" style="background:#8b1a1a"></div>Bloqueado</div>
-      <div class="g-legend-item"><div class="g-legend-dot" style="background:var(--red);width:2px;border-radius:0"></div>Hoy</div>
-    </div>
-    ${(()=>{
-      // Collect hours per assignee from all subtasks across all stories
-      if(!stories||!stories.length) return '';
-      const PART_COLORS=['#3fb950','#f0883e','#39c5f0','#f85149','#bc8cff','#58a6ff','#d29922','#ff7b72','#56d364','#ffa657'];
-      const byPerson={};
-      stories.forEach(story=>{
-        const subs=story.fields._subtasks||[];
-        subs.forEach(sub=>{
-          const name=sub.fields?.assignee?.displayName||'';
-          if(!name) return;
-          const hrs=sub.fields?.customfield_11136||0;
-          if(!byPerson[name]) byPerson[name]={name,hrs:0};
-          byPerson[name].hrs+=hrs;
-        });
-        // Also count story-level hours if no subtasks
-        if(!subs.length){
-          const name=story.fields?.assignee?.displayName||'';
-          if(!name) return;
-          const hrs=story.fields?.customfield_11136||0;
-          if(!byPerson[name]) byPerson[name]={name,hrs:0};
-          byPerson[name].hrs+=hrs;
-        }
-      });
-      const entries=Object.values(byPerson).filter(p=>p.hrs>0).sort((a,b)=>b.hrs-a.hrs);
-      if(!entries.length) return '';
-      const totalHrs=entries.reduce((s,p)=>s+p.hrs,0);
-      const maxHrs=entries[0].hrs;
-      const rows=entries.map((p,i)=>{
-        const ini=p.name.trim().split(/\s+/).map(w=>w[0]||'').join('').toUpperCase();
-        const pct=Math.round((p.hrs/totalHrs)*100);
-        const barW=Math.round((p.hrs/maxHrs)*100);
-        const col=PART_COLORS[i%PART_COLORS.length];
-        return `<div class="gpart-row">
-          <div class="gpart-ini" style="background:${col}22;color:${col}">${esc(ini)}</div>
-          <div class="gpart-name">${esc(p.name)}</div>
-          <div class="gpart-bar-wrap"><div class="gpart-bar" style="width:${barW}%;background:${col}"></div></div>
-          <div class="gpart-pct">${pct}%</div>
-          <div class="gpart-hrs">${p.hrs}h</div>
-        </div>`;
-      }).join('');
-      return `<div class="gpart-section">
-        <div class="gpart-title">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><path d="M21 21v-2a4 4 0 0 0-3-3.87"/></svg>
-          PARTICIPACIÓN DE RECURSOS
-        </div>
-        ${rows}
-        <div class="gpart-total">Total: ${totalHrs}h</div>
-      </div>`;
-    })()}
-  `;
-}
-
-function buildDetail(e){
-  const pA=e.pctAnalisis!==null?Math.round(e.pctAnalisis*100):null;
-  const pD=e.pctDesarrollo!==null?Math.round(e.pctDesarrollo*100):null;
-  const pP=e.pctPruebas!==null?Math.round(e.pctPruebas*100):null;
-  const pPlan=e.planPct!==null?Math.round(e.planPct*100):null;
-  const pReal=e.realPct!==null?Math.round(e.realPct*100):null;
-  const pDesv=e.desvioPct!==null?Math.round(e.desvioPct*100):null;
-  const desvColor=pDesv===null?'var(--text-muted)':Math.abs(pDesv)>17?'var(--red)':Math.abs(pDesv)>=5?'var(--yellow)':'var(--green)';
-  const bitHtml=e.bitacora?`<div class="log-box">${esc(e.bitacora)}</div>`:`<div class="log-box empty">Sin registros en bitácora</div>`;
-  const proxHtml=e.proximosPasos?`<div class="log-box">${esc(e.proximosPasos)}</div>`:`<div class="log-box empty">Sin próximos pasos definidos</div>`;
-  return `
-    <div class="dsec">Asignación</div>
-    <div class="drow"><span class="dlbl">Asignado</span><span class="dval ${e.asignado?'':'m'}">${esc(e.asignado)||'—'}</span></div>
-    <div class="dsec">Fechas</div>
-    <div class="drow"><span class="dlbl">Fecha de inicio</span><span class="dval">${fmtD(e.fechaInicio)||'<span class="dval m">—</span>'}</span></div>
-    <div class="drow"><span class="dlbl">Fecha de vencimiento</span><span class="dval">${fmtD(e.duedate)?'📅 '+fmtD(e.duedate):'<span class="dval m">—</span>'}</span></div>
-    <div class="dsec">Clasificación</div>
-    <div class="drow"><span class="dlbl">País</span><span class="dval">${pill(e.pais)}</span></div>
-    <div class="drow"><span class="dlbl">Área</span><span class="dval">${pill(e.area)}</span></div>
-    <div class="drow"><span class="dlbl">Sponsor</span><span class="dval ${e.sponsor?'':'m'}">${esc(e.sponsor)||'—'}</span></div>
-    <div class="drow"><span class="dlbl">Categoría</span><span class="dval">${pill(e.categoria)}</span></div>
-    <div class="drow"><span class="dlbl">Prioridad</span><span class="dval">${e.prioridad?`<span class="pill">${e.prioridad}</span>`:'<span class="dval m">—</span>'}</span></div>
-    <div class="drow"><span class="dlbl">Doc Funcional</span><span class="dval">${pill(e.docFuncional)}</span></div>
-    <div class="drow"><span class="dlbl">Responsable DF</span><span class="dval ${e.responsableDF?'':'m'}">${esc(e.responsableDF)||'—'}</span></div>
-    <div class="drow"><span class="dlbl">Bloqueante</span><span class="dval">${pill(e.bloqueante)}</span></div>
-    <div class="drow"><span class="dlbl">Conformidad</span><span class="dval">${pill(e.conformidad)}</span></div>
-    <div class="dsec">Progreso</div>
-    <div class="drow"><span class="dlbl">% Análisis</span><span class="dval">${pA!==null?pA+' %':'<span class="dval m">—</span>'}</span></div>
-    <div class="drow"><span class="dlbl">% Desarrollo</span><span class="dval">${pD!==null?pD+' %':'<span class="dval m">—</span>'}</span></div>
-    <div class="drow"><span class="dlbl">% Pruebas</span><span class="dval">${pP!==null?pP+' %':'<span class="dval m">—</span>'}</span></div>
-    <div class="drow"><span class="dlbl">Plan (%)</span><span class="dval">${pPlan!==null?pPlan+' %':'<span class="dval m">—</span>'}</span></div>
-    <div class="drow"><span class="dlbl">Real (%)</span><span class="dval">${pReal!==null?pReal+' %':'<span class="dval m">—</span>'}</span></div>
-    <div class="drow"><span class="dlbl">Desvío (%)</span><span class="dval" style="color:${desvColor}">${pDesv!==null?pDesv+' %':'<span class="dval m">—</span>'}</span></div>
-    <div class="log-section">
-      <div class="log-title"><div class="log-title-bar"></div>Bitácora</div>
-      ${bitHtml}
-      <div class="log-spacer"></div>
-      <div class="log-title"><div class="log-title-bar"></div>Próximos pasos</div>
-      ${proxHtml}
-    </div>`;
-}
-
-
-// ── MODAL (Portafolio) ─────────────────────────────────────
-let activeEpic=null, activeTab='gantt';
-const epicStoriesCache={};
-
-async function loadEpicStories(epicKey){
-  if(epicStoriesCache[epicKey]!==undefined) return epicStoriesCache[epicKey];
-  try{
-    const resp=await fetch('/api/jira',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'stories',epicKey})});
-    if(!resp.ok) return null;
-    const data=await resp.json();
-    epicStoriesCache[epicKey]=data.stories||[];
-    return epicStoriesCache[epicKey];
-  }catch(err){ console.error('Error historias:',err); return null; }
-}
-
-function renderModalBody(){
-  document.getElementById('modal-body').innerHTML =
-    activeTab==='gantt' ? buildGantt(activeEpic) : buildDetail(activeEpic);
-}
-
-function openModal(key){
-  activeEpic=epics.find(e=>e.key===key);
-  if(!activeEpic) return;
-  activeTab='gantt';
-  document.getElementById('modal-key').textContent  = activeEpic.codigo||activeEpic.key;
-  document.getElementById('modal-title').textContent = activeEpic.summary;
-  document.getElementById('modal-panel').className  = 'modal-panel w-gantt';
-  document.querySelectorAll('.modal-tab').forEach(t=>t.classList.toggle('active',t.dataset.mtab==='gantt'));
-  renderModalBody();
-  document.getElementById('modal-overlay').classList.add('open');
-  loadEpicStories(key).then(stories=>{
-    if(activeEpic&&activeEpic.key===key&&activeTab==='gantt')
-      document.getElementById('modal-body').innerHTML=buildGantt(activeEpic,stories);
+    req.on('error', reject);
+    req.end();
   });
 }
 
-document.querySelectorAll('.modal-tab').forEach(t=>{
-  t.addEventListener('click',()=>{
-    activeTab=t.dataset.mtab;
-    document.querySelectorAll('.modal-tab').forEach(x=>x.classList.toggle('active',x===t));
-    document.getElementById('modal-panel').className='modal-panel '+(activeTab==='gantt'?'w-gantt':'w-detail');
-    if(activeTab==='gantt'&&activeEpic){
-      renderModalBody();
-      const key=activeEpic.key;
-      loadEpicStories(key).then(stories=>{
-        if(activeEpic&&activeEpic.key===key&&activeTab==='gantt')
-          document.getElementById('modal-body').innerHTML=buildGantt(activeEpic,stories);
-      });
-    } else { renderModalBody(); }
-  });
-});
-document.getElementById('modal-close').addEventListener('click',()=>document.getElementById('modal-overlay').classList.remove('open'));
-document.getElementById('modal-overlay').addEventListener('click',function(ev){ if(ev.target===this) this.classList.remove('open'); });
-
-
-// ── RECURSOS ──────────────────────────────────────────────
-(function initRecursos(){
-  const today=new Date().toISOString().split('T')[0];
-  const fi=document.getElementById('rec-fecha-corte');
-  if(fi){ fi.value=today; fi.addEventListener('change',()=>{ if(recursos.length>0) renderRecursos(); }); }
-  document.getElementById('rec-search').addEventListener('input', renderRecursos);
-})();
-
-async function loadRecursos(){
-  recursosLoaded=true;
-  const info=document.getElementById('rec-table-info');
-  if(info) info.textContent='Cargando recursos desde Jira...';
-  try{
-    const respRec=await fetch('/api/jira',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'recursos'})});
-    if(!respRec.ok) throw new Error('Error recursos '+respRec.status);
-    const dataRec=await respRec.json();
-    const historias=dataRec.issues||[];
-
-    const CAPACITY=168;
-    const today=new Date(); today.setHours(0,0,0,0);
-    const fechaCorteEl=document.getElementById('rec-fecha-corte');
-    const fechaCorte=fechaCorteEl&&fechaCorteEl.value?new Date(fechaCorteEl.value+'T12:00:00'):today;
-    const mesActual=fechaCorte.getMonth();
-    const anioActual=fechaCorte.getFullYear();
-    const diasMes=new Date(anioActual,mesActual+1,0).getDate();
-    const diaCorte=fechaCorte.getDate();
-    const horasTranscurridas=Math.round((diaCorte/diasMes)*CAPACITY);
-    const horasFuturas=CAPACITY-horasTranscurridas;
-    const mesNombre=fechaCorte.toLocaleDateString('es-PE',{month:'long',year:'numeric'});
-    const avanceMes=Math.round((diaCorte/diasMes)*100);
-    const infoBar=document.getElementById('rec-corte-info');
-    if(infoBar) infoBar.innerHTML=`<span style="color:var(--text-muted);font-size:12px">
-      ${mesNombre} &nbsp;|&nbsp; Capacidad: <span style="color:var(--blue)">${CAPACITY}h</span>
-      &nbsp;|&nbsp; Transcurridas: <span style="color:var(--text-muted)">${horasTranscurridas}h</span>
-      &nbsp;|&nbsp; Futuras: <span style="color:var(--yellow)">${horasFuturas}h</span>
-      &nbsp;|&nbsp; Avance mes: <span style="color:var(--green)">${avanceMes}%</span></span>`;
-
-    const byPerson={};
-    historias.forEach(h=>{
-      const f=h.fields;
-      const nombre=f.assignee?f.assignee.displayName:'Sin asignar';
-      const horasEst=f.customfield_11136||0;
-      const horasPend=f.customfield_11137||0;
-      const horasCerr=Math.max(0,horasEst-horasPend);
-      const epica=f._epicaParent||null;
-      const epicaKey=epica?epica.key:null;
-      const epicaNom=epica?(epica.summary||epica.key):'Sin épica';
-      const area=f.customfield_10930?f.customfield_10930.value:null;
-      const pais=f.customfield_10592?f.customfield_10592.value:null;
-      const bloq=f.customfield_11003?f.customfield_11003.value:null;
-      const status=f.status?f.status.name:'';
-      const isDone=['Finalizada','Producción','En producción','Cerrado','Done','Closed'].includes(status);
-      if(!byPerson[nombre]) byPerson[nombre]={nombre,area,pais,horasEst:0,horasPend:0,horasCerr:0,totalHistorias:0,entregasPend:0,bloqueantes:0,epicasMap:{}};
-      const p=byPerson[nombre];
-      p.horasEst+=horasEst; p.horasPend+=horasPend; p.horasCerr+=horasCerr;
-      p.totalHistorias++;
-      if(!isDone) p.entregasPend++;
-      if(bloq==='Si') p.bloqueantes++;
-      if(area&&!p.area) p.area=area;
-      if(pais&&!p.pais) p.pais=pais;
-      if(epicaKey){
-        if(!p.epicasMap[epicaKey]) p.epicasMap[epicaKey]={key:epicaKey,nombre:epicaNom,horasEst:0,horasPend:0,actividades:0,pendientes:0,tareas:[]};
-        p.epicasMap[epicaKey].horasEst+=horasEst; p.epicasMap[epicaKey].horasPend+=horasPend;
-        p.epicasMap[epicaKey].actividades++;
-        if(!isDone) p.epicasMap[epicaKey].pendientes++;
-        p.epicasMap[epicaKey].tareas.push({key:h.key,nombre:f.summary||h.key,status,isDone,horasEst,horasPend,fecha:f.customfield_10015||f.duedate||null});
-      }
-    });
-
-    recursos=Object.values(byPerson).map(p=>({
-      nombre:p.nombre, area:p.area, pais:p.pais,
-      proyectos:Object.keys(p.epicasMap).length,
-      horasPend:p.horasPend, horasTotal:p.horasEst, horasCerr:p.horasCerr,
-      horasLibre:Math.max(0,CAPACITY-p.horasEst),
-      entregasPend:p.entregasPend, bloqueantes:p.bloqueantes,
-      proyectosDetalle:Object.values(p.epicasMap).map(e=>({key:e.key,nombre:e.nombre,horasTotal:e.horasEst,horasPend:e.horasPend,actividades:e.actividades,pendientes:e.pendientes,tareas:e.tareas||[]})).sort((a,b)=>b.horasTotal-a.horasTotal),
-    })).filter(r=>r.nombre!=='Sin asignar').sort((a,b)=>b.horasPend-a.horasPend);
-
-    // Populate área pills
-    const areas=[...new Set(recursos.map(r=>r.area).filter(Boolean))].sort();
-    const areaWrap=document.getElementById('rec-area-btns');
-    if(areaWrap){
-      areaWrap.innerHTML=areas.map(a=>`<button class="rec-area-btn" data-area="${esc(a)}">${esc(a)}</button>`).join('');
-      areaWrap.querySelectorAll('.rec-area-btn').forEach(btn=>{
-        btn.addEventListener('click',()=>{
-          const active=btn.classList.contains('active');
-          areaWrap.querySelectorAll('.rec-area-btn').forEach(b=>b.classList.remove('active'));
-          if(!active) btn.classList.add('active');
-          renderRecursos();
-        });
-      });
-    }
-    // Populate país select
-    const paises=[...new Set(recursos.map(r=>r.pais).filter(Boolean))].sort();
-    const paisSel=document.getElementById('rec-pais-sel');
-    if(paisSel) paisSel.innerHTML=`<option value="">Todos los países</option>`+paises.map(p=>`<option>${p}</option>`).join('');
-
-    document.getElementById('rec-limpiar-btn').addEventListener('click',()=>{
-      document.getElementById('rec-search').value='';
-      document.querySelectorAll('.rec-area-btn').forEach(b=>b.classList.remove('active'));
-      if(paisSel) paisSel.value='';
-      renderRecursos();
-    });
-    document.getElementById('rec-pais-sel').addEventListener('change', renderRecursos);
-
-    renderRecursos();
-  }catch(err){
-    console.error('Error recursos:', err);
-    if(info) info.textContent='Error al cargar recursos: '+err.message;
-  }
+async function fetchAllPages(auth, cloud, jql, fields) {
+  const fieldsStr = Array.isArray(fields) ? fields.join(',') : fields;
+  let allIssues = [];
+  let nextPageToken = null;
+  do {
+    const params = new URLSearchParams({ jql, fields: fieldsStr, maxResults: 100 });
+    if (nextPageToken) params.set('nextPageToken', nextPageToken);
+    const result = await jiraGet(auth, cloud, `/rest/api/3/search/jql?${params.toString()}`);
+    if (result.status !== 200) throw new Error(`Jira ${result.status}: ${JSON.stringify(result.body)}`);
+    const page = result.body;
+    allIssues = allIssues.concat(page.issues || []);
+    nextPageToken = page.isLast ? null : page.nextPageToken;
+    if (allIssues.length >= 2000) break;
+  } while (nextPageToken);
+  return allIssues;
 }
 
-function renderRecursos(){
-  const search=(document.getElementById('rec-search')?.value||'').toLowerCase();
-  const activeAreaBtn=document.querySelector('.rec-area-btn.active');
-  const area=activeAreaBtn?activeAreaBtn.dataset.area:'';
-  const pais=document.getElementById('rec-pais-sel')?.value||'';
+module.exports = async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.status(200).end();
 
-  let filtered=recursos.filter(r=>{
-    if(search&&!r.nombre.toLowerCase().includes(search)&&!r.proyectosDetalle.some(p=>p.nombre.toLowerCase().includes(search))) return false;
-    if(area&&r.area!==area) return false;
-    if(pais&&r.pais!==pais) return false;
-    return true;
-  });
+  const JIRA_EMAIL = process.env.JIRA_EMAIL;
+  const JIRA_TOKEN = process.env.JIRA_TOKEN;
+  const JIRA_CLOUD = process.env.JIRA_CLOUD || 'efletexia';
 
-  const total=filtered.length;
-  const alta=filtered.filter(r=>r.horasPend>=40).length;
-  const media=filtered.filter(r=>r.horasPend>=20&&r.horasPend<40).length;
-  const baja=filtered.filter(r=>r.horasPend<20).length;
-  const totalH=filtered.reduce((a,r)=>a+r.horasPend,0);
-  const totalE=filtered.reduce((a,r)=>a+r.entregasPend,0);
-  const sk=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
-  sk('rec-kpi-total',total||'—'); sk('rec-kpi-alta',alta||'0'); sk('rec-kpi-media',media||'0');
-  sk('rec-kpi-baja',baja||'0'); sk('rec-kpi-horas',totalH?totalH+'h':'—'); sk('rec-kpi-entregas',totalE||'—');
-
-  const info=document.getElementById('rec-table-info');
-  if(info) info.textContent=`Mostrando ${filtered.length} de ${recursos.length} recursos`;
-  const tbody=document.getElementById('rec-table-body');
-  if(!tbody) return;
-  if(!filtered.length){
-    tbody.innerHTML=`<tr><td colspan="9" class="rec-empty">
-      ${recursos.length===0?'Los datos de recursos se cargarán al abrir esta pestaña':'Sin resultados para los filtros aplicados'}
-    </td></tr>`;
-    return;
+  if (!JIRA_EMAIL || !JIRA_TOKEN) {
+    return res.status(500).json({ error: 'Credenciales no configuradas.' });
   }
 
-  // Área badge helper
-  function areaClass(a){
-    const m={'Desarrollo':'rec-area-desarrollo','Data':'rec-area-data','PMO':'rec-area-pmo','PM':'rec-area-pm','Torre de Control':'rec-area-torre','Soporte TI':'rec-area-soporte'};
-    return m[a]||'rec-area-default';
-  }
+  const auth = Buffer.from(`${JIRA_EMAIL}:${JIRA_TOKEN}`).toString('base64');
+  const { type } = req.body || {};
 
-  tbody.innerHTML=filtered.map(r=>{
-    const hClass=r.horasPend>=40?'rec-hours-high':r.horasPend>=20?'rec-hours-med':r.horasPend>0?'rec-hours-low':'rec-hours-zero';
-    const eClass=r.entregasPend>10?'rec-entregas-high':'rec-entregas-low';
-    const totalH2=r.horasCerr+r.horasPend+r.horasLibre;
-    const pCerr=totalH2>0?(r.horasCerr/totalH2*100).toFixed(1):0;
-    const pPend=totalH2>0?(r.horasPend/totalH2*100).toFixed(1):0;
-    const ocupPct=totalH2>0?Math.round((r.horasCerr+r.horasPend)/totalH2*100):0;
-    const ocupColor=ocupPct>=90?'var(--red)':ocupPct>=70?'var(--yellow)':'var(--green)';
-    const areaBadge=r.area?`<span class="rec-area-badge ${areaClass(r.area)}">${esc(r.area)}</span>`:'—';
-    const distBar=`<div class="rec-dist-cell">
-      <div style="position:relative">
-        <div class="rec-dist-bar-wrap">
-          <div class="rec-dist-cerr" style="width:${pCerr}%"></div>
-          <div class="rec-dist-pend" style="width:${pPend}%"></div>
-        </div>
-        <div style="position:absolute;right:4px;top:-1px;font-size:10px;font-weight:700;color:${ocupColor}">${ocupPct}%</div>
-      </div>
-      <div class="rec-dist-labels">
-        <span class="rec-dist-lbl"><span class="rec-dist-dot" style="background:var(--green)"></span>${r.horasCerr}h cerr.</span>
-        <span class="rec-dist-lbl"><span class="rec-dist-dot" style="background:var(--yellow)"></span>${r.horasPend}h pend.</span>
-        <span class="rec-dist-lbl"><span class="rec-dist-dot" style="background:var(--bg-elevated);border:1px solid var(--border)"></span>${r.horasLibre}h libre</span>
-      </div>
-    </div>`;
-    const bloqHtml=r.bloqueantes>0?`<span class="rec-bloq rec-bloq-warn">⚠ ${r.bloqueantes}</span>`:`<span class="rec-bloq rec-bloq-ok">✓</span>`;
-    return `<tr>
-      <td><span class="rec-name">${esc(r.nombre)}</span></td>
-      <td>${areaBadge}</td>
-      <td style="text-align:center">${r.proyectos}</td>
-      <td><span class="${hClass}">${r.horasPend}h</span></td>
-      <td style="color:var(--text-muted)">${r.horasTotal}h</td>
-      <td><span class="${eClass}">${r.entregasPend}</span></td>
-      <td>${distBar}</td>
-      <td>${bloqHtml}</td>
-      <td><button class="rec-ver-btn" onclick="verRecurso('${esc(r.nombre)}')">Ver →</button></td>
-    </tr>`;
-  }).join('');
-}
-
-// ── RECURSO DETAIL MODAL ───────────────────────────────────
-function verRecurso(nombre){
-  const r=recursos.find(x=>x.nombre===nombre);
-  if(!r) return;
-  activeRecIdx=recursos.indexOf(r);
-  document.getElementById('rec-modal-name').textContent=r.nombre;
-  document.getElementById('rec-modal-area').textContent=r.area||'—';
-  const proyectos=r.proyectosDetalle||[];
-  const totalHrs=proyectos.reduce((a,p)=>a+(p.horasTotal||0),0);
-  const statsHtml=`<div class="rec-modal-stats">
-    <div class="rec-modal-stat"><div class="rec-modal-stat-val c-blue">${r.proyectos}</div><div class="rec-modal-stat-lbl">Proyectos</div></div>
-    <div class="rec-modal-stat"><div class="rec-modal-stat-val" style="color:${r.horasPend>=40?'var(--red)':r.horasPend>=20?'var(--yellow)':'var(--green)'}">${r.horasPend}h</div><div class="rec-modal-stat-lbl">Horas Pend.</div></div>
-    <div class="rec-modal-stat"><div class="rec-modal-stat-val" style="color:${r.entregasPend>10?'var(--red)':'var(--green)'}">${r.entregasPend}</div><div class="rec-modal-stat-lbl">Entregas Pend.</div></div>
-  </div>`;
-  let partRows=proyectos.length&&totalHrs>0
-    ? proyectos.map(p=>{const pct=Math.round((p.horasTotal/totalHrs)*100);return`<div class="rec-part-row"><span class="rec-part-name" title="${esc(p.nombre)}">${esc(p.nombre)}</span><div class="rec-part-bar-wrap"><div class="rec-part-bar-fill" style="width:${pct}%"></div></div><span class="rec-part-pct">${pct}%</span><span class="rec-part-hrs">${p.horasTotal}h</span></div>`;}).join('')+`<div class="rec-part-total">Total: ${totalHrs}h</div>`
-    : '<div style="color:var(--text-dim);font-size:12px">Sin datos</div>';
-  let projCards=proyectos.length
-    ? proyectos.map((p,i)=>`<div class="rec-proj-card">
-        <div class="rec-proj-card-left">
-          <div class="rec-proj-card-name">${esc(p.nombre)}</div>
-          <div class="rec-proj-card-meta">${p.actividades} act · ${p.horasTotal}h · ${p.horasPend}h pend.</div>
-        </div>
-        <span class="rec-proj-pend-badge ${p.pendientes>0?'has-pend':'no-pend'}">${p.pendientes} pend.</span>
-        <button class="rec-proj-link" title="Ver detalle" onclick="verProyecto(${i});event.stopPropagation()">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-        </button>
-      </div>`).join('')
-    : '<div style="color:var(--text-dim);font-size:12px">Sin proyectos registrados</div>';
-  document.getElementById('rec-modal-body').innerHTML=`${statsHtml}
-    <div style="margin-bottom:20px">
-      <div class="rec-section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>Participación por proyecto</div>
-      ${partRows}
-    </div>
-    <div>
-      <div class="rec-section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>Proyectos · Actividades</div>
-      ${projCards}
-    </div>`;
-  document.getElementById('rec-modal-overlay').classList.add('open');
-}
-
-function verProyecto(epicIdx){
-  const r=recursos[activeRecIdx]; if(!r) return;
-  const p=(r.proyectosDetalle||[])[epicIdx]; if(!p) return;
-  const epicaGlobal=epics.find(e=>e.key===p.key);
-  const estado=epicaGlobal?epicaGlobal.status:'—';
-  const area=epicaGlobal?epicaGlobal.area:(r.area||'—');
-  const sponsor=epicaGlobal?epicaGlobal.sponsor:'—';
-  const avance=epicaGlobal?(epicaGlobal.planPct!=null&&epicaGlobal.realPct!=null
-    ?Math.round(epicaGlobal.realPct*100)+'% / Plan '+Math.round(epicaGlobal.planPct*100)+'%'
-    :epicaGlobal.pctDesarrollo!=null?Math.round(epicaGlobal.pctDesarrollo*100)+'%':'—'):'—';
-  const fin=epicaGlobal?fmtD(epicaGlobal.duedate):'—';
-  const desvioPct=epicaGlobal&&epicaGlobal.desvioPct!=null?Math.round(epicaGlobal.desvioPct*100):null;
-  const desvColor=desvioPct===null?'var(--text-muted)':Math.abs(desvioPct)>17?'var(--red)':Math.abs(desvioPct)>=5?'var(--yellow)':'var(--green)';
-  const sbCls={'Backlog':'backlog','Análisis':'analisis','Desarrollo':'desarrollo','Pruebas':'pruebas','Producción':'produccion','Planificado':'planificado','Stand by':'standby','Desestimado':'desestimado'}[estado]||'backlog';
-  const tareas=(p.tareas||[]).filter(t=>fmtD(t.fecha)!==null);
-  const tareasHtml=tareas.length
-    ?tareas.map(t=>`<div class="det-task-row"><span class="det-task-date">${fmtD(t.fecha)}</span><span class="det-task-name" title="${esc(t.nombre)}">${esc(t.nombre)}</span><span class="det-task-hrs">${t.horasEst}h</span><span class="det-task-status"><span class="det-badge ${t.isDone?'done':'open'}">${t.isDone?'Cerrado':'En proceso'}</span></span></div>`).join('')
-    :'<div style="color:var(--text-muted);font-size:12px;padding:8px 0">Sin actividades con fecha</div>';
-  document.getElementById('det-title').textContent=p.nombre;
-  document.getElementById('det-body').innerHTML=`
-    <div class="det-stats">
-      <div class="det-stat"><div class="det-stat-val" style="color:var(--blue)">${p.actividades}</div><div class="det-stat-lbl">Actividades</div></div>
-      <div class="det-stat"><div class="det-stat-val" style="color:${p.horasPend>=40?'var(--red)':p.horasPend>=20?'var(--yellow)':'var(--green)'}">${p.horasPend}h</div><div class="det-stat-lbl">Horas Pend.</div></div>
-      <div class="det-stat"><div class="det-stat-val" style="color:var(--blue)">${p.horasTotal}h</div><div class="det-stat-lbl">Horas Total</div></div>
-    </div>
-    <div class="det-sec">
-      <div class="det-sec-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Proyecto</div>
-      <div class="det-field"><span class="det-lbl">Estado</span><span class="det-val"><span class="badge badge-${sbCls}">${esc(estado)}</span></span></div>
-      <div class="det-field"><span class="det-lbl">Área</span><span class="det-val">${esc(area)||'—'}</span></div>
-      <div class="det-field"><span class="det-lbl">Sponsor</span><span class="det-val">${esc(sponsor)||'—'}</span></div>
-      <div class="det-field"><span class="det-lbl">Avance</span><span class="det-val">${avance}</span></div>
-      <div class="det-field"><span class="det-lbl">Fin</span><span class="det-val">${fin||'—'}</span></div>
-      <div class="det-field"><span class="det-lbl">Desvío</span><span class="det-val" style="color:${desvColor};font-weight:600">${desvioPct!==null?desvioPct+'%':'—'}</span></div>
-    </div>
-    <div class="det-sec">
-      <div class="det-sec-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Actividades de ${esc(r.nombre)}</div>
-      ${tareasHtml}
-    </div>`;
-  document.getElementById('det-panel').classList.add('open');
-}
-
-function closeDetModal(){ document.getElementById('det-panel')?.classList.remove('open'); }
-function closeRecModal(){ document.getElementById('rec-modal-overlay')?.classList.remove('open'); }
-
-document.getElementById('det-close').addEventListener('click', ev=>{ ev.stopPropagation(); closeDetModal(); });
-document.getElementById('rec-modal-close').addEventListener('click', ev=>{ ev.stopPropagation(); closeRecModal(); });
-document.getElementById('rec-modal-overlay').addEventListener('click', function(ev){ if(ev.target===this) closeRecModal(); });
-
-document.addEventListener('keydown', ev=>{
-  if(ev.key!=='Escape') return;
-  const det=document.getElementById('det-panel');
-  if(det&&det.classList.contains('open')){ closeDetModal(); return; }
-  const rec=document.getElementById('rec-modal-overlay');
-  if(rec&&rec.classList.contains('open')){ closeRecModal(); return; }
-  const mo=document.getElementById('modal-overlay');
-  if(mo&&mo.classList.contains('open')) mo.classList.remove('open');
-});
-
-// ── ROW CLICK portafolio ────────────────────────────────────
-document.getElementById('table-body').addEventListener('click', ev=>{
-  const tr=ev.target.closest('tr[data-key]');
-  if(tr&&!ev.target.closest('a,button')) openModal(tr.dataset.key);
-});
-
-// ═══════════════════════════════════════════════════════════
-//  CAPACITY TAB  — Calendario de capacidad por recurso
-// ═══════════════════════════════════════════════════════════
-
-const NOMENCLATURA = {
-  'AM':  { nombre: 'Andrés Medina',      pais: 'Mexico',    area: 'Desarrollo' },
-  'JC':  { nombre: 'Javier Carrillo',    pais: 'Mexico',    area: 'Desarrollo' },
-  'EC':  { nombre: 'Eric Cacho',         pais: 'Mexico',    area: 'Desarrollo' },
-  'HS':  { nombre: 'Henry Salazar',      pais: 'Colombia',  area: 'Desarrollo' },
-  'DV':  { nombre: 'Daniel Valencia',    pais: 'Colombia',  area: 'Desarrollo' },
-  'SD':  { nombre: 'Steven Díaz',        pais: 'Colombia',  area: 'Desarrollo' },
-  'AR':  { nombre: 'Alexander Romero',   pais: 'Peru',      area: 'Desarrollo' },
-  'HR':  { nombre: 'Hamhner Remuzgo',    pais: 'Peru',      area: 'Soporte TI' },
-  'AA':  { nombre: 'Abel Alva',          pais: 'Peru',      area: 'PMO' },
-  'RP':  { nombre: 'Roxana Peralta',     pais: 'Peru',      area: 'PM' },
-  'ALL': { nombre: 'Alberto Llosa',      pais: 'Peru',      area: 'PM' },
-  'FF':  { nombre: 'Farah Fidel',        pais: 'Mexico',    area: 'Comercial' },
-  'JM':  { nombre: 'Juan Menco',         pais: 'Colombia',  area: 'Comercial' },
-  'CC':  { nombre: 'Cesar Castañeda',    pais: 'Peru',      area: 'TC' },
-  'EN':  { nombre: 'Edgar Noriega',      pais: 'Peru',      area: 'TC' },
-  'JC2': { nombre: 'Jose Carlos Cautle', pais: 'Mexico',    area: 'TC' },
-  'MA':  { nombre: 'Maria Aguilar',      pais: 'Guatemala', area: 'TC' },
-  'NB':  { nombre: 'Nalia Blanco',       pais: 'Peru',      area: 'Comercial' },
-  'DV2': { nombre: 'Daniela Velarde',    pais: 'Peru',      area: 'Data' },
-  'LE':  { nombre: 'Lucia Escobar',      pais: 'Colombia',  area: 'Operación' },
-};
-
-const FERIADOS = {
-  'Peru': new Set([
-    '2025-01-01','2025-04-17','2025-04-18','2025-05-01','2025-06-07',
-    '2025-06-29','2025-07-23','2025-07-28','2025-07-29','2025-08-06',
-    '2025-08-30','2025-10-08','2025-11-01','2025-12-08','2025-12-09','2025-12-25',
-    '2026-01-01','2026-04-02','2026-04-03','2026-05-01','2026-06-07',
-    '2026-06-29','2026-07-23','2026-07-28','2026-07-29','2026-08-06',
-    '2026-08-30','2026-10-08','2026-11-01','2026-12-08','2026-12-09','2026-12-25',
-  ]),
-  'Colombia': new Set([
-    '2025-01-01','2025-01-06','2025-03-24','2025-04-17','2025-04-18',
-    '2025-05-01','2025-06-02','2025-06-23','2025-06-30','2025-07-07',
-    '2025-07-20','2025-08-07','2025-08-18','2025-10-13','2025-11-03',
-    '2025-11-17','2025-12-08','2025-12-25',
-    '2026-01-01','2026-01-12','2026-03-23','2026-04-02','2026-04-03',
-    '2026-05-01','2026-05-18','2026-06-08','2026-06-15','2026-06-29',
-    '2026-07-20','2026-08-07','2026-08-17','2026-10-12','2026-11-02',
-    '2026-11-16','2026-12-08','2026-12-25',
-  ]),
-  'Mexico': new Set([
-    '2025-01-01','2025-02-03','2025-03-17','2025-05-01','2025-09-16',
-    '2025-11-17','2025-12-25',
-    '2026-01-01','2026-02-02','2026-03-16','2026-05-01','2026-09-16',
-    '2026-11-16','2026-12-25',
-  ]),
-  'Guatemala': new Set([
-    '2025-01-01','2025-04-17','2025-04-18','2025-04-19','2025-05-01',
-    '2025-06-30','2025-09-15','2025-10-20','2025-11-01','2025-12-24','2025-12-25','2025-12-31',
-    '2026-01-01','2026-04-02','2026-04-03','2026-04-04','2026-05-01',
-    '2026-06-30','2026-09-15','2026-10-20','2026-11-01','2026-12-24','2026-12-25','2026-12-31',
-  ]),
-};
-
-function resolveNombreDesdeJira(displayName) {
-  if(!displayName) return null;
-  for(const [ini, rec] of Object.entries(NOMENCLATURA)){
-    if(rec.nombre.toLowerCase() === displayName.toLowerCase()) return { ini, ...rec };
-  }
-  return null;
-}
-function resolveNombreDesdeIni(ini) {
-  if(!ini) return null;
-  const key = ini.trim().toUpperCase();
-  return NOMENCLATURA[key] ? { ini: key, ...NOMENCLATURA[key] } : null;
-}
-function distribuirHoras(horasTotal, fechaInicio, fechaFin, pais) {
-  if(!horasTotal || !fechaInicio || !fechaFin) return [];
-  const feriados = FERIADOS[pais] || new Set();
-  const dias = [];
-  const cur = new Date(fechaInicio + 'T12:00:00');
-  const end = new Date(fechaFin   + 'T12:00:00');
-  while(cur <= end){
-    const dow = cur.getDay();
-    const iso = cur.toISOString().slice(0,10);
-    if(dow !== 0 && dow !== 6 && !feriados.has(iso)) dias.push(iso);
-    cur.setDate(cur.getDate()+1);
-  }
-  if(!dias.length) return [];
-  const hPorDia = +(horasTotal / dias.length).toFixed(2);
-  return dias.map(fecha => ({ fecha, horas: hPorDia }));
-}
-
-// ── State ──────────────────────────────────────────────────
-let capacityLoaded = false;
-let capRows = [];  // {fecha, persona, horas, proyecto, subtarea, comentario, esPlaneado}
-let capCalYear  = TODAY.getFullYear();
-let capCalMonth = TODAY.getMonth(); // 0-based
-
-// ── Tab lazy load ──────────────────────────────────────────
-document.querySelectorAll('.tabs .tab').forEach(tab => {
-  if(tab.dataset.tab === 'capacity') {
-    tab.addEventListener('click', () => {
-      if(!capacityLoaded) loadCapacity();
-    });
-  }
-});
-
-// ── Load from API ──────────────────────────────────────────
-async function loadCapacity(){
-  capacityLoaded = true;
-  const wrap = document.getElementById('cap-cal-wrap');
-  if(wrap) wrap.innerHTML = '<div class="cap-empty" style="padding:40px;text-align:center;color:var(--text-dim)">Cargando desde Jira…</div>';
   try {
-    const resp = await fetch('/api/jira', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'capacity' })
-    });
-    if(!resp.ok) throw new Error('HTTP ' + resp.status);
-    const j = await resp.json();
+    if (type === 'ventas') {
+      // Fetch all Ventas issues (mismos campos custom que Épicas)
+      const VENTA_FIELDS = [
+        'summary', 'status', 'assignee', 'duedate', 'parent',
+        'customfield_10015', // Fecha inicio
+        'customfield_10930', // Área
+        'customfield_10592', // País
+        'customfield_10931', // Sponsor
+        'customfield_10929', // Categoría
+        'customfield_10725', // % Plan
+        'customfield_10726', // % Real
+        'customfield_10759', // Desvío %
+        'customfield_10895', // % Análisis
+        'customfield_10928', // % Desarrollo
+        'customfield_10969', // % Pruebas
+        'customfield_11003', // Bloqueante
+        'customfield_11136', // Horas Estimadas
+        'customfield_11137', // Horas Pendientes
+      ];
+      const issues = await fetchAllPages(
+        auth, JIRA_CLOUD,
+        'project = PTS AND issuetype = Venta ORDER BY assignee ASC',
+        VENTA_FIELDS
+      );
+      return res.status(200).json({ issues, total: issues.length, type: 'ventas' });
 
-    capRows = [];
-    (j.issues || []).forEach(sub => {
-      const f = sub.fields || {};
-      const subtareaNom = f.summary || sub.key;
-      const proyectoNom  = f._epicName   || '';
-      const codigoProy   = f._epicCodigo || '';
-      const logs = f._worklogs || [];
+    } else if (type === 'recursos') {
+      // Subtareas: parent = Tarea, Tarea.parent = Épica
+      const SUBTAREA_FIELDS = [
+        'summary', 'status', 'assignee', 'parent', 'duedate', 'created',
+        'customfield_10015', // Fecha inicio
+        'customfield_10930', // Área
+        'customfield_10592', // País
+        'customfield_11003', // Bloqueante
+        'customfield_11136', // Horas Estimadas
+        'customfield_11137', // Horas Pendientes
+      ];
+      const issues = await fetchAllPages(
+        auth, JIRA_CLOUD,
+        'project = PTS AND issuetype = Subtarea ORDER BY assignee ASC',
+        SUBTAREA_FIELDS
+      );
 
-      // Solo mostrar subtareas con horas registradas en "Registro de actividad" de Jira
-      // Si logs está vacío = el recurso no registró actividad → no aparece en el calendario
-      if(logs.length > 0){
-        logs.forEach(wl => {
-          const horas    = wl.timeSpentSeconds ? +(wl.timeSpentSeconds / 3600).toFixed(2) : 0;
-          const fechaIso = wl.started ? wl.started.slice(0,10) : null;
-          const persona  = wl.author?.displayName || wl.updateAuthor?.displayName || '—';
-          let comentario = '';
-          if(wl.comment){
-            if(typeof wl.comment === 'string') comentario = wl.comment;
-            else if(wl.comment.content) comentario = adfToText(wl.comment).trim();
-          }
-          const recReal = resolveNombreDesdeJira(persona);
-          capRows.push({
-            fecha: fechaIso, persona, horas,
-            proyecto: proyectoNom, codigoProy, subKey: sub.key, subtarea: subtareaNom,
-            comentario, esPlaneado: false,
-            area: recReal?.area || '', pais: recReal?.pais || ''
-          });
-        });
+      // Resolver el segundo nivel: Subtarea→Tarea→Épica
+      // Recopilar todas las Tareas padre únicas que aún no conocemos la épica
+      const tareaKeys = [...new Set(
+        issues
+          .map(i => i.fields.parent?.key)
+          .filter(Boolean)
+      )];
+
+      // Traer solo las Tareas necesarias para obtener su parent (Épica)
+      const tareaMap = {};
+      const CHUNK = 50;
+      for (let i = 0; i < tareaKeys.length; i += CHUNK) {
+        const chunk = tareaKeys.slice(i, i + CHUNK);
+        const jqlChunk = `key in (${chunk.join(',')})`;
+        const tareas = await fetchAllPages(auth, JIRA_CLOUD, jqlChunk, ['summary', 'parent']);
+        tareas.forEach(t => { tareaMap[t.key] = t; });
       }
-    });
 
-    // Populate selectors from actual data
-    const areas = [...new Set(capRows.map(r => r.area).filter(Boolean))].sort();
-    const selA = document.getElementById('cap-area');
-    if(selA) selA.innerHTML = '<option value="">Todas</option>' + areas.map(a => `<option>${esc(a)}</option>`).join('');
-
-    const paises = [...new Set(capRows.map(r => r.pais).filter(Boolean))].sort();
-    const selP = document.getElementById('cap-pais');
-    if(selP) selP.innerHTML = '<option value="">Todos</option>' + paises.map(p => `<option>${esc(p)}</option>`).join('');
-
-    const personas = [...new Set(capRows.map(r => r.persona).filter(Boolean))].sort();
-    const sel = document.getElementById('cap-persona');
-    if(sel) sel.innerHTML = '<option value="">Todas</option>' + personas.map(p => `<option>${esc(p)}</option>`).join('');
-
-    // Set calendar to month with most data
-    if(capRows.length){
-      const fechas = capRows.map(r => r.fecha).filter(Boolean).sort();
-      const mid = fechas[Math.floor(fechas.length/2)];
-      const d = new Date(mid + 'T12:00:00');
-      capCalYear  = d.getFullYear();
-      capCalMonth = d.getMonth();
-    }
-
-    initCalNav();
-    renderCapacity();
-  } catch(err) {
-    console.error('Error capacity:', err);
-    const wrap = document.getElementById('cap-cal-wrap');
-    if(wrap) wrap.innerHTML = `<div class="cap-empty" style="padding:40px;text-align:center;color:var(--red)">Error: ${esc(err.message)}</div>`;
-  }
-}
-
-// ── Calendar navigation ────────────────────────────────────
-function initCalNav(){
-  // Populate month/year selectors
-  const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-  const mSel = document.getElementById('cap-cal-month');
-  const ySel = document.getElementById('cap-cal-year');
-  if(mSel) mSel.innerHTML = MONTHS.map((m,i) => `<option value="${i}">${m}</option>`).join('');
-  if(ySel){
-    const years = [...new Set(capRows.map(r => r.fecha?.slice(0,4)).filter(Boolean))].sort();
-    if(!years.length) years.push(String(TODAY.getFullYear()));
-    ySel.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
-  }
-  syncCalNav();
-
-  document.getElementById('cap-cal-prev')?.addEventListener('click', () => {
-    capCalMonth--; if(capCalMonth < 0){ capCalMonth=11; capCalYear--; }
-    syncCalNav(); renderCapacity();
-  });
-  document.getElementById('cap-cal-next')?.addEventListener('click', () => {
-    capCalMonth++; if(capCalMonth > 11){ capCalMonth=0; capCalYear++; }
-    syncCalNav(); renderCapacity();
-  });
-  document.getElementById('cap-cal-month')?.addEventListener('change', e => {
-    capCalMonth = +e.target.value; renderCapacity();
-  });
-  document.getElementById('cap-cal-year')?.addEventListener('change', e => {
-    capCalYear = +e.target.value; renderCapacity();
-  });
-}
-
-function syncCalNav(){
-  const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-  const title = document.getElementById('cap-cal-title');
-  if(title) title.textContent = `${MONTHS[capCalMonth]} ${capCalYear}`;
-  const mSel = document.getElementById('cap-cal-month');
-  const ySel = document.getElementById('cap-cal-year');
-  if(mSel) mSel.value = capCalMonth;
-  if(ySel) ySel.value = capCalYear;
-}
-
-// ── Filters ────────────────────────────────────────────────
-function getCapFiltered(){
-  const persona = document.getElementById('cap-persona')?.value || '';
-  const area    = document.getElementById('cap-area')?.value    || '';
-  const pais    = document.getElementById('cap-pais')?.value    || '';
-  return capRows.filter(r => {
-    if(persona && r.persona !== persona) return false;
-    if(area    && r.area    !== area)    return false;
-    if(pais    && r.pais    !== pais)    return false;
-    return true;
-  });
-}
-
-['cap-area','cap-pais','cap-persona','cap-orden'].forEach(id => {
-  const el = document.getElementById(id);
-  if(el) el.addEventListener('change', renderCapacity);
-});
-document.getElementById('cap-limpiar')?.addEventListener('click', () => {
-  const a  = document.getElementById('cap-area');    if(a)  a.value='';
-  const pa = document.getElementById('cap-pais');    if(pa) pa.value='';
-  const p  = document.getElementById('cap-persona'); if(p)  p.value='';
-  const o  = document.getElementById('cap-orden');   if(o)  o.value='nombre';
-  renderCapacity();
-});
-
-// ── Main render: calendar ──────────────────────────────────
-function renderCapacity(){
-  const filtered = getCapFiltered();
-  const orden    = document.getElementById('cap-orden')?.value || 'nombre';
-
-  // Global KPIs — solo horas reales de Jira
-  const totalHoras = filtered.reduce((s,r) => s+r.horas, 0);
-  let personasSet  = [...new Set(filtered.map(r => r.persona))];
-
-  // Weekly utilization per persona (all time)
-  function isoWeek(iso){
-    if(!iso) return null;
-    const d = new Date(iso+'T12:00:00');
-    const jan1 = new Date(d.getFullYear(),0,1);
-    const wk = Math.ceil(((d - jan1)/864e5 + jan1.getDay()+1)/7);
-    return `${d.getFullYear()}-W${String(wk).padStart(2,'0')}`;
-  }
-
-  const weeksByPersona = {};
-  filtered.forEach(r => {
-    if(!r.fecha) return;
-    const wk = isoWeek(r.fecha);
-    if(!weeksByPersona[r.persona]) weeksByPersona[r.persona] = {};
-    if(!weeksByPersona[r.persona][wk]) weeksByPersona[r.persona][wk] = 0;
-    weeksByPersona[r.persona][wk] += r.horas;
-  });
-
-  // Total horas por persona para ordenamiento
-  const horasPorPersona = {};
-  personasSet.forEach(p => {
-    horasPorPersona[p] = filtered.filter(r=>r.persona===p).reduce((s,r)=>s+r.horas,0);
-  });
-
-  // Avg weekly util
-  const avgUtils = {};
-  personasSet.forEach(p => {
-    const wks = Object.values(weeksByPersona[p] || {});
-    avgUtils[p] = wks.length ? +(wks.reduce((a,b)=>a+b,0)/wks.length/40*100).toFixed(1) : 0;
-  });
-  const avgUtilTotal = personasSet.length
-    ? +(personasSet.reduce((s,p) => s + avgUtils[p], 0) / personasSet.length).toFixed(1)
-    : 0;
-
-  // Sort personas
-  personasSet.sort((a,b) => {
-    const recA = Object.values(NOMENCLATURA).find(n=>n.nombre===a) || {};
-    const recB = Object.values(NOMENCLATURA).find(n=>n.nombre===b) || {};
-    if(orden==='horas_desc') return horasPorPersona[b] - horasPorPersona[a];
-    if(orden==='horas_asc')  return horasPorPersona[a] - horasPorPersona[b];
-    if(orden==='area')       return (recA.area||'').localeCompare(recB.area||'');
-    if(orden==='pais')       return (recA.pais||'').localeCompare(recB.pais||'');
-    return a.localeCompare(b); // nombre
-  });
-
-  const sk = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
-  sk('cap-kpi-personas', personasSet.length || '—');
-  sk('cap-kpi-horas',    totalHoras ? totalHoras.toFixed(1)+'h' : '—');
-  sk('cap-kpi-planeadas','—');
-  sk('cap-kpi-util',     avgUtilTotal ? avgUtilTotal+'%' : '—');
-
-  // Build calendar for capCalYear / capCalMonth
-  renderCalendar(filtered, personasSet, weeksByPersona);
-}
-
-// ── Calendar grid render ───────────────────────────────────
-function renderCalendar(filtered, personas, weeksByPersona){
-  const wrap = document.getElementById('cap-cal-wrap');
-  if(!wrap) return;
-
-  const year = capCalYear, month = capCalMonth;
-  const firstDay = new Date(year, month, 1);
-  const lastDay  = new Date(year, month+1, 0);
-  const DOW_LABELS = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
-
-  // Build array of all days in month
-  const days = [];
-  const cur = new Date(firstDay);
-  while(cur <= lastDay){
-    days.push(cur.toISOString().slice(0,10));
-    cur.setDate(cur.getDate()+1);
-  }
-
-  // Index filtered rows by persona+date
-  const idx = {}; // idx[persona][fecha] = [rows]
-  filtered.forEach(r => {
-    if(!r.fecha || !r.fecha.startsWith(`${year}-${String(month+1).padStart(2,'0')}`)) return;
-    if(!idx[r.persona]) idx[r.persona] = {};
-    if(!idx[r.persona][r.fecha]) idx[r.persona][r.fecha] = [];
-    idx[r.persona][r.fecha].push(r);
-  });
-
-  // Personas in this month (those with data OR all if no filter)
-  const personasInMonth = personas.length
-    ? personas
-    : [...new Set(filtered.map(r=>r.persona))].sort();
-
-  if(!personasInMonth.length){
-    wrap.innerHTML = '<div class="cap-empty" style="padding:40px;text-align:center;color:var(--text-dim)">Sin datos para este período</div>';
-    return;
-  }
-
-  // Weekly util for month: persona → week → horas
-  function isoWeek(iso){
-    const d = new Date(iso+'T12:00:00');
-    // Simple week key: Monday-based
-    const dayOfWeek = (d.getDay() + 6) % 7; // Mon=0
-    const mon = new Date(d); mon.setDate(d.getDate() - dayOfWeek);
-    return mon.toISOString().slice(0,10);
-  }
-
-  // Compute weekly totals per persona for THIS month
-  const weekTotals = {}; // persona → weekStartIso → horas
-  const weekSet = new Set();
-  filtered.forEach(r => {
-    if(!r.fecha) return;
-    const d = new Date(r.fecha+'T12:00:00');
-    if(d.getFullYear() !== year || d.getMonth() !== month) return;
-    const wk = isoWeek(r.fecha);
-    weekSet.add(wk);
-    if(!weekTotals[r.persona]) weekTotals[r.persona] = {};
-    if(!weekTotals[r.persona][wk]) weekTotals[r.persona][wk] = 0;
-    weekTotals[r.persona][wk] += r.horas;
-  });
-  // Also collect weeks that span into this month from days array
-  days.forEach(d => weekSet.add(isoWeek(d)));
-  const sortedWeeks = [...weekSet].sort();
-
-  // Group days by week
-  const daysByWeek = {};
-  days.forEach(d => {
-    const wk = isoWeek(d);
-    if(!daysByWeek[wk]) daysByWeek[wk] = [];
-    daysByWeek[wk].push(d);
-  });
-
-  // ── Build table HTML ──────────────────────────────────────
-  // Header row 1: week labels spanning their days
-  let hdr1 = '<tr class="row-month"><th class="col-persona">Recurso</th>';
-  sortedWeeks.forEach((wk, wi) => {
-    const wdays = daysByWeek[wk] || [];
-    const wkDate = new Date(wk+'T12:00:00');
-    const wkLabel = `Sem ${wkDate.toLocaleDateString('es-PE',{day:'2-digit',month:'short'})}`;
-    hdr1 += `<th colspan="${wdays.length}" class="col-week-sep">${wkLabel}</th>`;
-    hdr1 += `<th class="col-total">Total</th><th class="col-util">Util%</th>`;
-  });
-  hdr1 += '</tr>';
-
-  // Header row 2: day numbers + DOW
-  let hdr2 = '<tr class="row-dow"><th class="col-persona"></th>';
-  sortedWeeks.forEach(wk => {
-    const wdays = daysByWeek[wk] || [];
-    wdays.forEach(d => {
-      const dt = new Date(d+'T12:00:00');
-      const dow = dt.getDay(); // 0=Sun,6=Sat
-      const dayNum = dt.getDate();
-      const isWE = dow===0||dow===6;
-      hdr2 += `<th style="${isWE?'color:var(--text-dim)':''}">${dayNum}<br><span style="font-size:8px">${DOW_LABELS[dow]}</span></th>`;
-    });
-    hdr2 += '<th class="col-total"></th><th class="col-util"></th>';
-  });
-  hdr2 += '</tr>';
-
-  // Body rows: one per persona
-  let body = '';
-  personasInMonth.forEach(persona => {
-    const pRec = Object.values(NOMENCLATURA).find(n => n.nombre === persona);
-    const pais = pRec?.pais || 'Peru';
-    const ferPais = FERIADOS[pais] || new Set();
-
-    body += `<tr><td class="col-persona">${esc(persona)}</td>`;
-    sortedWeeks.forEach(wk => {
-      const wdays = daysByWeek[wk] || [];
-      let weekTotal = 0;
-      wdays.forEach(d => {
-        const dt = new Date(d+'T12:00:00');
-        const dow = dt.getDay();
-        const isWE = dow===0||dow===6;
-        const isFer = ferPais.has(d);
-        const rows = (idx[persona] && idx[persona][d]) || [];
-        const hTotal = rows.reduce((s,r)=>s+r.horas,0);
-        weekTotal += hTotal;
-
-        let cellClass, cellLabel;
-        if(isWE){
-          cellClass = 'c-weekend'; cellLabel = '—';
-        } else if(isFer){
-          cellClass = 'c-holiday'; cellLabel = 'F';
-        } else if(!rows.length){
-          cellClass = 'c-empty'; cellLabel = '-';
-        } else if(hTotal === 0){
-          cellClass = 'c-zero'; cellLabel = '0';
-        } else if(hTotal <= 4){
-          cellClass = 'c-low'; cellLabel = hTotal % 1 === 0 ? hTotal : hTotal.toFixed(1);
-        } else if(hTotal <= 8){
-          cellClass = 'c-med'; cellLabel = hTotal % 1 === 0 ? hTotal : hTotal.toFixed(1);
-        } else {
-          cellClass = 'c-over'; cellLabel = hTotal % 1 === 0 ? hTotal : hTotal.toFixed(1);
-        }
-
-        const clickable = !isWE && !isFer && rows.length > 0;
-        const cellAttr = clickable
-          ? `onclick="openCapDetail('${esc(persona)}','${d}')"  title="${hTotal}h — clic para ver detalle"`
-          : '';
-        const weekSepClass = wdays[0] === d ? 'week-sep' : '';
-        body += `<td class="${weekSepClass}"><div class="cap-cal-cell ${cellClass}" ${cellAttr}>${cellLabel}</div></td>`;
+      // Enriquecer cada subtarea con la épica de su tarea padre
+      issues.forEach(sub => {
+        const tareaKey = sub.fields.parent?.key;
+        const tarea = tareaKey ? tareaMap[tareaKey] : null;
+        sub.fields._tareaParent  = tarea ? { key: tarea.key, summary: tarea.fields?.summary } : null;
+        sub.fields._epicaParent  = tarea?.fields?.parent
+          ? { key: tarea.fields.parent.key, summary: tarea.fields.parent.fields?.summary }
+          : null;
       });
 
-      // Week total + util %
-      const wt = weekTotals[persona] ? (weekTotals[persona][wk]||0) : 0;
-      const util = wt > 0 ? +(wt/40*100).toFixed(1) : 0;
-      const utilCls = util === 0 ? '' : util > 100 ? 'cap-util-over' : util >= 70 ? 'cap-util-ok' : 'cap-util-warn';
-      body += `<td class="col-total">${wt > 0 ? wt.toFixed(1) : '—'}</td>`;
-      body += `<td class="col-util"><span class="${utilCls}">${util > 0 ? util+'%' : '—'}</span></td>`;
-    });
-    body += '</tr>';
-  });
+      return res.status(200).json({ issues, total: issues.length, type: 'recursos' });
 
-  wrap.innerHTML = `
-    <table class="cap-cal-table">
-      <thead>${hdr1}${hdr2}</thead>
-      <tbody>${body}</tbody>
-    </table>`;
-}
+    } else if (type === 'stories') {
+      const { epicKey } = req.body;
+      if (!epicKey) return res.status(400).json({ error: 'epicKey requerido' });
 
-// ── Detail drawer ──────────────────────────────────────────
-function openCapDetail(persona, fecha){
-  const rows = capRows.filter(r => r.persona === persona && r.fecha === fecha);
-  if(!rows.length) return;
+      const STORY_FIELDS = ['summary','status','assignee','parent','customfield_10015','duedate','subtasks','customfield_10725','customfield_10726','issuetype'];
+      const SUBTASK_FIELDS = ['summary','status','assignee','parent','customfield_10015','duedate','issuetype'];
 
-  const dt = new Date(fecha+'T12:00:00');
-  const fechaFmt = dt.toLocaleDateString('es-PE',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
-  const totalH = rows.reduce((s,r)=>s+r.horas,0);
+      // Buscar todos los hijos directos de la épica (Next-gen: parent=EPIC; clásico: Epic Link)
+      let storiesFinal = await fetchAllPages(auth, JIRA_CLOUD,
+        `project = PTS AND parent = ${epicKey} ORDER BY created ASC`,
+        STORY_FIELDS);
 
-  document.getElementById('cap-detail-title').textContent = persona;
-  document.getElementById('cap-detail-sub').textContent   = `${fechaFmt} · ${totalH.toFixed(2)}h total`;
+      if (!storiesFinal.length) {
+        storiesFinal = await fetchAllPages(auth, JIRA_CLOUD,
+          `project = PTS AND "Epic Link" = ${epicKey} AND issuetype not in subTaskIssueTypes() ORDER BY created ASC`,
+          STORY_FIELDS);
+      }
 
-  const tb = document.getElementById('cap-detail-body');
-  if(!tb) return;
-  tb.innerHTML = rows.map(r => {
-    const horasCls = r.horas >= 8 ? 'cap-horas-high' : r.horas >= 4 ? 'cap-horas-med' : 'cap-horas-low';
-    const comentario = r.comentario || '—';
-    const codigoCell = r.codigoProy
-      ? `<span style="font-weight:600;color:var(--blue)">${esc(r.codigoProy)}</span>`
-      : '—';
-    return `<tr>
-      <td style="color:var(--text-muted);white-space:nowrap">${fmtD(r.fecha)||'—'}</td>
-      <td><span class="cap-horas-badge ${horasCls}">${r.horas}h</span></td>
-      <td style="white-space:nowrap">${codigoCell}</td>
-      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-muted)" title="${esc(r.proyecto||'')}">${esc(r.proyecto||'—')}</td>
-      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.subtarea)}">${esc(r.subtarea)}</td>
-      <td style="color:var(--text-muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(comentario)}">${esc(comentario)}</td>
-    </tr>`;
-  }).join('');
+      // Filtrar solo historias/tareas (excluir subtareas que puedan aparecer)
+      storiesFinal = storiesFinal.filter(s => {
+        const it = (s.fields?.issuetype?.name || '').toLowerCase();
+        return !['subtarea','subtask','sub-task','sub-tarea'].includes(it);
+      });
 
-  document.getElementById('cap-detail-overlay').style.display = 'flex';
-}
+      // Subtareas de cada historia
+      const storyKeys = storiesFinal.map(s => s.key);
+      const subtaskMap = {};
+      for (let i = 0; i < storyKeys.length; i += 50) {
+        const chunk = storyKeys.slice(i, i + 50);
+        if (!chunk.length) continue;
+        const subs = await fetchAllPages(auth, JIRA_CLOUD,
+          `project = PTS AND parent in (${chunk.join(',')}) ORDER BY created ASC`,
+          SUBTASK_FIELDS);
+        subs.forEach(sub => {
+          const pk = sub.fields.parent?.key;
+          if (pk) { if (!subtaskMap[pk]) subtaskMap[pk] = []; subtaskMap[pk].push(sub); }
+        });
+      }
 
-function closeCapDetail(event){
-  if(event && event.target !== document.getElementById('cap-detail-overlay')) return;
-  document.getElementById('cap-detail-overlay').style.display = 'none';
-}
+      storiesFinal.forEach(s => { s.fields._subtasks = subtaskMap[s.key] || []; });
+      return res.status(200).json({ stories: storiesFinal, total: storiesFinal.length, type: 'stories' });
 
-// ── CSV export ─────────────────────────────────────────────
-document.getElementById('btn-export-cap')?.addEventListener('click', () => {
-  const filtered = getCapFiltered();
-  const hdr  = ['Fecha','Persona','Horas','Proyecto','Actividad (Subtarea)','Comentario','Tipo'];
-  const rows = filtered.map(r => [r.fecha||'', r.persona, r.horas, r.proyecto||'', r.subtarea, r.comentario, r.esPlaneado?'Planificado':'Real']);
-  downloadCSV([hdr,...rows], `capacity_${new Date().toISOString().slice(0,10)}.csv`);
-});
+
+    } else if (type === 'capacity') {
+      // Subtareas + worklogs por fecha
+      // 1. Traer todas las subtareas (mínimo de campos necesarios)
+      const CAP_FIELDS = [
+        'summary', 'assignee', 'parent',
+        'customfield_10015', // Fecha inicio
+        'duedate',
+        'customfield_10930', // Área
+        'customfield_11136', // Horas Estimadas
+        'customfield_11137', // Horas Pendientes
+        'customfield_11037', // Asignado (iniciales múltiples, ej: RP, AA, EN)
+        'customfield_11070', // Asignado alternativo
+      ];
+      const subtareas = await fetchAllPages(
+        auth, JIRA_CLOUD,
+        'project = PTS AND issuetype = Subtarea ORDER BY created ASC',
+        CAP_FIELDS
+      );
+
+      // 2. Obtener épica de cada subtarea: subtarea → historia (parent) → épica (parent.parent)
+      //    Recoger keys únicos de historias padre, buscarlas en batch
+      const storyKeys = [...new Set(
+        subtareas.map(s => s.fields?.parent?.key).filter(Boolean)
+      )];
+
+      // Mapa storyKey → epicSummary + epicCodigo
+      const epicNameMap = {};
+      const epicCodigoMap = {};
+      if (storyKeys.length) {
+        // Buscar historias en lotes de 50 usando JQL IN
+        const STORY_BATCH = 50;
+        for (let i = 0; i < storyKeys.length; i += STORY_BATCH) {
+          const batch = storyKeys.slice(i, i + STORY_BATCH);
+          const jqlStories = `key in (${batch.join(',')})`;
+          const stories = await fetchAllPages(auth, JIRA_CLOUD, jqlStories,
+            ['parent','summary','customfield_10934']);
+          stories.forEach(story => {
+            // story.fields.parent es la épica (nombre)
+            const epicSummary = story.fields?.parent?.fields?.summary || story.fields?.parent?.key || '';
+            epicNameMap[story.key] = epicSummary;
+            // El código está en la historia misma si lo tiene, sino hay que ir a la épica
+            const epicCodigo = story.fields?.customfield_10934 || '';
+            epicCodigoMap[story.key] = epicCodigo;
+            // Guardar key de la épica para buscar su código si la historia no lo tiene
+            if(!epicCodigo && story.fields?.parent?.key){
+              epicCodigoMap['__needsEpic__' + story.key] = story.fields.parent.key;
+            }
+          });
+
+          // Para historias sin código propio, buscar el código en la épica
+          const storiesNeedingEpic = Object.keys(epicCodigoMap)
+            .filter(k => k.startsWith('__needsEpic__'));
+          if(storiesNeedingEpic.length){
+            const epicKeys = [...new Set(storiesNeedingEpic.map(k => epicCodigoMap[k]))];
+            const EPIC_BATCH2 = 50;
+            const epicCodigoDirect = {};
+            for(let ei = 0; ei < epicKeys.length; ei += EPIC_BATCH2){
+              const eBatch = epicKeys.slice(ei, ei + EPIC_BATCH2);
+              const jqlEpics = `key in (${eBatch.join(',')})`;
+              const epics2 = await fetchAllPages(auth, JIRA_CLOUD, jqlEpics, ['customfield_10934']);
+              epics2.forEach(ep => { epicCodigoDirect[ep.key] = ep.fields?.customfield_10934 || ''; });
+            }
+            storiesNeedingEpic.forEach(k => {
+              const storyKey = k.replace('__needsEpic__','');
+              const epicKey  = epicCodigoMap[k];
+              epicCodigoMap[storyKey] = epicCodigoDirect[epicKey] || '';
+              delete epicCodigoMap[k];
+            });
+          }
+        }
+      }
+
+      // Inyectar epicName en cada subtarea
+      subtareas.forEach(s => {
+        const storyKey = s.fields?.parent?.key;
+        s.fields._epicName   = storyKey ? (epicNameMap[storyKey]   || '') : '';
+        s.fields._epicCodigo = storyKey ? (epicCodigoMap[storyKey] || '') : '';
+      });
+
+      // 3. Por cada subtarea, traer su worklog via REST
+      //    GET /rest/api/3/issue/{key}/worklog
+      //    Limitamos a 100 entradas por issue (suficiente para registros de actividad)
+      async function fetchWorklog(key) {
+        const result = await jiraGet(auth, JIRA_CLOUD, `/rest/api/3/issue/${key}/worklog?maxResults=100`);
+        if (result.status !== 200) return [];
+        return result.body.worklogs || [];
+      }
+
+      // Fetch worklogs en lotes de 10 en paralelo para no saturar la API
+      const BATCH = 10;
+      for (let i = 0; i < subtareas.length; i += BATCH) {
+        const batch = subtareas.slice(i, i + BATCH);
+        const logs = await Promise.all(batch.map(s => fetchWorklog(s.key)));
+        batch.forEach((s, idx) => { s.fields._worklogs = logs[idx]; });
+      }
+
+      return res.status(200).json({ issues: subtareas, total: subtareas.length, type: 'capacity' });
+
+    } else {
+      // Default: fetch Epics
+      const { jql, fields } = req.body || {};
+      const jqlStr = jql || 'project = PTS AND issuetype = Epic ORDER BY created ASC';
+      const EPIC_FIELDS = fields || [
+        'summary','status','assignee','reporter','labels','duedate',
+        'customfield_10015','customfield_10592','customfield_10659',
+        'customfield_10725','customfield_10726','customfield_10759',
+        'customfield_10895','customfield_10928','customfield_10929',
+        'customfield_10930','customfield_10931','customfield_10934',
+        'customfield_10829','customfield_10862','customfield_10969',
+        'customfield_10970','customfield_11003','customfield_11004',
+        'customfield_11037','customfield_11070',
+        'customfield_10896','customfield_10897','customfield_10898',
+        'customfield_10899','customfield_10900','customfield_10901',
+        'customfield_10902','customfield_10903','customfield_10904',
+        'customfield_10905','customfield_10906','customfield_10907',
+        'customfield_10908','customfield_10909','customfield_10910',
+        'customfield_10911','customfield_10912','customfield_10913',
+        'customfield_10914','customfield_10915','customfield_10916',
+        'customfield_10917','customfield_10918','customfield_10919',
+        'customfield_10920','customfield_10921','customfield_10922',
+        'customfield_10923','customfield_10924','customfield_10925',
+        'customfield_10926','customfield_10927','customfield_10932',
+        'customfield_10933'
+      ];
+      const issues = await fetchAllPages(auth, JIRA_CLOUD, jqlStr, EPIC_FIELDS);
+      return res.status(200).json({ issues, total: issues.length, isLast: true });
+    }
+
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+};
