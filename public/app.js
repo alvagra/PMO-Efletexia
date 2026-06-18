@@ -123,7 +123,7 @@ const JIRA_FIELDS = [
   "customfield_10930","customfield_10931","customfield_10934",
   "customfield_10829","customfield_10862","customfield_10969",
   "customfield_10970","customfield_11003","customfield_11004",
-  "customfield_11037","customfield_11070","customfield_11136"
+  "customfield_11037","customfield_11070"
 ];
 
 function parseIssue(i){
@@ -157,7 +157,29 @@ function parseIssue(i){
     conformidad:f.customfield_11004?f.customfield_11004.value:null,
     prioridad:f.customfield_11037?f.customfield_11037.value:null,
     sponsor:f.customfield_11070?f.customfield_11070.value:null,
-    condicion:(()=>{ const v=f.customfield_11136; if(!v) return null; if(typeof v==='string') return v; if(v.content) return adfToText(v).trim(); if(v.value) return v.value; return null; })(),
+    condicion:(()=>{
+      // Auto-detect COND. field: short text between pctAnalisis and pctDesarrollo
+      // Try known candidates in likely order
+      const candidates = [
+        'customfield_10896','customfield_10897','customfield_10898','customfield_10899',
+        'customfield_10900','customfield_10901','customfield_10902','customfield_10903',
+        'customfield_10904','customfield_10905','customfield_10906','customfield_10907',
+        'customfield_10908','customfield_10909','customfield_10910','customfield_10911',
+        'customfield_10912','customfield_10913','customfield_10914','customfield_10915',
+        'customfield_10916','customfield_10917','customfield_10918','customfield_10919',
+        'customfield_10920','customfield_10921','customfield_10922','customfield_10923',
+        'customfield_10924','customfield_10925','customfield_10926','customfield_10927',
+        'customfield_10932','customfield_10933','customfield_11136'
+      ];
+      for(const cf of candidates){
+        const v = f[cf];
+        if(!v) continue;
+        if(typeof v==='string' && v.length>0 && v.length<=50) return v;
+        if(v.content) { const t=adfToText(v).trim(); if(t&&t.length<=50) return t; }
+        if(v.value && typeof v.value==='string' && v.value.length<=50) return v.value;
+      }
+      return null;
+    })(),
     bitacora:bit||null,
     proximosPasos:prox||null,
   };
