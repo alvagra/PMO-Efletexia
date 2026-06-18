@@ -197,19 +197,29 @@ module.exports = async function handler(req, res) {
         subtareas.map(s => s.fields?.parent?.key).filter(Boolean)
       )];
 
-      // Mapa storyKey → epicSummary
+      // Mapa storyKey → epicSummary + epicCodigo
       const epicNameMap = {};
+      const epicCodigoMap = {};
       if (storyKeys.length) {
         // Buscar historias en lotes de 50 usando JQL IN
         const STORY_BATCH = 50;
         for (let i = 0; i < storyKeys.length; i += STORY_BATCH) {
           const batch = storyKeys.slice(i, i + STORY_BATCH);
           const jqlStories = `key in (${batch.join(',')})`;
-          const stories = await fetchAllPages(auth, JIRA_CLOUD, jqlStories, ['parent','summary']);
+          const stories = await fetchAllPages(auth, JIRA_CLOUD, jqlStories,
+            ['parent','summary','customfield_10659','customfield_10829']);
           stories.forEach(story => {
-            // story.fields.parent es la épica
+            // story.fields.parent es la épica (nombre)
             const epicSummary = story.fields?.parent?.fields?.summary || story.fields?.parent?.key || '';
             epicNameMap[story.key] = epicSummary;
+            // Código del proyecto desde la historia misma (heredado de la épica vía epic link)
+            // o desde el parent si viene con campos expandidos
+            const epicCodigo =
+              story.fields?.customfield_10659 ||
+              story.fields?.customfield_10829 ||
+              story.fields?.parent?.fields?.customfield_10659 ||
+              story.fields?.parent?.fields?.customfield_10829 || '';
+            epicCodigoMap[story.key] = epicCodigo;
           });
         }
       }
@@ -217,7 +227,8 @@ module.exports = async function handler(req, res) {
       // Inyectar epicName en cada subtarea
       subtareas.forEach(s => {
         const storyKey = s.fields?.parent?.key;
-        s.fields._epicName = storyKey ? (epicNameMap[storyKey] || '') : '';
+        s.fields._epicName   = storyKey ? (epicNameMap[storyKey]   || '') : '';
+        s.fields._epicCodigo = storyKey ? (epicCodigoMap[storyKey] || '') : '';
       });
 
       // 3. Por cada subtarea, traer su worklog via REST
