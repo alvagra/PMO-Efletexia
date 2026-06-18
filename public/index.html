@@ -588,15 +588,11 @@ a.jlink:hover{text-decoration:underline}
       </div>
       <button class="cap-detail-close" onclick="closeCapDetail()">✕</button>
     </div>
-    <div class="cap-detail-filters" style="display:flex;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap;align-items:flex-end">
-      <div class="filter-group"><label class="filter-label" for="det-tipo">Tipo</label><select id="det-tipo" class="filter-input"><option value="">Todos</option><option value="real">Real</option><option value="planeado">Planificado</option></select></div>
-      <div class="filter-group"><label class="filter-label" for="det-sort">Ordenar por</label><select id="det-sort" class="filter-input"><option value="fecha">Fecha</option><option value="horas">Horas</option><option value="proyecto">Proyecto</option><option value="subtarea">Actividad</option></select></div>
-      <div class="filter-group"><label class="filter-label" for="det-dir">Dirección</label><select id="det-dir" class="filter-input"><option value="asc">↑ Asc</option><option value="desc">↓ Desc</option></select></div>
-    </div>
+
     <div class="cap-detail-body">
       <table class="cap-detail-table">
         <thead><tr>
-          <th>Fecha</th><th>Horas</th><th>Código</th><th>Proyecto</th><th>Actividad</th><th>Comentario</th><th>Tipo</th>
+          <th>Fecha</th><th>Horas</th><th>Código</th><th>Proyecto</th><th>Actividad</th><th>Comentario</th>
         </tr></thead>
         <tbody id="cap-detail-body"></tbody>
       </table>
