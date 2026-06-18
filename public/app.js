@@ -81,7 +81,7 @@ function exportPortafolioCSV(){
   const data = sortedData(getFiltered());
   const hdr  = ['Clave','Código','Proyecto','Categoría','Área','Sponsor','Estado',
                  'Plan%','Real%','Desvío%','Des%','Pru%','FechaInicio','FechaFin',
-                 'Conformidad','DocFuncional','Bloqueante'];
+                 'COND.','Conformidad','DocFuncional','Bloqueante'];
   const rows = data.map(e => [
     e.key, e.codigo, e.summary, e.categoria, e.area, e.sponsor, e.status,
     e.planPct!==null?Math.round(e.planPct*100):'',
@@ -90,7 +90,7 @@ function exportPortafolioCSV(){
     e.pctDesarrollo!==null?Math.round(e.pctDesarrollo*100):'',
     e.pctPruebas!==null?Math.round(e.pctPruebas*100):'',
     e.fechaInicio||'', e.duedate||'',
-    e.conformidad||'', e.docFuncional||'', e.bloqueante||''
+    e.condicion||'', e.conformidad||'', e.docFuncional||'', e.bloqueante||''
   ]);
   downloadCSV([hdr,...rows], `portafolio_${new Date().toISOString().slice(0,10)}.csv`);
 }
@@ -123,7 +123,7 @@ const JIRA_FIELDS = [
   "customfield_10930","customfield_10931","customfield_10934",
   "customfield_10829","customfield_10862","customfield_10969",
   "customfield_10970","customfield_11003","customfield_11004",
-  "customfield_11037","customfield_11070"
+  "customfield_11037","customfield_11070","customfield_11136"
 ];
 
 function parseIssue(i){
@@ -157,6 +157,7 @@ function parseIssue(i){
     conformidad:f.customfield_11004?f.customfield_11004.value:null,
     prioridad:f.customfield_11037?f.customfield_11037.value:null,
     sponsor:f.customfield_11070?f.customfield_11070.value:null,
+    condicion:(()=>{ const v=f.customfield_11136; if(!v) return null; if(typeof v==='string') return v; if(v.content) return adfToText(v).trim(); if(v.value) return v.value; return null; })(),
     bitacora:bit||null,
     proximosPasos:prox||null,
   };
@@ -211,6 +212,7 @@ function renderTable(data){
       <td class="muted">${e.pctDesarrollo!==null?Math.round(e.pctDesarrollo*100)+'% / '+(e.pctPruebas!==null?Math.round(e.pctPruebas*100)+'%':'—'):'—'}</td>
       <td class="muted">${fmtD(e.fechaInicio)||'—'}</td>
       <td class="muted">${fmtD(e.duedate)||'—'}</td>
+      <td style="max-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-muted)" title="${esc(e.condicion||'')}">${esc(e.condicion||'—')}</td>
       <td class="muted">${e.conformidad==='Si'?'<span style="color:var(--green);font-size:15px">✓</span>':'—'}</td>
       <td class="muted">${e.docFuncional==='Si'?'<span style="color:var(--green);font-size:15px">✓</span>':e.docFuncional==='No'?'<span style="color:var(--red);font-size:15px">✕</span>':'—'}</td>
       <td><button class="btn-action" type="button" title="Cronograma y detalles" onclick="openModal('${e.key}');event.stopPropagation()">···</button></td>
