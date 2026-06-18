@@ -1110,7 +1110,8 @@ async function loadCapacity(){
     (j.issues || []).forEach(sub => {
       const f = sub.fields || {};
       const subtareaNom = f.summary || sub.key;
-      const proyectoNom = f._epicName || '';
+      const proyectoNom  = f._epicName   || '';
+      const codigoProy   = f._epicCodigo || '';
       const logs = f._worklogs || [];
 
       // Solo mostrar subtareas con horas registradas en "Registro de actividad" de Jira
@@ -1128,7 +1129,7 @@ async function loadCapacity(){
           const recReal = resolveNombreDesdeJira(persona);
           capRows.push({
             fecha: fechaIso, persona, horas,
-            proyecto: proyectoNom, subKey: sub.key, subtarea: subtareaNom,
+            proyecto: proyectoNom, codigoProy, subKey: sub.key, subtarea: subtareaNom,
             comentario, esPlaneado: false,
             area: recReal?.area || '', pais: recReal?.pais || ''
           });
@@ -1457,76 +1458,36 @@ function renderCalendar(filtered, personas, weeksByPersona){
 }
 
 // ── Detail drawer ──────────────────────────────────────────
-// State for current detail
-let _detPersona = '', _detFecha = '';
-
 function openCapDetail(persona, fecha){
-  _detPersona = persona; _detFecha = fecha;
+  const rows = capRows.filter(r => r.persona === persona && r.fecha === fecha);
+  if(!rows.length) return;
+
   const dt = new Date(fecha+'T12:00:00');
   const fechaFmt = dt.toLocaleDateString('es-PE',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
-  const allRows = capRows.filter(r => r.persona === persona && r.fecha === fecha);
-  if(!allRows.length) return;
-  const totalH = allRows.reduce((s,r)=>s+r.horas,0);
+  const totalH = rows.reduce((s,r)=>s+r.horas,0);
 
   document.getElementById('cap-detail-title').textContent = persona;
   document.getElementById('cap-detail-sub').textContent   = `${fechaFmt} · ${totalH.toFixed(2)}h total`;
 
-  // Reset detail filters
-  const dTipo = document.getElementById('det-tipo'); if(dTipo) dTipo.value='';
-  const dSort = document.getElementById('det-sort'); if(dSort) dSort.value='fecha';
-  const dDir  = document.getElementById('det-dir');  if(dDir)  dDir.value='asc';
-
-  // Wire detail filter listeners (safe to re-add)
-  ['det-tipo','det-sort','det-dir'].forEach(id => {
-    const el = document.getElementById(id);
-    if(el){ el.onchange = renderDetailBody; }
-  });
-
-  renderDetailBody();
-  document.getElementById('cap-detail-overlay').style.display = 'flex';
-}
-
-function renderDetailBody(){
-  const tipo = document.getElementById('det-tipo')?.value || '';
-  const sort = document.getElementById('det-sort')?.value || 'fecha';
-  const dir  = document.getElementById('det-dir')?.value  || 'asc';
-
-  let rows = capRows.filter(r => r.persona === _detPersona && r.fecha === _detFecha);
-  if(tipo === 'real')     rows = rows.filter(r => !r.esPlaneado);
-  if(tipo === 'planeado') rows = rows.filter(r =>  r.esPlaneado);
-
-  rows = [...rows].sort((a,b) => {
-    let va = a[sort]||'', vb = b[sort]||'';
-    if(typeof va==='number'||typeof vb==='number'){ va=va||0; vb=vb||0; }
-    return (va<vb?-1:va>vb?1:0) * (dir==='asc'?1:-1);
-  });
-
   const tb = document.getElementById('cap-detail-body');
   if(!tb) return;
-  if(!rows.length){
-    tb.innerHTML='<tr><td colspan="7" style="padding:20px;text-align:center;color:var(--text-dim)">Sin registros</td></tr>';
-    return;
-  }
   tb.innerHTML = rows.map(r => {
     const horasCls = r.horas >= 8 ? 'cap-horas-high' : r.horas >= 4 ? 'cap-horas-med' : 'cap-horas-low';
-    const rowStyle = r.esPlaneado ? 'opacity:.8;font-style:italic' : '';
     const comentario = r.comentario || '—';
-    const tipoLabel  = r.esPlaneado
-      ? '<span style="font-size:10px;color:var(--text-dim)">Planif.</span>'
-      : '<span style="font-size:10px;color:var(--cyan)">Real</span>';
-    const subKeyLink = r.subKey
-      ? `<a href="${JIRA_BASE}${esc(r.subKey)}" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:none;font-size:11px">${esc(r.subKey)}</a>`
+    const codigoCell = r.codigoProy
+      ? `<span style="font-weight:600;color:var(--blue)">${esc(r.codigoProy)}</span>`
       : '—';
-    return `<tr style="${rowStyle}">
+    return `<tr>
       <td style="color:var(--text-muted);white-space:nowrap">${fmtD(r.fecha)||'—'}</td>
       <td><span class="cap-horas-badge ${horasCls}">${r.horas}h</span></td>
-      <td style="white-space:nowrap">${subKeyLink}</td>
+      <td style="white-space:nowrap">${codigoCell}</td>
       <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-muted)" title="${esc(r.proyecto||'')}">${esc(r.proyecto||'—')}</td>
       <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.subtarea)}">${esc(r.subtarea)}</td>
       <td style="color:var(--text-muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(comentario)}">${esc(comentario)}</td>
-      <td>${tipoLabel}</td>
     </tr>`;
   }).join('');
+
+  document.getElementById('cap-detail-overlay').style.display = 'flex';
 }
 
 function closeCapDetail(event){
