@@ -620,35 +620,11 @@ function buildGantt(e, stories){
 }
 
 function buildDetail(e){
-  const pA=e.pctAnalisis!==null?Math.round(e.pctAnalisis*100):null;
-  const pD=e.pctDesarrollo!==null?Math.round(e.pctDesarrollo*100):null;
-  const pP=e.pctPruebas!==null?Math.round(e.pctPruebas*100):null;
-  const pPlan=e.planPct!==null?Math.round(e.planPct*100):null;
-  const pReal=e.realPct!==null?Math.round(e.realPct*100):null;
-  const pDesv=e.desvioPct!==null?Math.round(e.desvioPct*100):null;
-  const desvColor=pDesv===null?'var(--text-muted)':Math.abs(pDesv)>17?'var(--red)':Math.abs(pDesv)>=5?'var(--yellow)':'var(--green)';
   const bitHtml=e.bitacora?`<div class="log-box">${esc(e.bitacora)}</div>`:`<div class="log-box empty">Sin registros en bitácora</div>`;
   const proxHtml=e.proximosPasos?`<div class="log-box">${esc(e.proximosPasos)}</div>`:`<div class="log-box empty">Sin próximos pasos definidos</div>`;
   return `
     <div class="dsec">Detalles clave</div>
-    <div class="drow"><span class="dlbl">Asignado</span><span class="dval ${e.asignado?'':'m'}">${esc(e.asignado)||'—'}</span></div>
-    <div class="drow"><span class="dlbl">Fecha de inicio</span><span class="dval">${fmtD(e.fechaInicio)||'<span class="dval m">—</span>'}</span></div>
-    <div class="drow"><span class="dlbl">Fecha de vencimiento</span><span class="dval">${fmtD(e.duedate)?'📅 '+fmtD(e.duedate):'<span class="dval m">—</span>'}</span></div>
-    <div class="drow"><span class="dlbl">País</span><span class="dval">${pill(e.pais)}</span></div>
-    <div class="drow"><span class="dlbl">Área</span><span class="dval">${pill(e.area)}</span></div>
-    <div class="drow"><span class="dlbl">Sponsor</span><span class="dval ${e.sponsor?'':'m'}">${esc(e.sponsor)||'—'}</span></div>
-    <div class="drow"><span class="dlbl">Categoría</span><span class="dval">${pill(e.categoria)}</span></div>
-    <div class="drow"><span class="dlbl">Prioridad</span><span class="dval">${e.prioridad?`<span class="pill">${e.prioridad}</span>`:'<span class="dval m">—</span>'}</span></div>
-    <div class="drow"><span class="dlbl">Doc Funcional</span><span class="dval">${pill(e.docFuncional)}</span></div>
-    <div class="drow"><span class="dlbl">Responsable DF</span><span class="dval ${e.responsableDF?'':'m'}">${esc(e.responsableDF)||'—'}</span></div>
-    <div class="drow"><span class="dlbl">Bloqueante</span><span class="dval">${pill(e.bloqueante)}</span></div>
-    <div class="drow"><span class="dlbl">Conformidad</span><span class="dval">${pill(e.conformidad)}</span></div>
-    <div class="drow"><span class="dlbl">% Análisis</span><span class="dval">${pA!==null?pA+' %':'<span class="dval m">—</span>'}</span></div>
-    <div class="drow"><span class="dlbl">% Desarrollo</span><span class="dval">${pD!==null?pD+' %':'<span class="dval m">—</span>'}</span></div>
-    <div class="drow"><span class="dlbl">% Pruebas</span><span class="dval">${pP!==null?pP+' %':'<span class="dval m">—</span>'}</span></div>
-    <div class="drow"><span class="dlbl">Plan (%)</span><span class="dval">${pPlan!==null?pPlan+' %':'<span class="dval m">—</span>'}</span></div>
-    <div class="drow"><span class="dlbl">Real (%)</span><span class="dval">${pReal!==null?pReal+' %':'<span class="dval m">—</span>'}</span></div>
-    <div class="drow"><span class="dlbl">Desvío (%)</span><span class="dval" style="color:${desvColor}">${pDesv!==null?pDesv+' %':'<span class="dval m">—</span>'}</span></div>
+    <div class="drow"><span class="dlbl">Detalles clave</span><span class="dval ${e.condicion?'':'m'}">${esc(e.condicion)||'—'}</span></div>
     <div class="log-section">
       <div class="log-title"><div class="log-title-bar"></div>Bitácora</div>
       ${bitHtml}
