@@ -630,12 +630,10 @@ function buildDetail(e){
   const bitHtml=e.bitacora?`<div class="log-box">${esc(e.bitacora)}</div>`:`<div class="log-box empty">Sin registros en bitácora</div>`;
   const proxHtml=e.proximosPasos?`<div class="log-box">${esc(e.proximosPasos)}</div>`:`<div class="log-box empty">Sin próximos pasos definidos</div>`;
   return `
-    <div class="dsec">Asignación</div>
+    <div class="dsec">Detalles clave</div>
     <div class="drow"><span class="dlbl">Asignado</span><span class="dval ${e.asignado?'':'m'}">${esc(e.asignado)||'—'}</span></div>
-    <div class="dsec">Fechas</div>
     <div class="drow"><span class="dlbl">Fecha de inicio</span><span class="dval">${fmtD(e.fechaInicio)||'<span class="dval m">—</span>'}</span></div>
     <div class="drow"><span class="dlbl">Fecha de vencimiento</span><span class="dval">${fmtD(e.duedate)?'📅 '+fmtD(e.duedate):'<span class="dval m">—</span>'}</span></div>
-    <div class="dsec">Clasificación</div>
     <div class="drow"><span class="dlbl">País</span><span class="dval">${pill(e.pais)}</span></div>
     <div class="drow"><span class="dlbl">Área</span><span class="dval">${pill(e.area)}</span></div>
     <div class="drow"><span class="dlbl">Sponsor</span><span class="dval ${e.sponsor?'':'m'}">${esc(e.sponsor)||'—'}</span></div>
@@ -645,7 +643,6 @@ function buildDetail(e){
     <div class="drow"><span class="dlbl">Responsable DF</span><span class="dval ${e.responsableDF?'':'m'}">${esc(e.responsableDF)||'—'}</span></div>
     <div class="drow"><span class="dlbl">Bloqueante</span><span class="dval">${pill(e.bloqueante)}</span></div>
     <div class="drow"><span class="dlbl">Conformidad</span><span class="dval">${pill(e.conformidad)}</span></div>
-    <div class="dsec">Progreso</div>
     <div class="drow"><span class="dlbl">% Análisis</span><span class="dval">${pA!==null?pA+' %':'<span class="dval m">—</span>'}</span></div>
     <div class="drow"><span class="dlbl">% Desarrollo</span><span class="dval">${pD!==null?pD+' %':'<span class="dval m">—</span>'}</span></div>
     <div class="drow"><span class="dlbl">% Pruebas</span><span class="dval">${pP!==null?pP+' %':'<span class="dval m">—</span>'}</span></div>
