@@ -116,7 +116,7 @@ document.querySelectorAll('.tabs .tab').forEach(tab => {
 
 // ── PORTAFOLIO: parse & render ─────────────────────────────
 const JIRA_FIELDS = [
-  "summary","status","assignee","reporter","labels","duedate",
+  "summary","status","assignee","reporter","labels","duedate","description",
   "customfield_10015","customfield_10592","customfield_10659",
   "customfield_10725","customfield_10726","customfield_10759",
   "customfield_10895","customfield_10928","customfield_10929",
@@ -131,6 +131,9 @@ function parseIssue(i){
   let bit=f.customfield_10829, prox=f.customfield_10862;
   if(bit&&typeof bit==='object') bit=adfToText(bit).trim();
   if(prox&&typeof prox==='object') prox=adfToText(prox).trim();
+  let desc=f.description;
+  if(desc&&typeof desc==='object') desc=adfToText(desc).trim();
+  else if(typeof desc!=='string') desc=null;
   return{
     key:i.key,
     codigo:f.customfield_10934||null,
@@ -182,6 +185,7 @@ function parseIssue(i){
     })(),
     bitacora:bit||null,
     proximosPasos:prox||null,
+    descripcion:desc||null,
   };
 }
 
@@ -622,10 +626,12 @@ function buildGantt(e, stories){
 function buildDetail(e){
   const bitHtml=e.bitacora?`<div class="log-box">${esc(e.bitacora)}</div>`:`<div class="log-box empty">Sin registros en bitácora</div>`;
   const proxHtml=e.proximosPasos?`<div class="log-box">${esc(e.proximosPasos)}</div>`:`<div class="log-box empty">Sin próximos pasos definidos</div>`;
+  const descHtml=e.descripcion?`<div class="log-box" style="border-left-color:var(--blue)">${esc(e.descripcion)}</div>`:`<div class="log-box empty">Sin descripción definida</div>`;
   return `
-    <div class="dsec">Detalles clave</div>
-    <div class="drow"><span class="dlbl">Detalles clave</span><span class="dval ${e.condicion?'':'m'}">${esc(e.condicion)||'—'}</span></div>
     <div class="log-section">
+      <div class="log-title"><div class="log-title-bar" style="background:var(--blue)"></div>Detalles clave</div>
+      ${descHtml}
+      <div class="log-spacer"></div>
       <div class="log-title"><div class="log-title-bar"></div>Bitácora</div>
       ${bitHtml}
       <div class="log-spacer"></div>
