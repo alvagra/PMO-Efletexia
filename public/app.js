@@ -1532,11 +1532,6 @@ async function fetchSpecialStories(epicKey) {
       body: JSON.stringify({ type: 'stories', epicKey })
     });
     const data = await resp.json();
-    // DEBUG TEMPORAL: loguear campos de subtarea para identificar campo HP
-    if(data._debugSubKey) {
-      console.warn('[HP DEBUG] Subtarea key:', data._debugSubKey);
-      console.warn('[HP DEBUG] Campos no vacíos de subtarea:', data._debugSubFields);
-    }
     specialStoriesCache[epicKey] = data.stories || [];
   } catch(e) {
     specialStoriesCache[epicKey] = [];
@@ -1548,10 +1543,10 @@ function parseSpecialStory(s) {
   const f = s.fields || {};
   const isDone = ['done','cerrado','closed','producción','produccion'].includes((f.status?.name||'').toLowerCase());
   const subtasks = f._subtasks || [];
-  // HP = suma de customfield_10016 ("Horas estimadas") de subtareas (valor numérico directo)
+  // HP = suma de customfield_11136 ("Horas estimadas") de subtareas (valor numérico directo)
   const horasPlan = subtasks.reduce((acc, sub) => {
     const sf = sub.fields || {};
-    return acc + (sf.customfield_10016 || 0);
+    return acc + (sf.customfield_11136 || 0);
   }, 0);
   // HR = suma de timespent de subtareas (en segundos → horas)
   const horasReal = subtasks.reduce((acc, sub) => {
@@ -1571,7 +1566,7 @@ function parseSpecialStory(s) {
       asignado: sf.assignee?.displayName || null,
       fechaInicio: sf.customfield_10015 || null,
       duedate: sf.duedate || null,
-      horasPlan: sf.customfield_10016 || 0,
+      horasPlan: sf.customfield_11136 || 0,
       horasReal: (sf.timespent || 0) / 3600,
       status: sf.status?.name || '—'
     };
