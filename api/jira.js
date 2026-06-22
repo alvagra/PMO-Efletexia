@@ -134,7 +134,7 @@ module.exports = async function handler(req, res) {
       if (!epicKey) return res.status(400).json({ error: 'epicKey requerido' });
 
       const STORY_FIELDS = ['summary','status','assignee','parent','customfield_10015','duedate','subtasks','customfield_10725','customfield_10726','issuetype','customfield_10930','customfield_11070','customfield_11004','customfield_10895','customfield_10928','customfield_10929','customfield_10934','story_points','customfield_10016'];
-      const SUBTASK_FIELDS = ['summary','status','assignee','parent','customfield_10015','duedate','issuetype'];
+      const SUBTASK_FIELDS = ['summary','status','assignee','parent','customfield_10015','duedate','issuetype','timeoriginalestimate','timespent','customfield_10934'];
 
       // Buscar todos los hijos directos de la épica (Next-gen: parent=EPIC; clásico: Epic Link)
       let storiesFinal = await fetchAllPages(auth, JIRA_CLOUD,
