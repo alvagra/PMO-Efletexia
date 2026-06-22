@@ -4,6 +4,13 @@
 const JIRA_BASE = "https://efletexia.atlassian.net/browse/";
 const TODAY = new Date(); TODAY.setHours(0,0,0,0);
 
+// Épicas especiales excluidas de la bitácora principal
+const SPECIAL_EPICS = {
+  'PTS-327': { label: 'Soporte Requerimientos', icon: '🛠️' },
+  'PTS-326': { label: 'Gestión PMO-TI',         icon: '📋' }
+};
+const SPECIAL_EPIC_KEYS = Object.keys(SPECIAL_EPICS);
+
 // Data stores
 let epics    = [];
 let recursos = [];
@@ -197,7 +204,8 @@ function updateKpis(data){
   const avgs=data.map(e=>e.realPct!==null?e.realPct:null).filter(v=>v!==null);
   const avg =avgs.length?Math.round(avgs.reduce((a,b)=>a+b,0)/avgs.length*100):0;
   const cj  =data.filter(e=>e.duedate&&e.duedate.startsWith('2026-06')).length;
-  const isFiltered=data.length<epics.length;
+  const mainEpicsTotal=epics.filter(e=>!SPECIAL_EPIC_KEYS.includes(e.key)).length;
+  const isFiltered=data.length<mainEpicsTotal;
   function setKpi(id,val){
     const el=document.getElementById(id); if(!el) return;
     const prev=el.dataset.val;
@@ -213,17 +221,19 @@ function updateKpis(data){
   setKpi('kpi-avg',  avg+'%');
   setKpi('kpi-cj',   cj);
   document.getElementById('hdr-meta').textContent=isFiltered
-    ?`PMO TI · ${t} de ${epics.length} épicas`
-    :`PMO TI · ${epics.length} épicas`;
+    ?`PMO TI · ${t} de ${mainEpicsTotal} épicas`
+    :`PMO TI · ${mainEpicsTotal} épicas`;
 }
 
 function renderTable(data){
-  updateKpis(data);
+  const mainData = data.filter(e=>!SPECIAL_EPIC_KEYS.includes(e.key));
+  updateKpis(mainData);
   const info=document.getElementById('table-info');
-  if(info) info.innerHTML=`Mostrando <strong>${data.length}</strong> de ${epics.length} épicas`;
+  if(info) info.innerHTML=`Mostrando <strong>${mainData.length}</strong> de ${epics.filter(e=>!SPECIAL_EPIC_KEYS.includes(e.key)).length} épicas`;
+  const data_=mainData;
   const tb=document.getElementById('table-body');
-  if(!data.length){ tb.innerHTML='<tr><td colspan="15" style="text-align:center;padding:40px;color:var(--text-muted)">Sin resultados</td></tr>'; return; }
-  tb.innerHTML=data.map(e=>`
+  if(!data_.length){ tb.innerHTML='<tr><td colspan="15" style="text-align:center;padding:40px;color:var(--text-muted)">Sin resultados</td></tr>'; return; }
+  tb.innerHTML=data_.map(e=>`
     <tr data-key="${e.key}">
       <td style="text-align:center;font-weight:600;color:var(--text-primary)">${e.prioridad||'—'}</td>
       <td class="code"><a class="jlink" href="${JIRA_BASE}${e.key}" target="_blank" onclick="event.stopPropagation()">${esc(e.codigo||e.key)}</a></td>
@@ -258,6 +268,7 @@ function getFiltered(){
   const a  = document.getElementById('s-area').value;
   const ck = [...document.querySelectorAll('.estados-grid input:checked')].map(x=>x.value);
   return epics.filter(e=>{
+    if(SPECIAL_EPIC_KEYS.includes(e.key)) return false;
     if(s && !(e.codigo||'').toLowerCase().includes(s) && !e.summary.toLowerCase().includes(s) && !e.key.toLowerCase().includes(s)) return false;
     if(sp && e.sponsor!==sp) return false;
     if(p  && e.pais!==p)    return false;
@@ -361,8 +372,10 @@ async function loadData(manual=false){
       <div class="kpi"><div class="kpi-label">Cierre junio</div><div class="kpi-value c-green" id="kpi-cj"></div></div>
     `;
     sortCol=null; sortDir=1;
-    renderTable(epics);
-    updateKpis(epics);
+    const mainEpics=epics.filter(e=>!SPECIAL_EPIC_KEYS.includes(e.key));
+    renderTable(mainEpics);
+    updateKpis(mainEpics);
+    renderSpecialSections();
   }catch(err){
     console.error(err);
     loading.classList.add('hidden');
@@ -1505,3 +1518,187 @@ document.getElementById('btn-export-cap')?.addEventListener('click', () => {
   const rows = filtered.map(r => [r.fecha||'', r.persona, r.horas, r.proyecto||'', r.subtarea, r.comentario, r.esPlaneado?'Planificado':'Real']);
   downloadCSV([hdr,...rows], `capacity_${new Date().toISOString().slice(0,10)}.csv`);
 });
+
+// ── SECCIONES ESPECIALES (Soporte Requerimientos / Gestión PMO-TI) ──────────
+
+const specialStoriesCache = {};
+
+async function fetchSpecialStories(epicKey) {
+  if (specialStoriesCache[epicKey] !== undefined) return specialStoriesCache[epicKey];
+  try {
+    const resp = await fetch('/api/jira', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'stories', epicKey })
+    });
+    const data = await resp.json();
+    specialStoriesCache[epicKey] = data.stories || [];
+  } catch(e) {
+    specialStoriesCache[epicKey] = [];
+  }
+  return specialStoriesCache[epicKey];
+}
+
+function parseSpecialStory(s) {
+  const f = s.fields || {};
+  const isDone = ['done','cerrado','closed','producción','produccion'].includes((f.status?.name||'').toLowerCase());
+  const horas = f.customfield_10016 || f.story_points || null;
+  const avance = f.customfield_10726 !== undefined && f.customfield_10726 !== null
+    ? Math.round(f.customfield_10726 * 100)
+    : (f.customfield_10895 !== undefined && f.customfield_10895 !== null
+        ? Math.round(f.customfield_10895 * 100)
+        : null);
+  return {
+    key: s.key,
+    codigo: f.customfield_10934 || s.key,
+    summary: f.summary || '—',
+    area: f.customfield_10930?.value || null,
+    sponsor: f.customfield_11070?.value || null,
+    asignado: f.assignee?.displayName || null,
+    horas: horas,
+    fechaInicio: f.customfield_10015 || null,
+    duedate: f.duedate || null,
+    status: f.status?.name || '—',
+    conformidad: f.customfield_11004?.value || null,
+    avance: avance,
+    isDone
+  };
+}
+
+function buildSpecialKpis(stories) {
+  const total = stories.length;
+  const cerradas = stories.filter(s => s.isDone).length;
+  const pendientes = total - cerradas;
+  const horasTot = stories.reduce((a, s) => a + (s.horas || 0), 0);
+  const avgs = stories.map(s => s.avance).filter(v => v !== null);
+  const avgAvance = avgs.length ? Math.round(avgs.reduce((a, b) => a + b, 0) / avgs.length) : 0;
+  return `
+    <div class="sp-kpis">
+      <div class="sp-kpi"><div class="sp-kpi-label">Total historias</div><div class="sp-kpi-val c-white">${total}</div></div>
+      <div class="sp-kpi"><div class="sp-kpi-label">Horas totales</div><div class="sp-kpi-val c-cyan">${horasTot > 0 ? horasTot.toFixed(1) : '—'}</div></div>
+      <div class="sp-kpi"><div class="sp-kpi-label">Cerradas</div><div class="sp-kpi-val c-green">${cerradas}</div></div>
+      <div class="sp-kpi"><div class="sp-kpi-label">Pendientes</div><div class="sp-kpi-val c-yellow">${pendientes}</div></div>
+      <div class="sp-kpi"><div class="sp-kpi-label">% Avance prom.</div><div class="sp-kpi-val c-blue">${avgAvance}%</div></div>
+    </div>`;
+}
+
+function buildSpecialTable(stories, sectionId) {
+  if (!stories.length) return '<div style="padding:16px 20px;color:var(--text-muted);font-size:13px">Sin historias encontradas.</div>';
+
+  const searchId = `sp-search-${sectionId}`;
+  const tbodyId  = `sp-tbody-${sectionId}`;
+  const infoId   = `sp-info-${sectionId}`;
+
+  // render rows helper stored inline
+  return `
+    <div class="sp-table-controls">
+      <input id="${searchId}" class="filter-input" placeholder="Buscar historia..." autocomplete="off" style="max-width:260px"
+        oninput="filterSpecialTable('${sectionId}')"/>
+      <span id="${infoId}" class="sp-info">${stories.length} historias</span>
+    </div>
+    <div class="table-wrap" style="margin:0">
+      <table>
+        <thead>
+          <tr>
+            <th>Código</th>
+            <th>Historia</th>
+            <th>Área</th>
+            <th>Sponsor</th>
+            <th>Asignado</th>
+            <th>Horas</th>
+            <th>Inicio</th>
+            <th>Fin</th>
+            <th>Estado</th>
+            <th>Conform.</th>
+            <th>% Avance</th>
+          </tr>
+        </thead>
+        <tbody id="${tbodyId}">
+          ${renderSpecialRows(stories)}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+function renderSpecialRows(stories) {
+  return stories.map(s => `
+    <tr>
+      <td class="code"><a class="jlink" href="${JIRA_BASE}${s.key}" target="_blank">${esc(s.codigo)}</a></td>
+      <td class="proj" title="${esc(s.summary)}">${esc(s.summary)}</td>
+      <td class="muted">${s.area ? `<span class="pill">${esc(s.area)}</span>` : '—'}</td>
+      <td class="muted">${esc(s.sponsor) || '—'}</td>
+      <td class="muted">${esc(s.asignado) || '—'}</td>
+      <td class="muted">${s.horas !== null ? s.horas : '—'}</td>
+      <td class="muted">${fmtD(s.fechaInicio) || '—'}</td>
+      <td class="muted">${fmtD(s.duedate) || '—'}</td>
+      <td><span class="badge badge-${sbClass(s.status)}">${esc(s.status)}</span></td>
+      <td class="muted">${s.conformidad === 'Si' ? '<span style="color:var(--green);font-size:15px">✓</span>' : '—'}</td>
+      <td class="muted">${s.avance !== null ? s.avance + ' %' : '—'}</td>
+    </tr>`).join('');
+}
+
+// Cache de stories parseadas por sección para el filtro
+const specialParsedCache = {};
+
+function filterSpecialTable(sectionId) {
+  const input = document.getElementById(`sp-search-${sectionId}`);
+  const tbody = document.getElementById(`sp-tbody-${sectionId}`);
+  const info  = document.getElementById(`sp-info-${sectionId}`);
+  if (!input || !tbody) return;
+  const q = input.value.toLowerCase();
+  const all = specialParsedCache[sectionId] || [];
+  const filtered = q ? all.filter(s =>
+    s.summary.toLowerCase().includes(q) ||
+    s.codigo.toLowerCase().includes(q) ||
+    (s.asignado||'').toLowerCase().includes(q) ||
+    (s.area||'').toLowerCase().includes(q)
+  ) : all;
+  tbody.innerHTML = renderSpecialRows(filtered);
+  if (info) info.textContent = `${filtered.length} de ${all.length} historias`;
+}
+
+function toggleSpecialSection(sectionId) {
+  const body = document.getElementById(`sp-body-${sectionId}`);
+  const icon = document.getElementById(`sp-icon-${sectionId}`);
+  if (!body) return;
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : 'block';
+  if (icon) icon.textContent = isOpen ? '▶' : '▼';
+
+  // Lazy load: cargar datos al expandir por primera vez
+  if (!isOpen && !specialParsedCache[sectionId]) {
+    const epicKey = body.dataset.epickey;
+    const loadingEl = document.getElementById(`sp-loading-${sectionId}`);
+    fetchSpecialStories(epicKey).then(rawStories => {
+      const stories = rawStories.map(parseSpecialStory);
+      specialParsedCache[sectionId] = stories;
+      const container = document.getElementById(`sp-content-${sectionId}`);
+      if (container) {
+        container.innerHTML = buildSpecialKpis(stories) + buildSpecialTable(stories, sectionId);
+      }
+    });
+  }
+}
+
+async function renderSpecialSections() {
+  const container = document.getElementById('special-sections-container');
+  if (!container) return;
+
+  const entries = Object.entries(SPECIAL_EPICS); // [[key, {label,icon}], ...]
+  container.innerHTML = entries.map(([epicKey, meta]) => {
+    const sId = epicKey.replace('-', '_');
+    return `
+      <div class="sp-section">
+        <div class="sp-header" onclick="toggleSpecialSection('${sId}')">
+          <span class="sp-icon" id="sp-icon-${sId}">▶</span>
+          <span class="sp-title">${meta.icon} ${meta.label}</span>
+          <span class="sp-hint">Clic para expandir</span>
+        </div>
+        <div class="sp-body" id="sp-body-${sId}" style="display:none" data-epickey="${epicKey}">
+          <div id="sp-content-${sId}">
+            <div id="sp-loading-${sId}" style="padding:16px 20px;color:var(--text-muted);font-size:13px">Cargando historias...</div>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
