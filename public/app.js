@@ -1532,6 +1532,11 @@ async function fetchSpecialStories(epicKey) {
       body: JSON.stringify({ type: 'stories', epicKey })
     });
     const data = await resp.json();
+    // DEBUG TEMPORAL: loguear campos de subtarea para identificar campo HP
+    if(data._debugSubKey) {
+      console.warn('[HP DEBUG] Subtarea key:', data._debugSubKey);
+      console.warn('[HP DEBUG] Campos no vacíos de subtarea:', data._debugSubFields);
+    }
     specialStoriesCache[epicKey] = data.stories || [];
   } catch(e) {
     specialStoriesCache[epicKey] = [];
