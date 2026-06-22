@@ -885,8 +885,11 @@ function renderRecursos(){
       </div>
     </div>`;
     const bloqHtml=r.bloqueantes>0?`<span class="rec-bloq rec-bloq-warn">⚠ ${r.bloqueantes}</span>`:`<span class="rec-bloq rec-bloq-ok">✓</span>`;
-    return `<tr>
-      <td><span class="rec-name">${esc(r.nombre)}</span></td>
+    const hoyIso = new Date().toISOString().slice(0,10);
+    const enVacRec = estaDeVacaciones(r.nombre, hoyIso);
+    const vacBadgeRec = enVacRec ? ' <span style="background:rgba(99,102,241,.2);color:#818cf8;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;margin-left:4px">V</span>' : '';
+    return `<tr${enVacRec ? ' style="opacity:.7"' : ''}>
+      <td><span class="rec-name">${esc(r.nombre)}</span>${vacBadgeRec}</td>
       <td>${areaBadge}</td>
       <td style="text-align:center">${r.proyectos}</td>
       <td><span class="${hClass}">${r.horasPend}h</span></td>
@@ -1030,6 +1033,20 @@ const NOMENCLATURA = {
   'DV2': { nombre: 'Daniela Velarde',    pais: 'Peru',      area: 'Data' },
   'LE':  { nombre: 'Lucia Escobar',      pais: 'Colombia',  area: 'Operación' },
 };
+
+// Vacaciones por persona: { 'Nombre': [['YYYY-MM-DD','YYYY-MM-DD'], ...] }
+const VACACIONES = {
+  'Eric Cacho': [
+    ['2026-07-11', '2026-07-25'],
+    ['2026-12-21', '2026-12-31']
+  ]
+};
+
+function estaDeVacaciones(nombre, fecha) {
+  const rangos = VACACIONES[nombre];
+  if (!rangos) return false;
+  return rangos.some(([ini, fin]) => fecha >= ini && fecha <= fin);
+}
 
 const FERIADOS = {
   'Peru': new Set([
@@ -1431,9 +1448,12 @@ function renderCalendar(filtered, personas, weeksByPersona){
         const hTotal = rows.reduce((s,r)=>s+r.horas,0);
         weekTotal += hTotal;
 
+        const isVac = !isWE && estaDeVacaciones(persona, d);
         let cellClass, cellLabel;
         if(isWE){
           cellClass = 'c-weekend'; cellLabel = '—';
+        } else if(isVac){
+          cellClass = 'c-vacation'; cellLabel = 'V';
         } else if(isFer){
           cellClass = 'c-holiday'; cellLabel = 'F';
         } else if(!rows.length){
@@ -1448,7 +1468,7 @@ function renderCalendar(filtered, personas, weeksByPersona){
           cellClass = 'c-over'; cellLabel = hTotal % 1 === 0 ? hTotal : hTotal.toFixed(1);
         }
 
-        const clickable = !isWE && !isFer && rows.length > 0;
+        const clickable = !isWE && !isFer && !isVac && rows.length > 0;
         const cellAttr = clickable
           ? `onclick="openCapDetail('${esc(persona)}','${d}')"  title="${hTotal}h — clic para ver detalle"`
           : '';
