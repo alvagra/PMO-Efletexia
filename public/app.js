@@ -1542,12 +1542,15 @@ async function fetchSpecialStories(epicKey) {
 function parseSpecialStory(s) {
   const f = s.fields || {};
   const isDone = ['done','cerrado','closed','producción','produccion'].includes((f.status?.name||'').toLowerCase());
-  const horas = f.customfield_10016 || f.story_points || null;
-  const avance = f.customfield_10726 !== undefined && f.customfield_10726 !== null
-    ? Math.round(f.customfield_10726 * 100)
-    : (f.customfield_10895 !== undefined && f.customfield_10895 !== null
-        ? Math.round(f.customfield_10895 * 100)
-        : null);
+  // AJUSTE 1: horas = suma de horas de subtareas
+  const subtasks = f._subtasks || [];
+  const horasSub = subtasks.reduce((acc, sub) => {
+    const sf = sub.fields || {};
+    return acc + (sf.customfield_10016 || sf.story_points || 0);
+  }, 0);
+  // AJUSTE 3: Plan/Real de la HU (misma lógica que épicas en bitácora principal)
+  const planPct = f.customfield_10725 !== undefined && f.customfield_10725 !== null ? f.customfield_10725 : null;
+  const realPct = f.customfield_10726 !== undefined && f.customfield_10726 !== null ? f.customfield_10726 : null;
   return {
     key: s.key,
     codigo: f.customfield_10934 || s.key,
@@ -1555,12 +1558,13 @@ function parseSpecialStory(s) {
     area: f.customfield_10930?.value || null,
     sponsor: f.customfield_11070?.value || null,
     asignado: f.assignee?.displayName || null,
-    horas: horas,
+    horas: horasSub,
     fechaInicio: f.customfield_10015 || null,
     duedate: f.duedate || null,
     status: f.status?.name || '—',
     conformidad: f.customfield_11004?.value || null,
-    avance: avance,
+    planPct: planPct,
+    realPct: realPct,
     isDone
   };
 }
@@ -1569,9 +1573,10 @@ function buildSpecialKpis(stories) {
   const total = stories.length;
   const cerradas = stories.filter(s => s.isDone).length;
   const pendientes = total - cerradas;
+  // AJUSTE 2: horasTot = suma de horas de subtareas (ya calculado en parseSpecialStory)
   const horasTot = stories.reduce((a, s) => a + (s.horas || 0), 0);
-  const avgs = stories.map(s => s.avance).filter(v => v !== null);
-  const avgAvance = avgs.length ? Math.round(avgs.reduce((a, b) => a + b, 0) / avgs.length) : 0;
+  const avgs = stories.map(s => s.realPct).filter(v => v !== null);
+  const avgAvance = avgs.length ? Math.round(avgs.reduce((a, b) => a + b, 0) / avgs.length * 100) : 0;
   return `
     <div class="sp-kpis">
       <div class="sp-kpi"><div class="sp-kpi-label">Total historias</div><div class="sp-kpi-val c-white">${total}</div></div>
@@ -1589,7 +1594,11 @@ function buildSpecialTable(stories, sectionId) {
   const tbodyId  = `sp-tbody-${sectionId}`;
   const infoId   = `sp-info-${sectionId}`;
 
-  // render rows helper stored inline
+  // AJUSTE 3: Soporte Requerimientos (PTS_327) → columna Plan/Real
+  // AJUSTE 4: Gestión PMO-TI (PTS_326) → sin columna % Avance
+  const isSoporte = sectionId === 'PTS_327';
+  const extraHeader = isSoporte ? '<th>Plan / Real</th>' : '';
+
   return `
     <div class="sp-table-controls">
       <input id="${searchId}" class="filter-input" placeholder="Buscar historia..." autocomplete="off" style="max-width:260px"
@@ -1610,31 +1619,37 @@ function buildSpecialTable(stories, sectionId) {
             <th>Fin</th>
             <th>Estado</th>
             <th>Conform.</th>
-            <th>% Avance</th>
+            ${extraHeader}
           </tr>
         </thead>
         <tbody id="${tbodyId}">
-          ${renderSpecialRows(stories)}
+          ${renderSpecialRows(stories, isSoporte)}
         </tbody>
       </table>
     </div>`;
 }
 
-function renderSpecialRows(stories) {
-  return stories.map(s => `
+function renderSpecialRows(stories, isSoporte) {
+  return stories.map(s => {
+    // AJUSTE 3: Plan/Real solo en Soporte Requerimientos (mismo formato que bitácora principal)
+    const planRealCell = isSoporte
+      ? `<td class="muted">${s.planPct !== null ? Math.round(s.planPct * 100) + '% / ' + (s.realPct !== null ? Math.round(s.realPct * 100) + '%' : '—') : '—'}</td>`
+      : '';
+    return `
     <tr>
       <td class="code"><a class="jlink" href="${JIRA_BASE}${s.key}" target="_blank">${esc(s.codigo)}</a></td>
       <td class="proj" title="${esc(s.summary)}">${esc(s.summary)}</td>
       <td class="muted">${s.area ? `<span class="pill">${esc(s.area)}</span>` : '—'}</td>
       <td class="muted">${esc(s.sponsor) || '—'}</td>
       <td class="muted">${esc(s.asignado) || '—'}</td>
-      <td class="muted">${s.horas !== null ? s.horas : '—'}</td>
+      <td class="muted">${s.horas > 0 ? s.horas.toFixed(1) : '—'}</td>
       <td class="muted">${fmtD(s.fechaInicio) || '—'}</td>
       <td class="muted">${fmtD(s.duedate) || '—'}</td>
       <td><span class="badge badge-${sbClass(s.status)}">${esc(s.status)}</span></td>
       <td class="muted">${s.conformidad === 'Si' ? '<span style="color:var(--green);font-size:15px">✓</span>' : '—'}</td>
-      <td class="muted">${s.avance !== null ? s.avance + ' %' : '—'}</td>
-    </tr>`).join('');
+      ${planRealCell}
+    </tr>`;
+  }).join('');
 }
 
 // Cache de stories parseadas por sección para el filtro
@@ -1653,7 +1668,7 @@ function filterSpecialTable(sectionId) {
     (s.asignado||'').toLowerCase().includes(q) ||
     (s.area||'').toLowerCase().includes(q)
   ) : all;
-  tbody.innerHTML = renderSpecialRows(filtered);
+  tbody.innerHTML = renderSpecialRows(filtered, sectionId === 'PTS_327');
   if (info) info.textContent = `${filtered.length} de ${all.length} historias`;
 }
 
