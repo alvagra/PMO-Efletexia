@@ -1543,12 +1543,12 @@ function parseSpecialStory(s) {
   const f = s.fields || {};
   const isDone = ['done','cerrado','closed','producción','produccion'].includes((f.status?.name||'').toLowerCase());
   const subtasks = f._subtasks || [];
-  // Horas Plan = suma de timeoriginalestimate de subtareas (en segundos → horas)
+  // HP = suma de customfield_10016 ("Horas estimadas") de subtareas (valor numérico directo)
   const horasPlan = subtasks.reduce((acc, sub) => {
     const sf = sub.fields || {};
-    return acc + ((sf.timeoriginalestimate || 0) / 3600);
+    return acc + (sf.customfield_10016 || 0);
   }, 0);
-  // Horas Real = suma de timespent de subtareas (en segundos → horas)
+  // HR = suma de timespent de subtareas (en segundos → horas)
   const horasReal = subtasks.reduce((acc, sub) => {
     const sf = sub.fields || {};
     return acc + ((sf.timespent || 0) / 3600);
@@ -1566,7 +1566,7 @@ function parseSpecialStory(s) {
       asignado: sf.assignee?.displayName || null,
       fechaInicio: sf.customfield_10015 || null,
       duedate: sf.duedate || null,
-      horasPlan: (sf.timeoriginalestimate || 0) / 3600,
+      horasPlan: sf.customfield_10016 || 0,
       horasReal: (sf.timespent || 0) / 3600,
       status: sf.status?.name || '—'
     };
@@ -1597,8 +1597,6 @@ function buildSpecialKpis(stories) {
   const pendientes = total - cerradas;
   const horasPlanTot = stories.reduce((a, s) => a + (s.horasPlan || 0), 0);
   const horasRealTot = stories.reduce((a, s) => a + (s.horasReal || 0), 0);
-  const avgs = stories.map(s => s.realPct).filter(v => v !== null);
-  const avgAvance = avgs.length ? Math.round(avgs.reduce((a, b) => a + b, 0) / avgs.length * 100) : 0;
   return `
     <div class="sp-kpis">
       <div class="sp-kpi"><div class="sp-kpi-label">Total historias</div><div class="sp-kpi-val c-white">${total}</div></div>
@@ -1606,7 +1604,6 @@ function buildSpecialKpis(stories) {
       <div class="sp-kpi"><div class="sp-kpi-label">HR Totales</div><div class="sp-kpi-val c-blue">${horasRealTot > 0 ? horasRealTot.toFixed(1) : '—'}</div></div>
       <div class="sp-kpi"><div class="sp-kpi-label">Cerradas</div><div class="sp-kpi-val c-green">${cerradas}</div></div>
       <div class="sp-kpi"><div class="sp-kpi-label">Pendientes</div><div class="sp-kpi-val c-yellow">${pendientes}</div></div>
-      <div class="sp-kpi"><div class="sp-kpi-label">% Avance prom.</div><div class="sp-kpi-val c-blue">${avgAvance}%</div></div>
     </div>`;
 }
 
