@@ -1542,15 +1542,35 @@ async function fetchSpecialStories(epicKey) {
 function parseSpecialStory(s) {
   const f = s.fields || {};
   const isDone = ['done','cerrado','closed','producción','produccion'].includes((f.status?.name||'').toLowerCase());
-  // AJUSTE 1: horas = suma de horas de subtareas
   const subtasks = f._subtasks || [];
-  const horasSub = subtasks.reduce((acc, sub) => {
+  // Horas Plan = suma de timeoriginalestimate de subtareas (en segundos → horas)
+  const horasPlan = subtasks.reduce((acc, sub) => {
     const sf = sub.fields || {};
-    return acc + (sf.customfield_10016 || sf.story_points || 0);
+    return acc + ((sf.timeoriginalestimate || 0) / 3600);
   }, 0);
-  // AJUSTE 3: Plan/Real de la HU (misma lógica que épicas en bitácora principal)
+  // Horas Real = suma de timespent de subtareas (en segundos → horas)
+  const horasReal = subtasks.reduce((acc, sub) => {
+    const sf = sub.fields || {};
+    return acc + ((sf.timespent || 0) / 3600);
+  }, 0);
+  // Plan/Real % de la HU (misma lógica que épicas en bitácora principal)
   const planPct = f.customfield_10725 !== undefined && f.customfield_10725 !== null ? f.customfield_10725 : null;
   const realPct = f.customfield_10726 !== undefined && f.customfield_10726 !== null ? f.customfield_10726 : null;
+  // Subtareas parseadas para el Gantt
+  const subtasksParsed = subtasks.map(sub => {
+    const sf = sub.fields || {};
+    return {
+      key: sub.key,
+      codigo: sf.customfield_10934 || sub.key,
+      summary: sf.summary || '—',
+      asignado: sf.assignee?.displayName || null,
+      fechaInicio: sf.customfield_10015 || null,
+      duedate: sf.duedate || null,
+      horasPlan: (sf.timeoriginalestimate || 0) / 3600,
+      horasReal: (sf.timespent || 0) / 3600,
+      status: sf.status?.name || '—'
+    };
+  });
   return {
     key: s.key,
     codigo: f.customfield_10934 || s.key,
@@ -1558,13 +1578,15 @@ function parseSpecialStory(s) {
     area: f.customfield_10930?.value || null,
     sponsor: f.customfield_11070?.value || null,
     asignado: f.assignee?.displayName || null,
-    horas: horasSub,
+    horasPlan: horasPlan,
+    horasReal: horasReal,
     fechaInicio: f.customfield_10015 || null,
     duedate: f.duedate || null,
     status: f.status?.name || '—',
     conformidad: f.customfield_11004?.value || null,
     planPct: planPct,
     realPct: realPct,
+    subtasksParsed: subtasksParsed,
     isDone
   };
 }
@@ -1573,14 +1595,15 @@ function buildSpecialKpis(stories) {
   const total = stories.length;
   const cerradas = stories.filter(s => s.isDone).length;
   const pendientes = total - cerradas;
-  // AJUSTE 2: horasTot = suma de horas de subtareas (ya calculado en parseSpecialStory)
-  const horasTot = stories.reduce((a, s) => a + (s.horas || 0), 0);
+  const horasPlanTot = stories.reduce((a, s) => a + (s.horasPlan || 0), 0);
+  const horasRealTot = stories.reduce((a, s) => a + (s.horasReal || 0), 0);
   const avgs = stories.map(s => s.realPct).filter(v => v !== null);
   const avgAvance = avgs.length ? Math.round(avgs.reduce((a, b) => a + b, 0) / avgs.length * 100) : 0;
   return `
     <div class="sp-kpis">
       <div class="sp-kpi"><div class="sp-kpi-label">Total historias</div><div class="sp-kpi-val c-white">${total}</div></div>
-      <div class="sp-kpi"><div class="sp-kpi-label">Horas totales</div><div class="sp-kpi-val c-cyan">${horasTot > 0 ? horasTot.toFixed(1) : '—'}</div></div>
+      <div class="sp-kpi"><div class="sp-kpi-label">HP Totales</div><div class="sp-kpi-val c-cyan">${horasPlanTot > 0 ? horasPlanTot.toFixed(1) : '—'}</div></div>
+      <div class="sp-kpi"><div class="sp-kpi-label">HR Totales</div><div class="sp-kpi-val c-blue">${horasRealTot > 0 ? horasRealTot.toFixed(1) : '—'}</div></div>
       <div class="sp-kpi"><div class="sp-kpi-label">Cerradas</div><div class="sp-kpi-val c-green">${cerradas}</div></div>
       <div class="sp-kpi"><div class="sp-kpi-label">Pendientes</div><div class="sp-kpi-val c-yellow">${pendientes}</div></div>
       <div class="sp-kpi"><div class="sp-kpi-label">% Avance prom.</div><div class="sp-kpi-val c-blue">${avgAvance}%</div></div>
@@ -1614,12 +1637,14 @@ function buildSpecialTable(stories, sectionId) {
             <th>Área</th>
             <th>Sponsor</th>
             <th>Asignado</th>
-            <th>Horas</th>
+            <th>HP</th>
+            <th>HR</th>
             <th>Inicio</th>
             <th>Fin</th>
             <th>Estado</th>
             <th>Conform.</th>
             ${extraHeader}
+            <th></th>
           </tr>
         </thead>
         <tbody id="${tbodyId}">
@@ -1630,11 +1655,33 @@ function buildSpecialTable(stories, sectionId) {
 }
 
 function renderSpecialRows(stories, isSoporte) {
-  return stories.map(s => {
-    // AJUSTE 3: Plan/Real solo en Soporte Requerimientos (mismo formato que bitácora principal)
+  const colCount = isSoporte ? 12 : 11;
+  return stories.map((s, idx) => {
     const planRealCell = isSoporte
       ? `<td class="muted">${s.planPct !== null ? Math.round(s.planPct * 100) + '% / ' + (s.realPct !== null ? Math.round(s.realPct * 100) + '%' : '—') : '—'}</td>`
       : '';
+    const ganttId = `sp-gantt-${s.key.replace('-','_')}`;
+    const hasSubtasks = s.subtasksParsed && s.subtasksParsed.length > 0;
+    const ganttToggle = hasSubtasks
+      ? `<button class="btn-action" type="button" title="Ver subtareas" onclick="toggleSpGantt('${ganttId}')">···</button>`
+      : '';
+    const ganttRows = hasSubtasks ? s.subtasksParsed.map(sub => `
+      <div class="sp-gantt-row">
+        <span class="sp-gantt-code"><a class="jlink" href="${JIRA_BASE}${sub.key}" target="_blank">${esc(sub.codigo)}</a></span>
+        <span class="sp-gantt-name" title="${esc(sub.summary)}">${esc(sub.summary)}</span>
+        <span class="sp-gantt-cell muted">${esc(sub.asignado) || '—'}</span>
+        <span class="sp-gantt-cell muted">${fmtD(sub.fechaInicio) || '—'}</span>
+        <span class="sp-gantt-cell muted">${fmtD(sub.duedate) || '—'}</span>
+        <span class="sp-gantt-cell muted">HP: ${sub.horasPlan > 0 ? sub.horasPlan.toFixed(1)+'h' : '—'}</span>
+        <span class="sp-gantt-cell muted">HR: ${sub.horasReal > 0 ? sub.horasReal.toFixed(1)+'h' : '—'}</span>
+        <span class="sp-gantt-cell"><span class="badge badge-${sbClass(sub.status)}">${esc(sub.status)}</span></span>
+      </div>`).join('') : '';
+    const ganttBlock = hasSubtasks ? `
+      <tr id="${ganttId}" style="display:none">
+        <td colspan="${colCount}" style="padding:0;background:var(--bg-base)">
+          <div class="sp-gantt-wrap">${ganttRows}</div>
+        </td>
+      </tr>` : '';
     return `
     <tr>
       <td class="code"><a class="jlink" href="${JIRA_BASE}${s.key}" target="_blank">${esc(s.codigo)}</a></td>
@@ -1642,14 +1689,22 @@ function renderSpecialRows(stories, isSoporte) {
       <td class="muted">${s.area ? `<span class="pill">${esc(s.area)}</span>` : '—'}</td>
       <td class="muted">${esc(s.sponsor) || '—'}</td>
       <td class="muted">${esc(s.asignado) || '—'}</td>
-      <td class="muted">${s.horas > 0 ? s.horas.toFixed(1) : '—'}</td>
+      <td class="muted">${s.horasPlan > 0 ? s.horasPlan.toFixed(1) : '—'}</td>
+      <td class="muted">${s.horasReal > 0 ? s.horasReal.toFixed(1) : '—'}</td>
       <td class="muted">${fmtD(s.fechaInicio) || '—'}</td>
       <td class="muted">${fmtD(s.duedate) || '—'}</td>
       <td><span class="badge badge-${sbClass(s.status)}">${esc(s.status)}</span></td>
       <td class="muted">${s.conformidad === 'Si' ? '<span style="color:var(--green);font-size:15px">✓</span>' : '—'}</td>
       ${planRealCell}
-    </tr>`;
+      <td style="text-align:center">${ganttToggle}</td>
+    </tr>${ganttBlock}`;
   }).join('');
+}
+
+function toggleSpGantt(ganttId) {
+  const row = document.getElementById(ganttId);
+  if (!row) return;
+  row.style.display = row.style.display === 'none' ? 'table-row' : 'none';
 }
 
 // Cache de stories parseadas por sección para el filtro
