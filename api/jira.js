@@ -134,7 +134,7 @@ module.exports = async function handler(req, res) {
       if (!epicKey) return res.status(400).json({ error: 'epicKey requerido' });
 
       const STORY_FIELDS = ['summary','status','assignee','parent','customfield_10015','duedate','subtasks','customfield_10725','customfield_10726','issuetype','customfield_10930','customfield_11070','customfield_11004','customfield_10895','customfield_10928','customfield_10929','customfield_10934','story_points','customfield_10016'];
-      const SUBTASK_FIELDS = '*all';
+      const SUBTASK_FIELDS = ['summary','status','assignee','parent','customfield_10015','duedate','issuetype','timespent','customfield_10934','customfield_11136'];
 
       // Buscar todos los hijos directos de la épica (Next-gen: parent=EPIC; clásico: Epic Link)
       let storiesFinal = await fetchAllPages(auth, JIRA_CLOUD,
@@ -169,11 +169,7 @@ module.exports = async function handler(req, res) {
       }
 
       storiesFinal.forEach(s => { s.fields._subtasks = subtaskMap[s.key] || []; });
-      // DEBUG TEMPORAL: exponer campos de la primera subtarea para identificar campo HP
-      const allSubsDbg = Object.values(subtaskMap).flat();
-      const debugSub = allSubsDbg[0] || null;
-      const debugFields = debugSub ? Object.entries(debugSub.fields||{}).reduce((acc,[k,v])=>{ if(v!==null&&v!==undefined&&v!==''&&v!==false) acc[k]=v; return acc; },{}) : null;
-      return res.status(200).json({ stories: storiesFinal, total: storiesFinal.length, type: 'stories', _debugSubKey: debugSub && debugSub.key, _debugSubFields: debugFields });
+      return res.status(200).json({ stories: storiesFinal, total: storiesFinal.length, type: 'stories' });
 
 
     } else if (type === 'capacity') {
