@@ -343,6 +343,23 @@ a.jlink:hover{text-decoration:underline}
 .cap-horas-low{background:rgba(16,185,129,.15);color:var(--green)}
 .cap-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;padding:16px 20px;background:var(--bg-base);border-bottom:1px solid var(--border)}
 
+/* ── Secciones especiales acordeón ── */
+#special-sections-container{margin-top:12px;display:flex;flex-direction:column;gap:8px;padding:0 0 24px}
+.sp-section{background:var(--bg-card);border:1px solid var(--border-light);border-radius:8px;overflow:hidden}
+.sp-header{display:flex;align-items:center;gap:10px;padding:14px 20px;cursor:pointer;user-select:none;transition:background .15s}
+.sp-header:hover{background:var(--bg-hover)}
+.sp-icon{font-size:11px;color:var(--text-muted);width:14px}
+.sp-title{font-size:14px;font-weight:600;color:var(--text-primary);flex:1}
+.sp-hint{font-size:11px;color:var(--text-muted)}
+.sp-body{border-top:1px solid var(--border-light)}
+.sp-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--border-light);border-bottom:1px solid var(--border-light)}
+.sp-kpi{background:var(--bg-base);padding:14px 16px;text-align:center}
+.sp-kpi-label{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+.sp-kpi-val{font-size:22px;font-weight:700}
+.sp-table-controls{display:flex;align-items:center;gap:12px;padding:10px 16px;background:var(--bg-base);border-bottom:1px solid var(--border-light)}
+.sp-info{font-size:11px;color:var(--text-muted)}
+@media(max-width:900px){.sp-kpis{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:600px){.sp-kpis{grid-template-columns:repeat(2,1fr)}}
 </style></head>
 <body>
 
@@ -456,6 +473,7 @@ a.jlink:hover{text-decoration:underline}
       <tbody id="table-body"></tbody>
     </table>
   </div>
+  <div id="special-sections-container"></div>
 </div>
 
 
