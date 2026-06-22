@@ -133,7 +133,7 @@ module.exports = async function handler(req, res) {
       const { epicKey } = req.body;
       if (!epicKey) return res.status(400).json({ error: 'epicKey requerido' });
 
-      const STORY_FIELDS = ['summary','status','assignee','parent','customfield_10015','duedate','subtasks','customfield_10725','customfield_10726','issuetype'];
+      const STORY_FIELDS = ['summary','status','assignee','parent','customfield_10015','duedate','subtasks','customfield_10725','customfield_10726','issuetype','customfield_10930','customfield_11070','customfield_11004','customfield_10895','customfield_10928','customfield_10929','customfield_10934','story_points','customfield_10016'];
       const SUBTASK_FIELDS = ['summary','status','assignee','parent','customfield_10015','duedate','issuetype'];
 
       // Buscar todos los hijos directos de la épica (Next-gen: parent=EPIC; clásico: Epic Link)
@@ -212,10 +212,35 @@ module.exports = async function handler(req, res) {
             // story.fields.parent es la épica (nombre)
             const epicSummary = story.fields?.parent?.fields?.summary || story.fields?.parent?.key || '';
             epicNameMap[story.key] = epicSummary;
-            // Código del proyecto: customfield_10934 en la historia (ej: CEFU-007)
+            // El código está en la historia misma si lo tiene, sino hay que ir a la épica
             const epicCodigo = story.fields?.customfield_10934 || '';
             epicCodigoMap[story.key] = epicCodigo;
+            // Guardar key de la épica para buscar su código si la historia no lo tiene
+            if(!epicCodigo && story.fields?.parent?.key){
+              epicCodigoMap['__needsEpic__' + story.key] = story.fields.parent.key;
+            }
           });
+
+          // Para historias sin código propio, buscar el código en la épica
+          const storiesNeedingEpic = Object.keys(epicCodigoMap)
+            .filter(k => k.startsWith('__needsEpic__'));
+          if(storiesNeedingEpic.length){
+            const epicKeys = [...new Set(storiesNeedingEpic.map(k => epicCodigoMap[k]))];
+            const EPIC_BATCH2 = 50;
+            const epicCodigoDirect = {};
+            for(let ei = 0; ei < epicKeys.length; ei += EPIC_BATCH2){
+              const eBatch = epicKeys.slice(ei, ei + EPIC_BATCH2);
+              const jqlEpics = `key in (${eBatch.join(',')})`;
+              const epics2 = await fetchAllPages(auth, JIRA_CLOUD, jqlEpics, ['customfield_10934']);
+              epics2.forEach(ep => { epicCodigoDirect[ep.key] = ep.fields?.customfield_10934 || ''; });
+            }
+            storiesNeedingEpic.forEach(k => {
+              const storyKey = k.replace('__needsEpic__','');
+              const epicKey  = epicCodigoMap[k];
+              epicCodigoMap[storyKey] = epicCodigoDirect[epicKey] || '';
+              delete epicCodigoMap[k];
+            });
+          }
         }
       }
 
