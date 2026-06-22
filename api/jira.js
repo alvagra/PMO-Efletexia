@@ -169,7 +169,11 @@ module.exports = async function handler(req, res) {
       }
 
       storiesFinal.forEach(s => { s.fields._subtasks = subtaskMap[s.key] || []; });
-      return res.status(200).json({ stories: storiesFinal, total: storiesFinal.length, type: 'stories' });
+      // DEBUG TEMPORAL: exponer campos de la primera subtarea para identificar campo HP
+      const allSubsDbg = Object.values(subtaskMap).flat();
+      const debugSub = allSubsDbg[0] || null;
+      const debugFields = debugSub ? Object.entries(debugSub.fields||{}).reduce((acc,[k,v])=>{ if(v!==null&&v!==undefined&&v!==''&&v!==false) acc[k]=v; return acc; },{}) : null;
+      return res.status(200).json({ stories: storiesFinal, total: storiesFinal.length, type: 'stories', _debugSubKey: debugSub && debugSub.key, _debugSubFields: debugFields });
 
 
     } else if (type === 'capacity') {
