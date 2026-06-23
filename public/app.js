@@ -774,7 +774,7 @@ async function loadRecursos(){
         p.epicasMap[epicaKey].horasEst+=horasEst; p.epicasMap[epicaKey].horasPend+=horasPend;
         p.epicasMap[epicaKey].actividades++;
         if(!isDone) p.epicasMap[epicaKey].pendientes++;
-        p.epicasMap[epicaKey].tareas.push({key:h.key,nombre:f.summary||h.key,status,isDone,horasEst,horasPend,fecha:f.customfield_10015||f.duedate||null});
+        p.epicasMap[epicaKey].tareas.push({key:h.key,nombre:f.summary||h.key,status,isDone,horasEst,horasPend,fecha:f.customfield_10015||f.duedate||null,updated:f.updated||null});
       }
     });
 
@@ -943,6 +943,15 @@ function verRecurso(nombre){
   document.getElementById('rec-modal-overlay').classList.add('open');
 }
 
+// Clasificación de estado de actividades en detalle de proyecto
+function clsActStatus(status) {
+  const s = (status||'').toLowerCase();
+  if(['finalizada','producción','en producción','cerrado','done','closed'].includes(s)) return { label:'Cerrado',    cls:'done' };
+  if(['blocked','bloqueado'].includes(s))                                               return { label:'Bloqueado',  cls:'bloq' };
+  if(['en curso','review','en proceso'].includes(s))                                    return { label:'En proceso', cls:'open' };
+  return { label:'Pendiente', cls:'pend' };
+}
+
 function verProyecto(epicIdx){
   const r=recursos[activeRecIdx]; if(!r) return;
   const p=(r.proyectosDetalle||[])[epicIdx]; if(!p) return;
@@ -957,10 +966,10 @@ function verProyecto(epicIdx){
   const desvioPct=epicaGlobal&&epicaGlobal.desvioPct!=null?Math.round(epicaGlobal.desvioPct*100):null;
   const desvColor=desvioPct===null?'var(--text-muted)':Math.abs(desvioPct)>17?'var(--red)':Math.abs(desvioPct)>=5?'var(--yellow)':'var(--green)';
   const sbCls={'Backlog':'backlog','Análisis':'analisis','Desarrollo':'desarrollo','Pruebas':'pruebas','Producción':'produccion','Planificado':'planificado','Stand by':'standby','Desestimado':'desestimado'}[estado]||'backlog';
-  const tareas=(p.tareas||[]).filter(t=>fmtD(t.fecha)!==null);
+  const tareas=(p.tareas||[]).slice().sort((a,b)=>(b.updated||b.fecha||'').localeCompare(a.updated||a.fecha||''));
   const tareasHtml=tareas.length
-    ?tareas.map(t=>`<div class="det-task-row"><span class="det-task-date">${fmtD(t.fecha)}</span><span class="det-task-name" title="${esc(t.nombre)}">${esc(t.nombre)}</span><span class="det-task-hrs">${t.horasEst}h</span><span class="det-task-status"><span class="det-badge ${t.isDone?'done':'open'}">${t.isDone?'Cerrado':'En proceso'}</span></span></div>`).join('')
-    :'<div style="color:var(--text-muted);font-size:12px;padding:8px 0">Sin actividades con fecha</div>';
+    ?tareas.map(t=>{ const st=clsActStatus(t.status); return `<div class="det-task-row"><span class="det-task-date">${fmtD(t.fecha)||'—'}</span><span class="det-task-name" title="${esc(t.nombre)}">${esc(t.nombre)}</span><span class="det-task-hrs">${t.horasEst}h</span><span class="det-task-status"><span class="det-badge det-badge-${st.cls}">${st.label}</span></span></div>`; }).join('')
+    :'<div style="color:var(--text-muted);font-size:12px;padding:8px 0">Sin actividades registradas</div>';
   document.getElementById('det-title').textContent=p.nombre;
   document.getElementById('det-body').innerHTML=`
     <div class="det-stats">
