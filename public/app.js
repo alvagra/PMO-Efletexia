@@ -1185,11 +1185,17 @@ async function loadCapacity(){
     const selA = document.getElementById('cap-area');
     if(selA) selA.innerHTML = '<option value="">Todas</option>' + areas.map(a => `<option>${esc(a)}</option>`).join('');
 
-    const paises = [...new Set(capRows.map(r => r.pais).filter(Boolean))].sort();
+    // Países desde NOMENCLATURA (fuente de verdad) + los que haya en capRows
+    const paisesNom = [...new Set(Object.values(NOMENCLATURA).map(n=>n.pais).filter(Boolean))].sort();
+    const paisesRows = [...new Set(capRows.map(r => r.pais).filter(Boolean))];
+    const paises = [...new Set([...paisesNom, ...paisesRows])].sort();
     const selP = document.getElementById('cap-pais');
     if(selP) selP.innerHTML = '<option value="">Todos</option>' + paises.map(p => `<option>${esc(p)}</option>`).join('');
 
-    const personas = [...new Set(capRows.map(r => r.persona).filter(Boolean))].sort();
+    // Personas desde NOMENCLATURA + las que haya en capRows
+    const personasNom = Object.values(NOMENCLATURA).map(n=>n.nombre).filter(Boolean);
+    const personasRows = [...new Set(capRows.map(r => r.persona).filter(Boolean))];
+    const personas = [...new Set([...personasNom, ...personasRows])].sort();
     const sel = document.getElementById('cap-persona');
     if(sel) sel.innerHTML = '<option value="">Todas</option>' + personas.map(p => `<option>${esc(p)}</option>`).join('');
 
@@ -1318,6 +1324,17 @@ function renderCapacity(){
   const avgUtilTotal = personasSet.length
     ? +(personasSet.reduce((s,p) => s + avgUtils[p], 0) / personasSet.length).toFixed(1)
     : 0;
+
+  // Incluir recursos de NOMENCLATURA que coincidan con filtro País/Persona aunque no tengan worklogs
+  const paisFiltro    = document.getElementById('cap-pais')?.value    || '';
+  const personaFiltro = document.getElementById('cap-persona')?.value || '';
+  if(paisFiltro || personaFiltro) {
+    Object.values(NOMENCLATURA).forEach(n => {
+      if(paisFiltro    && n.pais   !== paisFiltro)    return;
+      if(personaFiltro && n.nombre !== personaFiltro) return;
+      if(!personasSet.includes(n.nombre)) personasSet.push(n.nombre);
+    });
+  }
 
   // Sort personas
   personasSet.sort((a,b) => {
