@@ -1092,8 +1092,10 @@ const FERIADOS = {
 
 function resolveNombreDesdeJira(displayName) {
   if(!displayName) return null;
+  const norm = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
+  const dn = norm(displayName);
   for(const [ini, rec] of Object.entries(NOMENCLATURA)){
-    if(rec.nombre.toLowerCase() === displayName.toLowerCase()) return { ini, ...rec };
+    if(norm(rec.nombre) === dn) return { ini, ...rec };
   }
   return null;
 }
@@ -1458,7 +1460,10 @@ function renderCalendar(filtered, personas, weeksByPersona){
   // Body rows: one per persona
   let body = '';
   personasInMonth.forEach(persona => {
-    const pRec = Object.values(NOMENCLATURA).find(n => n.nombre === persona);
+    // Buscar en NOMENCLATURA: primero exacto, luego normalizado (sin tildes, minúsculas)
+    const norm = s => (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
+    const pRec = Object.values(NOMENCLATURA).find(n => n.nombre === persona)
+              || Object.values(NOMENCLATURA).find(n => norm(n.nombre) === norm(persona));
     const pais = pRec?.pais || 'Peru';
     const ferPais = FERIADOS[pais] || new Set();
 
