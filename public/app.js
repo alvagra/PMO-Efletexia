@@ -1035,7 +1035,7 @@ const NOMENCLATURA = {
   'FF':  { nombre: 'Farah Fidel',        pais: 'Mexico',    area: 'Comercial' },
   'JM':  { nombre: 'Juan Menco',         pais: 'Colombia',  area: 'Comercial' },
   'CC':  { nombre: 'Cesar Castañeda',    pais: 'Peru',      area: 'TC' },
-  'EN':  { nombre: 'Edgar Noriega',      pais: 'Peru',      area: 'TC' },
+  'EN':  { nombre: 'Edgar Noriega',      pais: 'Colombia',  area: 'TC' },
   'JC2': { nombre: 'Jose Carlos Cautle', pais: 'Mexico',    area: 'TC' },
   'MA':  { nombre: 'Maria Aguilar',      pais: 'Guatemala', area: 'TC' },
   'NB':  { nombre: 'Nalia Blanco',       pais: 'Peru',      area: 'Comercial' },
@@ -1169,8 +1169,9 @@ async function loadCapacity(){
             else if(wl.comment.content) comentario = adfToText(wl.comment).trim();
           }
           const recReal = resolveNombreDesdeJira(persona);
+          const personaNom = recReal?.nombre || persona; // usar nombre canónico de NOMENCLATURA
           capRows.push({
-            fecha: fechaIso, persona, horas,
+            fecha: fechaIso, persona: personaNom, horas,
             proyecto: proyectoNom, codigoProy, subKey: sub.key, subtarea: subtareaNom,
             comentario, esPlaneado: false,
             area: recReal?.area || '', pais: recReal?.pais || ''
