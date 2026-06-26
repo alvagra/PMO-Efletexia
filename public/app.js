@@ -1315,7 +1315,8 @@ function renderCapacity(){
 
   // Global KPIs — solo horas reales de Jira
   const totalHoras = filtered.reduce((s,r) => s+r.horas, 0);
-  let personasSet  = [...new Set(filtered.map(r => r.persona))];
+  // Normalizar nombres: resolver alias/abreviados al nombre canónico de NOMENCLATURA
+  let personasSet  = [...new Set(filtered.map(r => findNomenclaturaByNombre(r.persona)?.nombre || r.persona))];
 
   // Weekly utilization per persona (all time)
   function isoWeek(iso){
@@ -1435,9 +1436,10 @@ function renderCalendar(filtered, personas, weeksByPersona){
   const idx = {}; // idx[persona][fecha] = [rows]
   filtered.forEach(r => {
     if(!r.fecha || !r.fecha.startsWith(`${year}-${String(month+1).padStart(2,'0')}`)) return;
-    if(!idx[r.persona]) idx[r.persona] = {};
-    if(!idx[r.persona][r.fecha]) idx[r.persona][r.fecha] = [];
-    idx[r.persona][r.fecha].push(r);
+    const pNom = findNomenclaturaByNombre(r.persona)?.nombre || r.persona;
+    if(!idx[pNom]) idx[pNom] = {};
+    if(!idx[pNom][r.fecha]) idx[pNom][r.fecha] = [];
+    idx[pNom][r.fecha].push(r);
   });
 
   // Personas in this month (those with data OR all if no filter)
@@ -1468,9 +1470,10 @@ function renderCalendar(filtered, personas, weeksByPersona){
     if(d.getFullYear() !== year || d.getMonth() !== month) return;
     const wk = isoWeek(r.fecha);
     weekSet.add(wk);
-    if(!weekTotals[r.persona]) weekTotals[r.persona] = {};
-    if(!weekTotals[r.persona][wk]) weekTotals[r.persona][wk] = 0;
-    weekTotals[r.persona][wk] += r.horas;
+    const pNomWt = findNomenclaturaByNombre(r.persona)?.nombre || r.persona;
+    if(!weekTotals[pNomWt]) weekTotals[pNomWt] = {};
+    if(!weekTotals[pNomWt][wk]) weekTotals[pNomWt][wk] = 0;
+    weekTotals[pNomWt][wk] += r.horas;
   });
   // Also collect weeks that span into this month from days array
   days.forEach(d => weekSet.add(isoWeek(d)));
