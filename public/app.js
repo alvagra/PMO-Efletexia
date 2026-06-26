@@ -1026,7 +1026,7 @@ const NOMENCLATURA = {
   'EC':  { nombre: 'Eric Cacho',         pais: 'Mexico',    area: 'Desarrollo' },
   'HS':  { nombre: 'Henry Salazar',      pais: 'Colombia',  area: 'Desarrollo' },
   'DV':  { nombre: 'Daniel Valencia',    pais: 'Colombia',  area: 'Desarrollo' },
-  'SD':  { nombre: 'Steven Díaz',        pais: 'Colombia',  area: 'Desarrollo' },
+  'SD':  { nombre: 'Steven Díaz',        pais: 'Colombia',  area: 'Desarrollo', alias: ['stiven d','stiven diaz','steven d'] },
   'AR':  { nombre: 'Alexander Romero',   pais: 'Peru',      area: 'Desarrollo' },
   'HR':  { nombre: 'Hamhner Remuzgo',    pais: 'Peru',      area: 'Soporte TI' },
   'AA':  { nombre: 'Abel Alva',          pais: 'Peru',      area: 'PMO' },
@@ -1405,6 +1405,10 @@ function findNomenclaturaByNombre(nombre) {
       const cp = norm(rec.nombre).split(/\s+/);
       if(cp[0] === parts[0] && cp[1] && cp[1].startsWith(parts[1].replace('.',''))) return { ini, ...rec };
     }
+  }
+  // 4. Alias explícitos (para nombres con ortografía distinta en Jira)
+  for(const [ini, rec] of Object.entries(NOMENCLATURA)){
+    if((rec.alias||[]).some(a => norm(a) === dn)) return { ini, ...rec };
   }
   return null;
 }
