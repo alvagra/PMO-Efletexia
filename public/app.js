@@ -328,7 +328,7 @@ async function fetchAllEpics(){
   const resp = await fetch('/api/jira',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ jql:'project = PTS AND issuetype = Epic ORDER BY created ASC', fields:JIRA_FIELDS })
+    body: JSON.stringify({ jql:'project = PTS AND issuetype = Epic ORDER BY created ASC', fields:'*all' }) // DEBUG COND
   });
   if(!resp.ok){ const err=await resp.text(); throw new Error(`Jira ${resp.status}: ${err}`); }
   return resp.json();
@@ -345,7 +345,16 @@ async function loadData(manual=false){
     const data   = await fetchAllEpics();
     const issues = data.issues||[];
     document.getElementById('loading-text').textContent=`Procesando ${issues.length} épicas...`;
-    epics = issues.map(parseIssue);
+    // DEBUG COND: loguear campos no vacíos de la primera épica para identificar campo COND.
+  if(issues[0]){
+    const f0 = issues[0].fields;
+    const nonEmpty = Object.entries(f0).reduce((acc,[k,v])=>{
+      if(v!==null&&v!==undefined&&v!==''&&v!==false&&!(Array.isArray(v)&&!v.length)) acc[k]=v;
+      return acc;
+    },{});
+    console.warn('[COND DEBUG] key:', issues[0].key, '| Campos no vacíos:', nonEmpty);
+  }
+  epics = issues.map(parseIssue);
 
     function populateSelect(id,values,allLabel){
       const sel=document.getElementById(id); if(!sel) return;
