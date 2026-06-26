@@ -274,28 +274,7 @@ module.exports = async function handler(req, res) {
       // Default: fetch Epics
       const { jql, fields } = req.body || {};
       const jqlStr = jql || 'project = PTS AND issuetype = Epic ORDER BY created ASC';
-      const EPIC_FIELDS = fields || [
-        'summary','status','assignee','reporter','labels','duedate',
-        'customfield_10015','customfield_10592','customfield_10659',
-        'customfield_10725','customfield_10726','customfield_10759',
-        'customfield_10895','customfield_10928','customfield_10929',
-        'customfield_10930','customfield_10931','customfield_10934',
-        'customfield_10829','customfield_10862','customfield_10969',
-        'customfield_10970','customfield_11003','customfield_11004',
-        'customfield_11037','customfield_11070',
-        'customfield_10896','customfield_10897','customfield_10898',
-        'customfield_10899','customfield_10900','customfield_10901',
-        'customfield_10902','customfield_10903','customfield_10904',
-        'customfield_10905','customfield_10906','customfield_10907',
-        'customfield_10908','customfield_10909','customfield_10910',
-        'customfield_10911','customfield_10912','customfield_10913',
-        'customfield_10914','customfield_10915','customfield_10916',
-        'customfield_10917','customfield_10918','customfield_10919',
-        'customfield_10920','customfield_10921','customfield_10922',
-        'customfield_10923','customfield_10924','customfield_10925',
-        'customfield_10926','customfield_10927','customfield_10932',
-        'customfield_10933'
-      ];
+      const EPIC_FIELDS = fields || '*all';
       const issues = await fetchAllPages(auth, JIRA_CLOUD, jqlStr, EPIC_FIELDS);
       return res.status(200).json({ issues, total: issues.length, isLast: true });
     }
