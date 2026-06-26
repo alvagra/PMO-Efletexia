@@ -1183,8 +1183,12 @@ async function loadCapacity(){
     });
 
     // Populate selectors from actual data
-    const areas = [...new Set(capRows.map(r => r.area).filter(Boolean))].sort();
     const selA = document.getElementById('cap-area');
+
+    // Áreas desde NOMENCLATURA + las que haya en capRows
+    const areasNom = [...new Set(Object.values(NOMENCLATURA).map(n=>n.area).filter(Boolean))].sort();
+    const areasRows = [...new Set(capRows.map(r => r.area).filter(Boolean))];
+    const areas = [...new Set([...areasNom, ...areasRows])].sort();
     if(selA) selA.innerHTML = '<option value="">Todas</option>' + areas.map(a => `<option>${esc(a)}</option>`).join('');
 
     // Países desde NOMENCLATURA (fuente de verdad) + los que haya en capRows
@@ -1327,13 +1331,15 @@ function renderCapacity(){
     ? +(personasSet.reduce((s,p) => s + avgUtils[p], 0) / personasSet.length).toFixed(1)
     : 0;
 
-  // Incluir recursos de NOMENCLATURA que coincidan con filtro País/Persona aunque no tengan worklogs
+  // Incluir recursos de NOMENCLATURA que coincidan con filtros aunque no tengan worklogs
   const paisFiltro    = document.getElementById('cap-pais')?.value    || '';
   const personaFiltro = document.getElementById('cap-persona')?.value || '';
-  if(paisFiltro || personaFiltro) {
+  const areaFiltro    = document.getElementById('cap-area')?.value    || '';
+  if(paisFiltro || personaFiltro || areaFiltro) {
     Object.values(NOMENCLATURA).forEach(n => {
       if(paisFiltro    && n.pais   !== paisFiltro)    return;
       if(personaFiltro && n.nombre !== personaFiltro) return;
+      if(areaFiltro    && n.area   !== areaFiltro)    return;
       if(!personasSet.includes(n.nombre)) personasSet.push(n.nombre);
     });
   }
