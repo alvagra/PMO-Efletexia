@@ -270,6 +270,16 @@ module.exports = async function handler(req, res) {
 
       return res.status(200).json({ issues: subtareas, total: subtareas.length, type: 'capacity' });
 
+    } else if(type === 'debug_epic') {
+      // DEBUG TEMPORAL: retornar todos los campos de PTS-13 para identificar COND.
+      const result = await jiraGet(auth, JIRA_CLOUD, '/rest/api/3/issue/PTS-13?fields=*all');
+      const f = result.body.fields || {};
+      const nonEmpty = Object.entries(f).reduce((acc,[k,v])=>{
+        if(v!==null&&v!==undefined&&v!==''&&!(Array.isArray(v)&&!v.length)&&v!==false) acc[k]=v;
+        return acc;
+      },{});
+      return res.status(200).json({ key:'PTS-13', fields: nonEmpty });
+
     } else {
       // Default: fetch Epics
       const { jql, fields } = req.body || {};
