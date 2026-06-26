@@ -168,25 +168,25 @@ function parseIssue(i){
     prioridad:f.customfield_11037?f.customfield_11037.value:null,
     sponsor:f.customfield_11070?f.customfield_11070.value:null,
     condicion:(()=>{
-      // Auto-detect COND. field: short text between pctAnalisis and pctDesarrollo
-      // Try known candidates in likely order
-      const candidates = [
-        'customfield_10896','customfield_10897','customfield_10898','customfield_10899',
-        'customfield_10900','customfield_10901','customfield_10902','customfield_10903',
-        'customfield_10904','customfield_10905','customfield_10906','customfield_10907',
-        'customfield_10908','customfield_10909','customfield_10910','customfield_10911',
-        'customfield_10912','customfield_10913','customfield_10914','customfield_10915',
-        'customfield_10916','customfield_10917','customfield_10918','customfield_10919',
-        'customfield_10920','customfield_10921','customfield_10922','customfield_10923',
-        'customfield_10924','customfield_10925','customfield_10926','customfield_10927',
-        'customfield_10932','customfield_10933','customfield_11136'
-      ];
-      for(const cf of candidates){
+      // Campos ya mapeados a otros atributos — excluir de la búsqueda de COND.
+      const mapped = new Set([
+        'summary','status','assignee','reporter','labels','duedate','description',
+        'customfield_10015','customfield_10592','customfield_10659',
+        'customfield_10725','customfield_10726','customfield_10759',
+        'customfield_10895','customfield_10928','customfield_10929',
+        'customfield_10930','customfield_10931','customfield_10934',
+        'customfield_10829','customfield_10862','customfield_10969',
+        'customfield_10970','customfield_11003','customfield_11004',
+        'customfield_11037','customfield_11070','customfield_11136'
+      ]);
+      // Buscar en todos los customfields no mapeados un valor de texto corto (≤20 chars)
+      // que represente una nomenclatura/condición (no número, no fecha, no URL)
+      const allCf = Object.keys(f).filter(k => k.startsWith('customfield_') && !mapped.has(k));
+      for(const cf of allCf){
         const v = f[cf];
         if(!v) continue;
-        if(typeof v==='string' && v.length>0 && v.length<=50) return v;
-        if(v.content) { const t=adfToText(v).trim(); if(t&&t.length<=50) return t; }
-        if(v.value && typeof v.value==='string' && v.value.length<=50) return v.value;
+        if(typeof v==='string' && v.length>0 && v.length<=20 && !/^\d{4}-/.test(v) && !/^http/.test(v)) return v;
+        if(v?.value && typeof v.value==='string' && v.value.length>0 && v.value.length<=20) return v.value;
       }
       return null;
     })(),
@@ -328,7 +328,7 @@ async function fetchAllEpics(){
   const resp = await fetch('/api/jira',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ jql:'project = PTS AND issuetype = Epic ORDER BY created ASC', fields:'*all' }) // DEBUG COND
+    body: JSON.stringify({ jql:'project = PTS AND issuetype = Epic ORDER BY created ASC', fields:JIRA_FIELDS })
   });
   if(!resp.ok){ const err=await resp.text(); throw new Error(`Jira ${resp.status}: ${err}`); }
   return resp.json();
@@ -345,16 +345,7 @@ async function loadData(manual=false){
     const data   = await fetchAllEpics();
     const issues = data.issues||[];
     document.getElementById('loading-text').textContent=`Procesando ${issues.length} épicas...`;
-    // DEBUG COND: loguear campos no vacíos de la primera épica para identificar campo COND.
-  if(issues[0]){
-    const f0 = issues[0].fields;
-    const nonEmpty = Object.entries(f0).reduce((acc,[k,v])=>{
-      if(v!==null&&v!==undefined&&v!==''&&v!==false&&!(Array.isArray(v)&&!v.length)) acc[k]=v;
-      return acc;
-    },{});
-    console.warn('[COND DEBUG] key:', issues[0].key, '| Campos no vacíos:', nonEmpty);
-  }
-  epics = issues.map(parseIssue);
+    epics = issues.map(parseIssue);
 
     function populateSelect(id,values,allLabel){
       const sel=document.getElementById(id); if(!sel) return;
