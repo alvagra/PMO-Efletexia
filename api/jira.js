@@ -270,21 +270,20 @@ module.exports = async function handler(req, res) {
 
       return res.status(200).json({ issues: subtareas, total: subtareas.length, type: 'capacity' });
 
-    } else if(type === 'debug_epic') {
-      // DEBUG TEMPORAL: retornar todos los campos de PTS-13 para identificar COND.
-      const result = await jiraGet(auth, JIRA_CLOUD, '/rest/api/3/issue/PTS-13?fields=*all');
-      const f = result.body.fields || {};
-      const nonEmpty = Object.entries(f).reduce((acc,[k,v])=>{
-        if(v!==null&&v!==undefined&&v!==''&&!(Array.isArray(v)&&!v.length)&&v!==false) acc[k]=v;
-        return acc;
-      },{});
-      return res.status(200).json({ key:'PTS-13', fields: nonEmpty });
-
     } else {
       // Default: fetch Epics
       const { jql, fields } = req.body || {};
       const jqlStr = jql || 'project = PTS AND issuetype = Epic ORDER BY created ASC';
-      const EPIC_FIELDS = fields || '*all';
+      const EPIC_FIELDS = fields || [
+        'summary','status','assignee','reporter','labels','duedate','description',
+        'customfield_10015','customfield_10592','customfield_10659',
+        'customfield_10725','customfield_10726','customfield_10759',
+        'customfield_10895','customfield_10928','customfield_10929',
+        'customfield_10930','customfield_10931','customfield_10934',
+        'customfield_10829','customfield_10862','customfield_10969',
+        'customfield_10970','customfield_11003','customfield_11004',
+        'customfield_11037','customfield_11070','customfield_11170'
+      ];
       const issues = await fetchAllPages(auth, JIRA_CLOUD, jqlStr, EPIC_FIELDS);
       return res.status(200).json({ issues, total: issues.length, isLast: true });
     }
