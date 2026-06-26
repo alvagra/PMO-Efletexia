@@ -1094,8 +1094,22 @@ function resolveNombreDesdeJira(displayName) {
   if(!displayName) return null;
   const norm = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
   const dn = norm(displayName);
+  // 1. Exacto normalizado
   for(const [ini, rec] of Object.entries(NOMENCLATURA)){
     if(norm(rec.nombre) === dn) return { ini, ...rec };
+  }
+  // 2. displayName contenido en nombre canónico o viceversa
+  for(const [ini, rec] of Object.entries(NOMENCLATURA)){
+    const cn = norm(rec.nombre);
+    if(dn.includes(cn) || cn.includes(dn)) return { ini, ...rec };
+  }
+  // 3. Primera palabra + inicial de apellido (ej. "Henry S." → "Henry Salazar", "Stiven D" → "Steven Díaz")
+  const parts = dn.split(/\s+/);
+  if(parts.length >= 2){
+    for(const [ini, rec] of Object.entries(NOMENCLATURA)){
+      const cp = norm(rec.nombre).split(/\s+/);
+      if(cp[0] === parts[0] && cp[1] && cp[1].startsWith(parts[1].replace('.',''))) return { ini, ...rec };
+    }
   }
   return null;
 }
@@ -1274,7 +1288,7 @@ function getCapFiltered(){
     if(pais    && r.pais    !== pais)    return false;
     if(area) {
       // Resolver área desde NOMENCLATURA por nombre del recurso (fuente de verdad)
-      const recNom = Object.values(NOMENCLATURA).find(n => norm(n.nombre) === norm(r.persona));
+      const recNom = findNomenclaturaByNombre(r.persona);
       const areaRec = recNom?.area || r.area || '';
       if(areaRec !== area) return false;
     }
@@ -1369,6 +1383,30 @@ function renderCapacity(){
 
   // Build calendar for capCalYear / capCalMonth
   renderCalendar(filtered, personasSet, weeksByPersona);
+}
+
+function findNomenclaturaByNombre(nombre) {
+  if(!nombre) return null;
+  const norm = s => (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+  const dn = norm(nombre);
+  // 1. Exacto
+  for(const [ini, rec] of Object.entries(NOMENCLATURA)){
+    if(norm(rec.nombre) === dn) return { ini, ...rec };
+  }
+  // 2. Contenido
+  for(const [ini, rec] of Object.entries(NOMENCLATURA)){
+    const cn = norm(rec.nombre);
+    if(dn.includes(cn) || cn.includes(dn)) return { ini, ...rec };
+  }
+  // 3. Primer nombre + inicial apellido (ej. "Henry S." → "Henry Salazar")
+  const parts = dn.split(/\s+/);
+  if(parts.length >= 2){
+    for(const [ini, rec] of Object.entries(NOMENCLATURA)){
+      const cp = norm(rec.nombre).split(/\s+/);
+      if(cp[0] === parts[0] && cp[1] && cp[1].startsWith(parts[1].replace('.',''))) return { ini, ...rec };
+    }
+  }
+  return null;
 }
 
 // ── Calendar grid render ───────────────────────────────────
@@ -1473,9 +1511,7 @@ function renderCalendar(filtered, personas, weeksByPersona){
   let body = '';
   personasInMonth.forEach(persona => {
     // Buscar en NOMENCLATURA: primero exacto, luego normalizado (sin tildes, minúsculas)
-    const norm = s => (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
-    const pRec = Object.values(NOMENCLATURA).find(n => n.nombre === persona)
-              || Object.values(NOMENCLATURA).find(n => norm(n.nombre) === norm(persona));
+    const pRec = findNomenclaturaByNombre(persona);
     const pais = pRec?.pais || 'Peru';
     const ferPais = FERIADOS[pais] || new Set();
 
