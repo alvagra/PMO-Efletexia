@@ -1268,10 +1268,16 @@ function getCapFiltered(){
   const persona = document.getElementById('cap-persona')?.value || '';
   const area    = document.getElementById('cap-area')?.value    || '';
   const pais    = document.getElementById('cap-pais')?.value    || '';
+  const norm = s => (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
   return capRows.filter(r => {
     if(persona && r.persona !== persona) return false;
-    if(area    && r.area    !== area)    return false;
     if(pais    && r.pais    !== pais)    return false;
+    if(area) {
+      // Resolver área desde NOMENCLATURA por nombre del recurso (fuente de verdad)
+      const recNom = Object.values(NOMENCLATURA).find(n => norm(n.nombre) === norm(r.persona));
+      const areaRec = recNom?.area || r.area || '';
+      if(areaRec !== area) return false;
+    }
     return true;
   });
 }
