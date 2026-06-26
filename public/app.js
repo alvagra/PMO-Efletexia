@@ -130,7 +130,7 @@ const JIRA_FIELDS = [
   "customfield_10930","customfield_10931","customfield_10934",
   "customfield_10829","customfield_10862","customfield_10969",
   "customfield_10970","customfield_11003","customfield_11004",
-  "customfield_11037","customfield_11070"
+  "customfield_11037","customfield_11070","customfield_11170"
 ];
 
 function parseIssue(i){
@@ -167,29 +167,7 @@ function parseIssue(i){
     conformidad:f.customfield_11004?f.customfield_11004.value:null,
     prioridad:f.customfield_11037?f.customfield_11037.value:null,
     sponsor:f.customfield_11070?f.customfield_11070.value:null,
-    condicion:(()=>{
-      // Campos ya mapeados a otros atributos — excluir de la búsqueda de COND.
-      const mapped = new Set([
-        'summary','status','assignee','reporter','labels','duedate','description',
-        'customfield_10015','customfield_10592','customfield_10659',
-        'customfield_10725','customfield_10726','customfield_10759',
-        'customfield_10895','customfield_10928','customfield_10929',
-        'customfield_10930','customfield_10931','customfield_10934',
-        'customfield_10829','customfield_10862','customfield_10969',
-        'customfield_10970','customfield_11003','customfield_11004',
-        'customfield_11037','customfield_11070','customfield_11136'
-      ]);
-      // Buscar en todos los customfields no mapeados un valor de texto corto (≤20 chars)
-      // que represente una nomenclatura/condición (no número, no fecha, no URL)
-      const allCf = Object.keys(f).filter(k => k.startsWith('customfield_') && !mapped.has(k));
-      for(const cf of allCf){
-        const v = f[cf];
-        if(!v) continue;
-        if(typeof v==='string' && v.length>0 && v.length<=20 && !/^\d{4}-/.test(v) && !/^http/.test(v)) return v;
-        if(v?.value && typeof v.value==='string' && v.value.length>0 && v.value.length<=20) return v.value;
-      }
-      return null;
-    })(),
+    condicion:f.customfield_11170||null,
     bitacora:bit||null,
     proximosPasos:prox||null,
     descripcion:desc||null,
