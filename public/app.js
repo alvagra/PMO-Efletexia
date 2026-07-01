@@ -1971,13 +1971,14 @@ function openEntDrawer(tipo) {
       </div>
     </div>`).join('');
 
-  // Reutilizar el det-panel existente
+  // Reutilizar el det-panel existente (dentro de rec-modal-overlay)
   document.getElementById('det-title').textContent = titulo;
   const body = document.getElementById('det-body');
   if (body) {
     body.innerHTML = items || '<div style="padding:20px;color:var(--text-muted)">No hay proyectos en este estado.</div>';
   }
   document.getElementById('det-panel').classList.add('open');
+  document.getElementById('rec-modal-overlay').classList.add('open');
 }
 
 // ── TARJETA KPI EJECUTIVO ENTREGABLES ───────────────────────
