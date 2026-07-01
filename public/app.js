@@ -16,6 +16,24 @@ let epics    = [];
 let recursos = [];
 let activeRecIdx = -1;
 
+
+// ── SEMÁFORO PORTAFOLIO (columna Semaforización) ────────────
+const WARN_ICON = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#F5B800" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+
+function getSemaforoPortafolio(e) {
+  // 1. Stand By (prioridad máxima)
+  if ((e.status||'').toLowerCase() === 'stand by') return WARN_ICON;
+  // 2-4: misma lógica del semáforo existente
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  const fin = e.duedate ? new Date(e.duedate+'T12:00:00') : null;
+  const vencido = fin && fin < hoy;
+  const bitText = (e.bitacora||'').toLowerCase();
+  const tieneReplan = bitText.includes('replanificación de fecha fin') || bitText.includes('replanificacion de fecha fin');
+  if (vencido)     return '🔴';
+  if (tieneReplan) return '<svg width="18" height="18" viewBox="0 0 18 18" style="vertical-align:middle"><circle cx="9" cy="9" r="8" fill="#F5B800"/></svg>';
+  return '🟢';
+}
+
 // ── UTILS ──────────────────────────────────────────────────
 function sbClass(s){
   if(!s) return 'backlog';
@@ -213,16 +231,7 @@ function renderTable(data){
   const tb=document.getElementById('table-body');
   if(!data_.length){ tb.innerHTML='<tr><td colspan="15" style="text-align:center;padding:40px;color:var(--text-muted)">Sin resultados</td></tr>'; return; }
   tb.innerHTML=data_.map(e=>{
-    const hoy = new Date(); hoy.setHours(0,0,0,0);
-    const fin = e.duedate ? new Date(e.duedate+'T12:00:00') : null;
-    const vencido = fin && fin < hoy;
-    const bitText = (e.bitacora||'').toLowerCase();
-    const tieneReplan = bitText.includes('replanificación de fecha fin') || bitText.includes('replanificacion de fecha fin');
-    const semaforo = vencido
-      ? '🔴'
-      : tieneReplan
-        ? '<svg width="18" height="18" viewBox="0 0 18 18" style="vertical-align:middle"><circle cx="9" cy="9" r="8" fill="#F5B800"/></svg>'
-        : '🟢';
+    const semaforo = getSemaforoPortafolio(e);
     return `
     <tr data-key="${e.key}">
       <td style="text-align:center;font-size:16px">${semaforo}</td>
@@ -1889,6 +1898,88 @@ function getSemaforoEnt(e) {
 
 
 
+
+// ── TARJETAS STAND BY Y BACKLOG EN ENTREGABLES ──────────────
+
+function renderEntKpiCards() {
+  // Reutiliza el mismo renderKpiEjecutivo existente ya en ent-kpi-wrap
+  // Agrega tarjetas Stand By y Backlog en ent-cards-wrap
+  const wrap = document.getElementById('ent-cards-wrap');
+  if (!wrap) return;
+
+  const allEpics = (epics || []).filter(e => !SPECIAL_EPIC_KEYS.includes(e.key));
+  const standbyList = allEpics.filter(e => (e.status||'').toLowerCase() === 'stand by');
+  const backlogList = allEpics.filter(e => (e.status||'').toLowerCase() === 'backlog');
+
+  // Calcular días promedio en Stand By (desde fechaInicio si existe)
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  const diasSB = standbyList.map(e => {
+    if (!e.fechaInicio) return null;
+    const d = new Date(e.fechaInicio+'T12:00:00');
+    return Math.max(0, Math.round((hoy - d) / 86400000));
+  }).filter(v => v !== null);
+  const avgSB = diasSB.length ? Math.round(diasSB.reduce((a,b)=>a+b,0)/diasSB.length) : null;
+
+  const diasBL = backlogList.map(e => {
+    if (!e.fechaInicio) return null;
+    const d = new Date(e.fechaInicio+'T12:00:00');
+    return Math.max(0, Math.round((hoy - d) / 86400000));
+  }).filter(v => v !== null);
+  const avgBL = diasBL.length ? Math.round(diasBL.reduce((a,b)=>a+b,0)/diasBL.length) : null;
+
+  wrap.innerHTML = `
+    <div class="kpi ent-kpi-clickable" onclick="openEntDrawer('standby')" style="cursor:pointer" title="Ver proyectos Stand By">
+      <div class="kpi-label" style="display:flex;align-items:center;gap:5px">
+        ${WARN_ICON} Proyectos con Bloqueantes
+      </div>
+      <div class="kpi-value" style="color:#F5B800">${standbyList.length}</div>
+      <div class="kpi-sub">Stand By${avgSB!==null?' · Prom: '+avgSB+'d':''}</div>
+    </div>
+    <div class="kpi ent-kpi-clickable" onclick="openEntDrawer('backlog')" style="cursor:pointer" title="Ver proyectos Backlog">
+      <div class="kpi-label" style="display:flex;align-items:center;gap:5px">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+        Backlog
+      </div>
+      <div class="kpi-value c-white">${backlogList.length}</div>
+      <div class="kpi-sub">Pendientes de iniciar${avgBL!==null?' · Prom: '+avgBL+'d':''}</div>
+    </div>`;
+}
+
+// Drawer reutilizado para Stand By y Backlog
+function openEntDrawer(tipo) {
+  const allEpics = (epics || []).filter(e => !SPECIAL_EPIC_KEYS.includes(e.key));
+  const lista = tipo === 'standby'
+    ? allEpics.filter(e => (e.status||'').toLowerCase() === 'stand by')
+    : allEpics.filter(e => (e.status||'').toLowerCase() === 'backlog');
+
+  const titulo = tipo === 'standby' ? 'Proyectos Stand By' : 'Proyectos Backlog';
+  const icono = tipo === 'standby'
+    ? WARN_ICON
+    : '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>';
+
+  const items = lista.map(e => `
+    <div class="det-proj-card" onclick="openModal('${e.key}')" style="cursor:pointer">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        ${icono}
+        <span style="font-size:13px;font-weight:600;color:var(--text-primary)">${esc(e.summary)}</span>
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);display:flex;gap:12px;flex-wrap:wrap">
+        <span><span class="badge badge-${sbClass(e.status)}">${esc(e.status)}</span></span>
+        ${e.sponsor?`<span>Sponsor: ${esc(e.sponsor)}</span>`:''}
+        ${e.asignado?`<span>Resp: ${esc(e.asignado)}</span>`:''}
+        ${e.duedate?`<span>Fin: ${fmtD(e.duedate)}</span>`:''}
+      </div>
+    </div>`).join('');
+
+  // Reutilizar el det-panel existente
+  document.getElementById('det-title').textContent = titulo;
+  const body = document.getElementById('det-body');
+  if (body) {
+    body.innerHTML = items || '<div style="padding:20px;color:var(--text-muted)">No hay proyectos en este estado.</div>';
+  }
+  document.getElementById('det-panel').classList.add('open');
+}
+
 // ── TARJETA KPI EJECUTIVO ENTREGABLES ───────────────────────
 function renderKpiEjecutivo() {
   const wrap = document.getElementById('ent-kpi-wrap');
@@ -1945,6 +2036,7 @@ function renderKpiEjecutivo() {
 // ── RESUMEN MENSUAL ENTREGABLES ──────────────────────────────
 function renderResumenMensual() {
   renderKpiEjecutivo();
+  renderEntKpiCards();
   const wrap = document.getElementById('ent-resumen-wrap');
   if (!wrap) return;
 
@@ -2040,9 +2132,11 @@ function renderEntregables() {
   const hoy = new Date(); hoy.setHours(0,0,0,0);
   const hoyIso = hoy.toISOString().slice(0,10);
 
+  const EXCLUIR_GANTT = ['backlog','desestimado'];
   let data = (epics || []).filter(e => {
     if (SPECIAL_EPIC_KEYS.includes(e.key)) return false;
     if (!e.duedate) return false;
+    if (EXCLUIR_GANTT.includes((e.status||'').toLowerCase())) return false;
     if (desde && e.duedate < desde) return false;
     if (hasta && e.duedate > hasta) return false;
     return true;
