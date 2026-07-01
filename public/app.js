@@ -1887,6 +1887,87 @@ function getSemaforoEnt(e) {
   return             { color:'#4ade80', label:'En plazo',      textColor:'#1a1a1a' };
 }
 
+
+// ── RESUMEN MENSUAL ENTREGABLES ──────────────────────────────
+function renderResumenMensual() {
+  const wrap = document.getElementById('ent-resumen-wrap');
+  if (!wrap) return;
+
+  // Todos los entregables sin filtro de fechas
+  const data = (epics || []).filter(e => !SPECIAL_EPIC_KEYS.includes(e.key) && e.duedate);
+  if (!data.length) { wrap.innerHTML = ''; return; }
+
+  // Rango de meses: desde el mínimo hasta el máximo de fechas fin
+  const fechas = data.map(e => e.duedate).sort();
+  const dMin = new Date(fechas[0]+'T12:00:00');
+  const dMax = new Date(fechas[fechas.length-1]+'T12:00:00');
+  dMin.setDate(1); dMax.setDate(1);
+
+  // Agrupar por mes
+  const byMonth = {};
+  data.forEach(e => {
+    const d = new Date(e.duedate+'T12:00:00');
+    const mk = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    if (!byMonth[mk]) byMonth[mk] = [];
+    byMonth[mk].push(e);
+  });
+
+  // Orden de estados para mostrar bloques
+  const ORDEN = ['En plazo','Replanificado','Vencido','Producción'];
+  const COLORS = {
+    'En plazo':      '#4ade80',
+    'Replanificado': '#F5B800',
+    'Vencido':       '#ef4444',
+    'Producción':    '#14B8A6'
+  };
+
+  // Generar todas las filas de meses en el rango
+  let html = '<div class="ent-resumen-title">Resumen mensual de entregables</div><div class="ent-resumen-grid">';
+
+  let cur = new Date(dMin);
+  while (cur <= dMax) {
+    const mk = `${cur.getFullYear()}-${String(cur.getMonth()+1).padStart(2,'0')}`;
+    const mesLabel = cur.toLocaleDateString('es-PE', { month:'long', year:'numeric' });
+    const items = byMonth[mk] || [];
+
+    html += `<div class="ent-mes-row">
+      <span class="ent-mes-label">${mesLabel.charAt(0).toUpperCase()+mesLabel.slice(1)}</span>`;
+
+    if (!items.length) {
+      html += '<span class="ent-mes-vacio">Sin entregables</span>';
+    } else {
+      // Agrupar por estado
+      const grupos = {};
+      items.forEach(e => {
+        const sem = getSemaforoEnt(e);
+        if (!grupos[sem.label]) grupos[sem.label] = [];
+        grupos[sem.label].push(e);
+      });
+
+      html += '<div class="ent-mes-bloques">';
+      ORDEN.forEach(estado => {
+        const grupo = grupos[estado] || [];
+        if (!grupo.length) return;
+        const col = COLORS[estado];
+        html += `<div class="ent-grupo">`;
+        grupo.forEach(e => {
+          const bit = esc(e.bitacora || 'Sin bitácora').replace(/"/g,'&quot;');
+          const tip = `${esc(e.codigo||e.key)} · ${esc(e.summary)}&#10;Fin: ${fmtD(e.duedate)||e.duedate}&#10;Estado: ${estado}&#10;${bit}`;
+          html += `<div class="ent-bloque" style="background:${col}" title="${tip}" onclick="showEntDetalle(event,'${e.key}')"></div>`;
+        });
+        html += `<span class="ent-grupo-count">${grupo.length}</span></div>`;
+      });
+      html += '</div>';
+    }
+
+    html += '</div>';
+    cur.setMonth(cur.getMonth()+1);
+  }
+
+  html += '</div>';
+  wrap.innerHTML = html;
+}
+
 function limpiarEntFiltros() {
   document.getElementById('ent-desde').value = '';
   document.getElementById('ent-hasta').value = '';
@@ -1894,6 +1975,7 @@ function limpiarEntFiltros() {
 }
 
 function renderEntregables() {
+  renderResumenMensual();
   const wrap = document.getElementById('ent-gantt-wrap');
   if (!wrap) return;
 
