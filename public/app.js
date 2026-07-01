@@ -1876,8 +1876,14 @@ function getSemaforoEnt(e) {
   const vencido = fin && fin < hoy;
   const bitText = (e.bitacora||'').toLowerCase();
   const tieneReplan = bitText.includes('replanificación de fecha fin') || bitText.includes('replanificacion de fecha fin');
+  // 1. Producción (prioridad máxima)
+  const statusLow = (e.status||'').toLowerCase();
+  if (statusLow === 'producción' || statusLow === 'produccion') return { color:'#14B8A6', label:'Producción', textColor:'#fff', border:'#0F766E' };
+  // 2. Vencido
   if (vencido)     return { color:'#ef4444', label:'Vencido',       textColor:'#fff' };
+  // 3. Replanificado
   if (tieneReplan) return { color:'#F5B800', label:'Replanificado', textColor:'#1a1a1a' };
+  // 4. En plazo
   return             { color:'#4ade80', label:'En plazo',      textColor:'#1a1a1a' };
 }
 
