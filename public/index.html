@@ -372,6 +372,26 @@ a.jlink:hover{text-decoration:underline}
 .sp-gantt-cell{min-width:80px;color:var(--text-muted)}
 /* Vacaciones en calendario de capacidad */
 .c-vacation{background:rgba(99,102,241,.25)!important;color:#818cf8!important;font-weight:700;cursor:default}
+/* ── Pestaña Entregables ── */
+.ent-toolbar{display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--border-light);flex-wrap:wrap}
+.ent-filter-group{display:flex;align-items:center;gap:6px}
+.ent-label{font-size:11px;color:var(--text-muted);white-space:nowrap}
+.ent-input{background:var(--bg-hover);border:1px solid var(--border-light);border-radius:6px;color:var(--text-primary);font-size:12px;padding:5px 8px;outline:none}
+.ent-legend{display:flex;align-items:center;gap:12px;margin-left:auto;font-size:11px;color:var(--text-muted)}
+.ent-leg-item{display:flex;align-items:center;gap:4px}
+.ent-dot{display:inline-block;width:10px;height:10px;border-radius:50%}
+#ent-gantt-wrap{padding:16px 20px;overflow-x:auto}
+.ent-gantt-table{width:100%;border-collapse:collapse;min-width:700px}
+.ent-gantt-table th{font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;padding:6px 10px;border-bottom:1px solid var(--border-light);white-space:nowrap;background:var(--bg-base)}
+.ent-gantt-table td{padding:6px 10px;border-bottom:1px solid var(--border-light);font-size:12px;vertical-align:middle}
+.ent-gantt-table tr:hover td{background:var(--bg-hover)}
+.ent-bar{display:inline-flex;align-items:center;gap:8px;padding:5px 12px;border-radius:4px;cursor:pointer;font-size:12px;font-weight:600;color:#fff;white-space:nowrap;transition:opacity .15s}
+.ent-bar:hover{opacity:.85}
+.ent-proyecto{font-size:13px;color:var(--text-primary);font-weight:500}
+.ent-codigo{font-size:11px;color:var(--blue);font-weight:600;min-width:80px}
+.ent-fecha-col{font-size:12px;color:var(--text-muted);white-space:nowrap}
+.ent-empty{padding:60px;text-align:center;color:var(--text-muted);font-size:13px}
+.ent-month-hdr{font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;padding:16px 10px 4px;letter-spacing:.05em}
 </style></head>
 <body>
 
@@ -413,6 +433,10 @@ a.jlink:hover{text-decoration:underline}
   </div>
   <div class="tab" data-tab="capacity">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M5 8h6M8 5v6"/></svg>Capacity
+  </div>
+  <div class="tab" data-tab="entregables">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M10 5l3 3-3 3"/><path d="M3 4v8"/></svg>Entregables
+  </div>
   </div>
 </nav>
 
@@ -607,6 +631,36 @@ a.jlink:hover{text-decoration:underline}
   <!-- Calendar grid -->
   <div class="cap-cal-wrap" id="cap-cal-wrap">
     <div class="cap-empty" style="padding:40px;text-align:center;color:var(--text-dim)">Cargando calendario…</div>
+  </div>
+</div>
+
+</div>
+
+<div class="tab-panel" id="panel-entregables">
+  <div class="ent-toolbar">
+    <div class="ent-filter-group">
+      <label class="ent-label">Desde</label>
+      <input type="date" id="ent-desde" class="ent-input">
+    </div>
+    <div class="ent-filter-group">
+      <label class="ent-label">Hasta</label>
+      <input type="date" id="ent-hasta" class="ent-input">
+    </div>
+    <button class="btn-action" onclick="renderEntregables()">Aplicar</button>
+    <button class="btn-action" onclick="limpiarEntFiltros()">Limpiar</button>
+    <div class="ent-legend">
+      <span class="ent-leg-item"><span class="ent-dot" style="background:#ef4444"></span>Vencido</span>
+      <span class="ent-leg-item"><svg width="12" height="12" viewBox="0 0 12 12"><circle cx="6" cy="6" r="5" fill="#F5B800"/></svg> Replanificado</span>
+      <span class="ent-leg-item"><span class="ent-dot" style="background:#4ade80"></span>En plazo</span>
+    </div>
+  </div>
+  <div id="ent-gantt-wrap"></div>
+  <!-- Tooltip detalle bitácora -->
+  <div id="ent-tooltip" style="display:none;position:fixed;z-index:999;background:var(--bg-card);border:1px solid var(--border-light);border-radius:8px;padding:14px 16px;max-width:360px;box-shadow:0 8px 24px rgba(0,0,0,.4)">
+    <div style="font-weight:600;font-size:13px;margin-bottom:6px" id="ent-tooltip-title"></div>
+    <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px" id="ent-tooltip-fecha"></div>
+    <div style="font-size:12px;color:var(--text-primary);white-space:pre-wrap;line-height:1.6;max-height:200px;overflow-y:auto" id="ent-tooltip-bit"></div>
+    <div style="margin-top:8px;text-align:right"><button class="btn-action" onclick="document.getElementById('ent-tooltip').style.display='none'">Cerrar</button></div>
   </div>
 </div>
 
