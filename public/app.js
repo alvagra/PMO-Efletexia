@@ -2016,7 +2016,7 @@ function renderEntregables() {
         <!-- barra -->
         <div style="position:absolute;top:50%;transform:translateY(-50%);left:${bx}px;width:${bw}px;height:22px;background:${sem.color};border-radius:4px;display:flex;align-items:center;padding:0 8px;cursor:pointer;box-sizing:border-box;overflow:hidden;white-space:nowrap"
              onclick="showEntDetalle(event,'${e.key}')" title="${esc(e.summary)} · ${fmtD(e.duedate)}">
-          <span style="font-size:10px;font-weight:700;color:${sem.textColor};overflow:hidden;text-overflow:ellipsis">${fmtD(e.duedate)}</span>
+
         </div>
         <!-- línea de hoy -->
         <div style="position:absolute;top:0;bottom:0;left:${hoyX}px;width:2px;background:#3b82f6;opacity:.6;pointer-events:none"></div>
