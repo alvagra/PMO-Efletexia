@@ -372,6 +372,10 @@ a.jlink:hover{text-decoration:underline}
 .sp-gantt-cell{min-width:80px;color:var(--text-muted)}
 /* Vacaciones en calendario de capacidad */
 .c-vacation{background:rgba(99,102,241,.25)!important;color:#818cf8!important;font-weight:700;cursor:default}
+/* Tarjetas drawer Stand By / Backlog */
+.det-proj-card{background:var(--bg-hover);border:1px solid var(--border-light);border-radius:6px;padding:10px 12px;margin-bottom:8px;transition:background .15s}
+.det-proj-card:hover{background:var(--bg-card)}
+.ent-kpi-clickable:hover{background:var(--bg-hover)!important;transition:background .15s}
 /* ── Pestaña Entregables ── */
 .ent-toolbar{display:flex;align-items:center;gap:16px;padding:12px 20px;border-bottom:1px solid var(--border-light);flex-wrap:wrap;background:var(--bg-base)}
 .ent-filter-group{display:flex;align-items:center;gap:6px}
@@ -657,6 +661,7 @@ a.jlink:hover{text-decoration:underline}
 </div>
 
 <div class="tab-panel" id="panel-entregables">
+  <div class="kpis" id="ent-cards-wrap" style="grid-template-columns:repeat(2,1fr)"></div>
   <div class="ent-top-row">
     <div class="ent-resumen-col" id="ent-resumen-wrap"></div>
     <div class="ent-kpi-col" id="ent-kpi-wrap"></div>
