@@ -117,6 +117,7 @@ document.querySelectorAll('.tabs .tab').forEach(tab => {
     if(panel) panel.classList.add('active');
     if(tab.dataset.tab==='recursos' && !recursosLoaded) loadRecursos();
     if(tab.dataset.tab==='capacity' && !capacityLoaded) loadCapacity();
+    if(tab.dataset.tab==='entregables') renderEntregables();
   });
 });
 
@@ -1866,3 +1867,108 @@ async function renderSpecialSections() {
       </div>`;
   }).join('');
 }
+
+// ── PESTAÑA ENTREGABLES ─────────────────────────────────────
+
+function getSemaforoEnt(e) {
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  const fin = e.duedate ? new Date(e.duedate+'T12:00:00') : null;
+  const vencido = fin && fin < hoy;
+  const bitText = (e.bitacora||'').toLowerCase();
+  const tieneReplan = bitText.includes('replanificación de fecha fin') || bitText.includes('replanificacion de fecha fin');
+  if (vencido)       return { color:'#ef4444', label:'Vencido',      icon:'🔴' };
+  if (tieneReplan)   return { color:'#F5B800', label:'Replanificado', icon:'⚠' };
+  return               { color:'#4ade80', label:'En plazo',     icon:'🟢' };
+}
+
+function limpiarEntFiltros() {
+  document.getElementById('ent-desde').value = '';
+  document.getElementById('ent-hasta').value = '';
+  renderEntregables();
+}
+
+function renderEntregables() {
+  const wrap = document.getElementById('ent-gantt-wrap');
+  if (!wrap) return;
+
+  const desde = document.getElementById('ent-desde')?.value || '';
+  const hasta = document.getElementById('ent-hasta')?.value || '';
+
+  // Filtrar épicas con fecha fin, excluyendo especiales
+  let data = (epics || []).filter(e => {
+    if (SPECIAL_EPIC_KEYS.includes(e.key)) return false;
+    if (!e.duedate) return false;
+    if (desde && e.duedate < desde) return false;
+    if (hasta && e.duedate > hasta) return false;
+    return true;
+  });
+
+  if (!data.length) {
+    wrap.innerHTML = '<div class="ent-empty">No hay entregables con fecha fin en el rango seleccionado.</div>';
+    return;
+  }
+
+  // Ordenar por fecha fin
+  data.sort((a, b) => a.duedate.localeCompare(b.duedate));
+
+  // Agrupar por mes
+  const byMonth = {};
+  data.forEach(e => {
+    const d = new Date(e.duedate+'T12:00:00');
+    const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    const label = d.toLocaleDateString('es-PE', { month:'long', year:'numeric' });
+    if (!byMonth[key]) byMonth[key] = { label, items:[] };
+    byMonth[key].items.push(e);
+  });
+
+  let html = '<table class="ent-gantt-table"><thead><tr>';
+  html += '<th style="width:80px">Código</th>';
+  html += '<th>Proyecto</th>';
+  html += '<th style="width:110px">Fecha Fin</th>';
+  html += '<th style="width:130px">Estado</th>';
+  html += '<th style="width:80px">Detalle</th>';
+  html += '</tr></thead><tbody>';
+
+  Object.keys(byMonth).sort().forEach(mk => {
+    const { label, items } = byMonth[mk];
+    html += `<tr><td colspan="5" class="ent-month-hdr">${label.charAt(0).toUpperCase()+label.slice(1)}</td></tr>`;
+    items.forEach(e => {
+      const sem = getSemaforoEnt(e);
+      const fechaFmt = fmtD(e.duedate) || e.duedate;
+      const hasBit = e.bitacora && e.bitacora.trim();
+      html += `<tr>
+        <td class="ent-codigo">${esc(e.codigo||e.key)}</td>
+        <td class="ent-proyecto" title="${esc(e.summary)}">${esc(e.summary)}</td>
+        <td class="ent-fecha-col">📅 ${fechaFmt}</td>
+        <td><span class="ent-bar" style="background:${sem.color}" onclick="showEntDetalle(event,'${e.key}')">${sem.icon} ${sem.label}</span></td>
+        <td>${hasBit ? `<button class="btn-action" onclick="showEntDetalle(event,'${e.key}')">Bitácora</button>` : '<span style="color:var(--text-muted)">—</span>'}</td>
+      </tr>`;
+    });
+  });
+
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+function showEntDetalle(event, key) {
+  event.stopPropagation();
+  const e = (epics||[]).find(x => x.key === key);
+  if (!e) return;
+  const sem = getSemaforoEnt(e);
+  const tt = document.getElementById('ent-tooltip');
+  document.getElementById('ent-tooltip-title').textContent = `${e.codigo||e.key} · ${e.summary}`;
+  document.getElementById('ent-tooltip-fecha').textContent = `Fecha Fin: ${fmtD(e.duedate)||'—'} · ${sem.label}`;
+  document.getElementById('ent-tooltip-bit').textContent = e.bitacora || 'Sin bitácora registrada.';
+  // Posicionar tooltip cerca del clic
+  const x = Math.min(event.clientX + 12, window.innerWidth - 380);
+  const y = Math.min(event.clientY + 12, window.innerHeight - 280);
+  tt.style.left = x + 'px';
+  tt.style.top  = y + 'px';
+  tt.style.display = 'block';
+}
+
+// Cerrar tooltip al clic fuera
+document.addEventListener('click', e => {
+  const tt = document.getElementById('ent-tooltip');
+  if (tt && !tt.contains(e.target)) tt.style.display = 'none';
+});
