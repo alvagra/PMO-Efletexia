@@ -1888,8 +1888,63 @@ function getSemaforoEnt(e) {
 }
 
 
+
+// ── TARJETA KPI EJECUTIVO ENTREGABLES ───────────────────────
+function renderKpiEjecutivo() {
+  const wrap = document.getElementById('ent-kpi-wrap');
+  if (!wrap) return;
+
+  const data = (epics || []).filter(e => !SPECIAL_EPIC_KEYS.includes(e.key) && e.duedate);
+  const total = data.length;
+  if (!total) { wrap.innerHTML = ''; return; }
+
+  let nPlazo=0, nProd=0, nReplan=0, nVencido=0;
+  data.forEach(e => {
+    const s = getSemaforoEnt(e).label;
+    if (s==='En plazo')      nPlazo++;
+    else if (s==='Producción') nProd++;
+    else if (s==='Replanificado') nReplan++;
+    else if (s==='Vencido')   nVencido++;
+  });
+
+  const pct = n => total ? Math.round(n/total*100) : 0;
+  const cumplimiento = pct(nPlazo + nProd);
+  const cumColor = cumplimiento>=80?'var(--green)':cumplimiento>=60?'var(--yellow)':'var(--red)';
+
+  wrap.innerHTML = `
+    <div class="ent-kpi-card">
+      <div class="ent-kpi-card-title">📊 Indicadores del Portafolio</div>
+      <div class="ent-kpi-row">
+        <span class="ent-kpi-lbl">📦 Total entregables</span>
+        <div class="ent-kpi-vals"><span class="ent-kpi-num">${total}</span></div>
+      </div>
+      <div class="ent-kpi-row">
+        <span class="ent-kpi-lbl"><span style="color:#4ade80">●</span> En plazo</span>
+        <div class="ent-kpi-vals"><span class="ent-kpi-num" style="color:#4ade80">${nPlazo}</span><span class="ent-kpi-pct">${pct(nPlazo)}%</span></div>
+      </div>
+      <div class="ent-kpi-row">
+        <span class="ent-kpi-lbl"><span style="color:#14B8A6">●</span> Producción</span>
+        <div class="ent-kpi-vals"><span class="ent-kpi-num" style="color:#14B8A6">${nProd}</span><span class="ent-kpi-pct">${pct(nProd)}%</span></div>
+      </div>
+      <div class="ent-kpi-row">
+        <span class="ent-kpi-lbl"><span style="color:#F5B800">●</span> Replanificados</span>
+        <div class="ent-kpi-vals"><span class="ent-kpi-num" style="color:#F5B800">${nReplan}</span><span class="ent-kpi-pct">${pct(nReplan)}%</span></div>
+      </div>
+      <div class="ent-kpi-row">
+        <span class="ent-kpi-lbl"><span style="color:#ef4444">●</span> Vencidos</span>
+        <div class="ent-kpi-vals"><span class="ent-kpi-num" style="color:#ef4444">${nVencido}</span><span class="ent-kpi-pct">${pct(nVencido)}%</span></div>
+      </div>
+      <hr class="ent-kpi-divider">
+      <div class="ent-kpi-cumplimiento">
+        <div class="ent-kpi-cum-lbl">📈 Cumplimiento General</div>
+        <div class="ent-kpi-cum-val" style="color:${cumColor}">${cumplimiento}%</div>
+      </div>
+    </div>`;
+}
+
 // ── RESUMEN MENSUAL ENTREGABLES ──────────────────────────────
 function renderResumenMensual() {
+  renderKpiEjecutivo();
   const wrap = document.getElementById('ent-resumen-wrap');
   if (!wrap) return;
 
