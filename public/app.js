@@ -220,7 +220,7 @@ function renderTable(data){
     const semaforo = vencido
       ? '🔴'
       : tieneReplan
-        ? '<span style="font-size:16px;color:#F5B800">&#9899;</span>'
+        ? '<svg width="18" height="18" viewBox="0 0 18 18" style="vertical-align:middle"><circle cx="9" cy="9" r="8" fill="#F5B800"/></svg>'
         : '🟢';
     return `
     <tr data-key="${e.key}">
