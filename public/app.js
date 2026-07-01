@@ -1945,7 +1945,7 @@ function renderEntKpiCards() {
     </div>`;
 }
 
-// Drawer reutilizado para Stand By y Backlog
+// Drawer propio para Stand By y Backlog
 function openEntDrawer(tipo) {
   const allEpics = (epics || []).filter(e => !SPECIAL_EPIC_KEYS.includes(e.key));
   const lista = tipo === 'standby'
@@ -1958,7 +1958,7 @@ function openEntDrawer(tipo) {
     : '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>';
 
   const items = lista.map(e => `
-    <div class="det-proj-card" onclick="openModal('${e.key}')" style="cursor:pointer">
+    <div class="det-proj-card" onclick="openEntDetalle('${e.key}')" style="cursor:pointer">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
         ${icono}
         <span style="font-size:13px;font-weight:600;color:var(--text-primary)">${esc(e.summary)}</span>
@@ -1971,14 +1971,75 @@ function openEntDrawer(tipo) {
       </div>
     </div>`).join('');
 
-  // Reutilizar el det-panel existente (dentro de rec-modal-overlay)
-  document.getElementById('det-title').textContent = titulo;
-  const body = document.getElementById('det-body');
-  if (body) {
-    body.innerHTML = items || '<div style="padding:20px;color:var(--text-muted)">No hay proyectos en este estado.</div>';
-  }
-  document.getElementById('det-panel').classList.add('open');
-  document.getElementById('rec-modal-overlay').classList.add('open');
+  document.getElementById('ent-drawer-title').textContent = titulo;
+  document.getElementById('ent-drawer-body').innerHTML =
+    items || '<div style="padding:20px;color:var(--text-muted)">No hay proyectos en este estado.</div>';
+  const ov = document.getElementById('ent-drawer-overlay');
+  ov.style.display = 'flex';
+}
+
+function closeEntDrawer(event) {
+  if (event && event.target !== document.getElementById('ent-drawer-overlay')) return;
+  document.getElementById('ent-drawer-overlay').style.display = 'none';
+  document.getElementById('ent-det-overlay').style.display = 'none';
+}
+
+// Panel de detalle dentro del drawer (bitácora, próximos pasos, etc.)
+function openEntDetalle(key) {
+  const e = (epics||[]).find(x => x.key === key);
+  if (!e) return;
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+
+  // Calcular días en estado actual desde fechaInicio
+  const diasEst = e.fechaInicio
+    ? Math.max(0, Math.round((hoy - new Date(e.fechaInicio+'T12:00:00')) / 86400000))
+    : null;
+
+  const bitHtml = e.bitacora
+    ? `<div class="log-box">${esc(e.bitacora)}</div>`
+    : `<div class="log-box empty">Sin bitácora registrada</div>`;
+  const proxHtml = e.proximosPasos
+    ? `<div class="log-box">${esc(e.proximosPasos)}</div>`
+    : `<div class="log-box empty">Sin próximos pasos definidos</div>`;
+  const condHtml = e.condicion
+    ? `<div class="log-box">${esc(e.condicion)}</div>`
+    : `<div class="log-box empty">Sin información</div>`;
+
+  const ov = document.getElementById('ent-det-overlay');
+  document.getElementById('ent-det-nombre').textContent = e.summary;
+  document.getElementById('ent-det-body').innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border-light);margin-bottom:16px;border-radius:6px;overflow:hidden">
+      <div style="background:var(--bg-surface);padding:12px;text-align:center">
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px">Estado</div>
+        <span class="badge badge-${sbClass(e.status)}">${esc(e.status)}</span>
+      </div>
+      <div style="background:var(--bg-surface);padding:12px;text-align:center">
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px">Días en estado</div>
+        <div style="font-size:20px;font-weight:700;color:var(--yellow)">${diasEst!==null?diasEst:'—'}</div>
+      </div>
+      <div style="background:var(--bg-surface);padding:12px;text-align:center">
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px">Fecha Fin</div>
+        <div style="font-size:13px;font-weight:600;color:var(--text-primary)">${fmtD(e.duedate)||'—'}</div>
+      </div>
+    </div>
+    <div class="gm-section">
+      <div class="gm-item"><span class="gm-lbl">Área</span><span class="gm-val">${esc(e.area)||'—'}</span></div>
+      <div class="gm-item"><span class="gm-lbl">Sponsor</span><span class="gm-val">${esc(e.sponsor)||'—'}</span></div>
+      <div class="gm-item"><span class="gm-lbl">Responsable</span><span class="gm-val">${esc(e.asignado)||'—'}</span></div>
+      <div class="gm-item"><span class="gm-lbl">Fecha Inicio</span><span class="gm-val">${fmtD(e.fechaInicio)||'—'}</span></div>
+      <div class="gm-item"><span class="gm-lbl">COND.</span><span class="gm-val">${esc(e.condicion)||'—'}</span></div>
+    </div>
+    <div class="log-section" style="margin-top:12px">
+      <div class="log-title"><div class="log-title-bar" style="background:var(--blue)"></div>Detalles clave</div>
+      ${condHtml}
+      <div class="log-spacer"></div>
+      <div class="log-title"><div class="log-title-bar"></div>Bitácora</div>
+      ${bitHtml}
+      <div class="log-spacer"></div>
+      <div class="log-title"><div class="log-title-bar"></div>Próximos pasos</div>
+      ${proxHtml}
+    </div>`;
+  ov.style.display = 'flex';
 }
 
 // ── TARJETA KPI EJECUTIVO ENTREGABLES ───────────────────────
