@@ -758,5 +758,33 @@ a.jlink:hover{text-decoration:underline}
 </div>
 
 <script src="app.js"></script>
+
+<!-- DRAWER STAND BY / BACKLOG -->
+<div id="ent-drawer-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:500;justify-content:flex-end" onclick="closeEntDrawer(event)">
+  <div id="ent-drawer-panel" style="background:var(--bg-surface);border-left:1px solid var(--border);width:min(50vw,560px);height:100vh;overflow-y:auto;display:flex;flex-direction:column" onclick="event.stopPropagation()">
+    <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
+      <div>
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Portafolio</div>
+        <div style="font-size:16px;font-weight:700;color:var(--text-primary)" id="ent-drawer-title">—</div>
+      </div>
+      <button onclick="document.getElementById('ent-drawer-overlay').style.display='none'" style="background:none;border:none;color:var(--text-muted);font-size:18px;cursor:pointer;padding:4px">&#x2715;</button>
+    </div>
+    <div style="padding:16px;flex:1" id="ent-drawer-body"></div>
+  </div>
+</div>
+
+<!-- DETALLE INDIVIDUAL STAND BY / BACKLOG -->
+<div id="ent-det-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:600;justify-content:flex-end" onclick="if(event.target===this)this.style.display='none'">
+  <div style="background:var(--bg-surface);border-left:1px solid var(--border);width:min(50vw,560px);height:100vh;overflow-y:auto;display:flex;flex-direction:column" onclick="event.stopPropagation()">
+    <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
+      <div>
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Detalle de proyecto</div>
+        <div style="font-size:15px;font-weight:700;color:var(--text-primary)" id="ent-det-nombre">—</div>
+      </div>
+      <button onclick="document.getElementById('ent-det-overlay').style.display='none'" style="background:none;border:none;color:var(--text-muted);font-size:18px;cursor:pointer;padding:4px">&#x2715;</button>
+    </div>
+    <div style="padding:20px;flex:1" id="ent-det-body"></div>
+  </div>
+</div>
 </body>
 </html>
