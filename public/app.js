@@ -1876,9 +1876,9 @@ function getSemaforoEnt(e) {
   const vencido = fin && fin < hoy;
   const bitText = (e.bitacora||'').toLowerCase();
   const tieneReplan = bitText.includes('replanificación de fecha fin') || bitText.includes('replanificacion de fecha fin');
-  if (vencido)       return { color:'#ef4444', label:'Vencido',      icon:'🔴' };
-  if (tieneReplan)   return { color:'#F5B800', label:'Replanificado', icon:'⚠' };
-  return               { color:'#4ade80', label:'En plazo',     icon:'🟢' };
+  if (vencido)     return { color:'#ef4444', label:'Vencido',       textColor:'#fff' };
+  if (tieneReplan) return { color:'#F5B800', label:'Replanificado', textColor:'#1a1a1a' };
+  return             { color:'#4ade80', label:'En plazo',      textColor:'#1a1a1a' };
 }
 
 function limpiarEntFiltros() {
@@ -1894,59 +1894,133 @@ function renderEntregables() {
   const desde = document.getElementById('ent-desde')?.value || '';
   const hasta = document.getElementById('ent-hasta')?.value || '';
 
-  // Filtrar épicas con fecha fin, excluyendo especiales
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  const hoyIso = hoy.toISOString().slice(0,10);
+
   let data = (epics || []).filter(e => {
     if (SPECIAL_EPIC_KEYS.includes(e.key)) return false;
     if (!e.duedate) return false;
     if (desde && e.duedate < desde) return false;
     if (hasta && e.duedate > hasta) return false;
     return true;
-  });
+  }).sort((a,b) => a.duedate.localeCompare(b.duedate));
 
   if (!data.length) {
     wrap.innerHTML = '<div class="ent-empty">No hay entregables con fecha fin en el rango seleccionado.</div>';
     return;
   }
 
-  // Ordenar por fecha fin
-  data.sort((a, b) => a.duedate.localeCompare(b.duedate));
+  // Rango del Gantt: desde hoy (o la más temprana si ya venció) hasta la más lejana + 7 días
+  const fechas = data.map(e => e.duedate);
+  const minFin = fechas.reduce((a,b) => a<b?a:b);
+  const maxFin = fechas.reduce((a,b) => a>b?a:b);
+  const ganttStart = new Date(Math.min(hoy, new Date(minFin+'T12:00:00')));
+  ganttStart.setHours(0,0,0,0);
+  const ganttEnd = new Date(maxFin+'T12:00:00');
+  ganttEnd.setDate(ganttEnd.getDate() + 10);
+  ganttEnd.setHours(0,0,0,0);
 
-  // Agrupar por mes
-  const byMonth = {};
-  data.forEach(e => {
-    const d = new Date(e.duedate+'T12:00:00');
-    const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-    const label = d.toLocaleDateString('es-PE', { month:'long', year:'numeric' });
-    if (!byMonth[key]) byMonth[key] = { label, items:[] };
-    byMonth[key].items.push(e);
+  const totalDays = Math.round((ganttEnd - ganttStart) / 86400000);
+  const COL_W = 28; // px por día
+  const ROW_H = 36;
+  const LABEL_W = 220;
+  const ganttW = totalDays * COL_W;
+
+  // Construir cabeceras: meses y días
+  let months = [];
+  let days = [];
+  let cur = new Date(ganttStart);
+  while (cur <= ganttEnd) {
+    const iso = cur.toISOString().slice(0,10);
+    const dow = cur.getDay();
+    const isWE = dow === 0 || dow === 6;
+    const isHoy = iso === hoyIso;
+    days.push({ iso, day: cur.getDate(), dow, isWE, isHoy });
+    // mes
+    const mKey = `${cur.getFullYear()}-${cur.getMonth()}`;
+    if (!months.length || months[months.length-1].key !== mKey) {
+      months.push({ key: mKey, label: cur.toLocaleDateString('es-PE',{month:'short',year:'numeric'}), count: 1 });
+    } else {
+      months[months.length-1].count++;
+    }
+    cur.setDate(cur.getDate()+1);
+  }
+
+  // Función para calcular posición X de una fecha
+  function xOf(isoDate) {
+    const d = new Date(isoDate+'T12:00:00'); d.setHours(0,0,0,0);
+    return Math.round((d - ganttStart) / 86400000) * COL_W;
+  }
+
+  let html = `<div style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 180px)">
+  <table class="ent-gantt-tbl" style="border-collapse:collapse;table-layout:fixed">
+  <colgroup>
+    <col style="width:${LABEL_W}px;min-width:${LABEL_W}px">
+    <col style="width:${ganttW}px;min-width:${ganttW}px">
+  </colgroup>
+  <thead>
+    <tr class="ent-hdr-months">
+      <th style="background:var(--bg-base);border-bottom:1px solid var(--border-light);border-right:1px solid var(--border-light);padding:4px 10px;font-size:11px;color:var(--text-muted);text-align:left">Proyecto</th>
+      <th style="padding:0;background:var(--bg-base);border-bottom:1px solid var(--border-light)">
+        <div style="display:flex">`;
+  months.forEach(m => {
+    html += `<div style="width:${m.count*COL_W}px;min-width:${m.count*COL_W}px;padding:4px 6px;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;border-right:1px solid var(--border-light);overflow:hidden;white-space:nowrap">${m.label}</div>`;
   });
+  html += `</div></th></tr>
+    <tr class="ent-hdr-days">
+      <th style="background:var(--bg-base);border-bottom:1px solid var(--border-light);border-right:1px solid var(--border-light)"></th>
+      <th style="padding:0;background:var(--bg-base);border-bottom:1px solid var(--border-light)">
+        <div style="display:flex">`;
+  days.forEach(d => {
+    const bg = d.isHoy ? 'rgba(59,130,246,.25)' : d.isWE ? 'rgba(255,255,255,.03)' : 'transparent';
+    const col = d.isHoy ? '#60a5fa' : d.isWE ? 'var(--text-dim)' : 'var(--text-muted)';
+    html += `<div style="width:${COL_W}px;min-width:${COL_W}px;text-align:center;font-size:9px;padding:3px 0;background:${bg};color:${col};border-right:1px solid rgba(255,255,255,.04)">${d.day}</div>`;
+  });
+  html += `</div></th></tr>
+  </thead>
+  <tbody>`;
 
-  let html = '<table class="ent-gantt-table"><thead><tr>';
-  html += '<th style="width:80px">Código</th>';
-  html += '<th>Proyecto</th>';
-  html += '<th style="width:110px">Fecha Fin</th>';
-  html += '<th style="width:130px">Estado</th>';
-  html += '<th style="width:80px">Detalle</th>';
-  html += '</tr></thead><tbody>';
+  // Línea de hoy (posición)
+  const hoyX = xOf(hoyIso);
 
-  Object.keys(byMonth).sort().forEach(mk => {
-    const { label, items } = byMonth[mk];
-    html += `<tr><td colspan="5" class="ent-month-hdr">${label.charAt(0).toUpperCase()+label.slice(1)}</td></tr>`;
-    items.forEach(e => {
-      const sem = getSemaforoEnt(e);
-      const fechaFmt = fmtD(e.duedate) || e.duedate;
-      const hasBit = e.bitacora && e.bitacora.trim();
-      html += `<tr>
-        <td class="ent-codigo">${esc(e.codigo||e.key)}</td>
-        <td class="ent-proyecto" title="${esc(e.summary)}">${esc(e.summary)}</td>
-        <td class="ent-fecha-col">📅 ${fechaFmt}</td>
-        <td><span class="ent-bar" style="background:${sem.color}" onclick="showEntDetalle(event,'${e.key}')">${sem.icon} ${sem.label}</span></td>
-        <td>${hasBit ? `<button class="btn-action" onclick="showEntDetalle(event,'${e.key}')">Bitácora</button>` : '<span style="color:var(--text-muted)">—</span>'}</td>
-      </tr>`;
+  data.forEach((e, i) => {
+    const sem = getSemaforoEnt(e);
+    const fin = new Date(e.duedate+'T12:00:00'); fin.setHours(0,0,0,0);
+    const vencido = fin < hoy;
+
+    // Barra: desde hoy (o desde el inicio del gantt si ya venció) hasta fecha fin
+    const barStart = vencido ? ganttStart : hoy;
+    const barEnd = fin;
+    const bx = xOf(barStart.toISOString().slice(0,10));
+    const bw = Math.max(xOf(e.duedate) - bx + COL_W, COL_W);
+
+    const bg = i%2===0 ? 'transparent' : 'rgba(255,255,255,.015)';
+
+    html += `<tr style="height:${ROW_H}px;background:${bg}">
+      <td style="padding:4px 10px;border-right:1px solid var(--border-light);border-bottom:1px solid rgba(255,255,255,.05);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;max-width:${LABEL_W}px">
+        <div style="font-size:11px;font-weight:600;color:var(--blue)">${esc(e.codigo||e.key)}</div>
+        <div style="font-size:11px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(e.summary)}">${esc(e.summary)}</div>
+      </td>
+      <td style="padding:0;border-bottom:1px solid rgba(255,255,255,.05);position:relative">
+        <!-- grid lines fin de semana -->
+        <div style="display:flex;height:100%;position:absolute;inset:0">`;
+    days.forEach(d => {
+      const colBg = d.isHoy ? 'rgba(59,130,246,.08)' : d.isWE ? 'rgba(255,255,255,.025)' : 'transparent';
+      html += `<div style="width:${COL_W}px;min-width:${COL_W}px;height:100%;background:${colBg};border-right:1px solid rgba(255,255,255,.035)"></div>`;
     });
+    html += `</div>
+        <!-- barra -->
+        <div style="position:absolute;top:50%;transform:translateY(-50%);left:${bx}px;width:${bw}px;height:22px;background:${sem.color};border-radius:4px;display:flex;align-items:center;padding:0 8px;cursor:pointer;box-sizing:border-box;overflow:hidden;white-space:nowrap"
+             onclick="showEntDetalle(event,'${e.key}')" title="${esc(e.summary)} · ${fmtD(e.duedate)}">
+          <span style="font-size:10px;font-weight:700;color:${sem.textColor};overflow:hidden;text-overflow:ellipsis">${fmtD(e.duedate)}</span>
+        </div>
+        <!-- línea de hoy -->
+        <div style="position:absolute;top:0;bottom:0;left:${hoyX}px;width:2px;background:#3b82f6;opacity:.6;pointer-events:none"></div>
+      </td>
+    </tr>`;
   });
 
-  html += '</tbody></table>';
+  html += `</tbody></table></div>`;
   wrap.innerHTML = html;
 }
 
@@ -1959,15 +2033,13 @@ function showEntDetalle(event, key) {
   document.getElementById('ent-tooltip-title').textContent = `${e.codigo||e.key} · ${e.summary}`;
   document.getElementById('ent-tooltip-fecha').textContent = `Fecha Fin: ${fmtD(e.duedate)||'—'} · ${sem.label}`;
   document.getElementById('ent-tooltip-bit').textContent = e.bitacora || 'Sin bitácora registrada.';
-  // Posicionar tooltip cerca del clic
   const x = Math.min(event.clientX + 12, window.innerWidth - 380);
-  const y = Math.min(event.clientY + 12, window.innerHeight - 280);
+  const y = Math.min(event.clientY + 12, window.innerHeight - 300);
   tt.style.left = x + 'px';
   tt.style.top  = y + 'px';
   tt.style.display = 'block';
 }
 
-// Cerrar tooltip al clic fuera
 document.addEventListener('click', e => {
   const tt = document.getElementById('ent-tooltip');
   if (tt && !tt.contains(e.target)) tt.style.display = 'none';
