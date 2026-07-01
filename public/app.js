@@ -1988,11 +1988,9 @@ function renderEntregables() {
     const fin = new Date(e.duedate+'T12:00:00'); fin.setHours(0,0,0,0);
     const vencido = fin < hoy;
 
-    // Barra: desde hoy (o desde el inicio del gantt si ya venció) hasta fecha fin
-    const barStart = vencido ? ganttStart : hoy;
-    const barEnd = fin;
-    const bx = xOf(barStart.toISOString().slice(0,10));
-    const bw = Math.max(xOf(e.duedate) - bx + COL_W, COL_W);
+    // Barra: SOLO la columna de la Fecha Fin (1 día de ancho = hito)
+    const bx = xOf(e.duedate);
+    const bw = COL_W;
 
     const bg = i%2===0 ? 'transparent' : 'rgba(255,255,255,.015)';
 
