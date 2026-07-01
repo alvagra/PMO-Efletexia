@@ -381,6 +381,18 @@ a.jlink:hover{text-decoration:underline}
 .ent-leg-item{display:flex;align-items:center;gap:5px}
 .ent-dot{display:inline-block;width:10px;height:10px;border-radius:50%}
 #ent-gantt-wrap{padding:16px 20px}
+/* Resumen mensual */
+#ent-resumen-wrap{padding:0 20px 20px}
+.ent-resumen-title{font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px;padding-top:16px}
+.ent-resumen-grid{display:flex;flex-direction:column;gap:6px}
+.ent-mes-row{display:flex;align-items:center;gap:12px;padding:8px 12px;background:var(--bg-card);border:1px solid var(--border-light);border-radius:6px}
+.ent-mes-label{font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;min-width:90px;letter-spacing:.04em}
+.ent-mes-bloques{display:flex;flex-wrap:wrap;gap:3px;align-items:center;flex:1}
+.ent-bloque{width:14px;height:14px;border-radius:3px;cursor:default;flex-shrink:0;transition:transform .1s}
+.ent-bloque:hover{transform:scale(1.4);z-index:10}
+.ent-grupo{display:flex;align-items:center;gap:3px;margin-right:6px}
+.ent-grupo-count{font-size:10px;color:var(--text-muted);font-weight:600;min-width:10px}
+.ent-mes-vacio{font-size:11px;color:var(--text-dim);font-style:italic}
 .ent-empty{padding:60px;text-align:center;color:var(--text-muted);font-size:13px}
 </style></head>
 <body>
@@ -645,6 +657,7 @@ a.jlink:hover{text-decoration:underline}
       <span class="ent-leg-item"><span class="ent-dot" style="background:#14B8A6"></span>Producción</span>
     </div>
   </div>
+  <div id="ent-resumen-wrap"></div>
   <div id="ent-gantt-wrap"></div>
   <!-- Tooltip detalle bitácora -->
   <div id="ent-tooltip" style="display:none;position:fixed;z-index:999;background:#ffffff;border:1px solid #dee2e6;border-radius:10px;padding:20px;max-width:380px;box-shadow:0 12px 32px rgba(0,0,0,.18);font-family:inherit">
