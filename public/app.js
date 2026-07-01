@@ -1985,22 +1985,30 @@ function renderKpiEjecutivo() {
   const wrap = document.getElementById('ent-kpi-wrap');
   if (!wrap) return;
 
-  const data = (epics || []).filter(e => !SPECIAL_EPIC_KEYS.includes(e.key) && e.duedate);
+  const allEpics = (epics || []).filter(e => !SPECIAL_EPIC_KEYS.includes(e.key));
+  const data = allEpics.filter(e => e.duedate);
   const total = data.length;
-  if (!total) { wrap.innerHTML = ''; return; }
+  const nStandby = allEpics.filter(e => (e.status||'').toLowerCase()==='stand by').length;
+  const nBacklog  = allEpics.filter(e => (e.status||'').toLowerCase()==='backlog').length;
 
   let nPlazo=0, nProd=0, nReplan=0, nVencido=0;
   data.forEach(e => {
     const s = getSemaforoEnt(e).label;
-    if (s==='En plazo')      nPlazo++;
+    if (s==='En plazo')        nPlazo++;
     else if (s==='Producción') nProd++;
     else if (s==='Replanificado') nReplan++;
-    else if (s==='Vencido')   nVencido++;
+    else if (s==='Vencido')    nVencido++;
   });
 
   const pct = n => total ? Math.round(n/total*100) : 0;
   const cumplimiento = pct(nPlazo + nProd);
   const cumColor = cumplimiento>=80?'var(--green)':cumplimiento>=60?'var(--yellow)':'var(--red)';
+
+  const rowInteractive = (onclick, icon, label, num, numColor) =>
+    `<div class="ent-kpi-row ent-kpi-btn" onclick="${onclick}" title="Ver proyectos">
+      <span class="ent-kpi-lbl">${icon} ${label}</span>
+      <div class="ent-kpi-vals"><span class="ent-kpi-num" style="color:${numColor||'var(--text-primary)'}">${num}</span></div>
+    </div>`;
 
   wrap.innerHTML = `
     <div class="ent-kpi-card">
@@ -2025,6 +2033,8 @@ function renderKpiEjecutivo() {
         <span class="ent-kpi-lbl"><span style="color:#ef4444">●</span> Vencidos</span>
         <div class="ent-kpi-vals"><span class="ent-kpi-num" style="color:#ef4444">${nVencido}</span><span class="ent-kpi-pct">${pct(nVencido)}%</span></div>
       </div>
+      ${rowInteractive("openEntDrawer('standby')", WARN_ICON, 'Proyectos con Bloqueantes', nStandby, '#F5B800')}
+      ${rowInteractive("openEntDrawer('backlog')", '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>', 'Backlog', nBacklog, 'var(--text-primary)')}
       <hr class="ent-kpi-divider">
       <div class="ent-kpi-cumplimiento">
         <div class="ent-kpi-cum-lbl">📈 Cumplimiento General</div>
@@ -2036,7 +2046,6 @@ function renderKpiEjecutivo() {
 // ── RESUMEN MENSUAL ENTREGABLES ──────────────────────────────
 function renderResumenMensual() {
   renderKpiEjecutivo();
-  renderEntKpiCards();
   const wrap = document.getElementById('ent-resumen-wrap');
   if (!wrap) return;
 
