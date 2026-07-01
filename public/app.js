@@ -217,7 +217,11 @@ function renderTable(data){
     const vencido = fin && fin < hoy;
     const bitText = (e.bitacora||'').toLowerCase();
     const tieneReplan = bitText.includes('replanificación de fecha fin') || bitText.includes('replanificacion de fecha fin');
-    const semaforo = vencido ? '🔴' : tieneReplan ? '🟠' : '🟢';
+    const semaforo = vencido
+      ? '🔴'
+      : tieneReplan
+        ? '<span style="font-size:16px;color:#F5B800">&#9899;</span>'
+        : '🟢';
     return `
     <tr data-key="${e.key}">
       <td style="text-align:center;font-size:16px">${semaforo}</td>
