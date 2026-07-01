@@ -381,8 +381,12 @@ a.jlink:hover{text-decoration:underline}
 .ent-leg-item{display:flex;align-items:center;gap:5px}
 .ent-dot{display:inline-block;width:10px;height:10px;border-radius:50%}
 #ent-gantt-wrap{padding:12px 20px}
+/* Layout superior: resumen + kpi lado a lado */
+.ent-top-row{display:flex;gap:12px;padding:14px 20px 4px;align-items:flex-start}
+.ent-resumen-col{flex:7;min-width:0}
+.ent-kpi-col{flex:3;min-width:220px}
 /* Resumen mensual */
-#ent-resumen-wrap{padding:14px 20px 4px}
+#ent-resumen-wrap{padding:0}
 .ent-resumen-title{font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px}
 .ent-resumen-grid{display:flex;flex-direction:column;gap:2px;border:1px solid var(--border-light);border-radius:6px;overflow:hidden;background:var(--bg-card)}
 .ent-mes-row{display:flex;align-items:center;gap:10px;padding:5px 10px;border-bottom:1px solid rgba(255,255,255,.04)}
@@ -394,6 +398,19 @@ a.jlink:hover{text-decoration:underline}
 .ent-grupo{display:flex;align-items:center;gap:2px;margin-right:5px}
 .ent-grupo-count{font-size:9px;color:var(--text-muted);font-weight:700;min-width:8px;margin-left:2px}
 .ent-mes-vacio{font-size:10px;color:var(--text-dim);font-style:italic}
+/* Tarjeta indicadores ejecutivos */
+.ent-kpi-card{background:var(--bg-card);border:1px solid var(--border-light);border-radius:8px;padding:14px;height:100%;box-sizing:border-box}
+.ent-kpi-card-title{font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px}
+.ent-kpi-row{display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.ent-kpi-row:last-of-type{border-bottom:none}
+.ent-kpi-lbl{font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:5px}
+.ent-kpi-vals{display:flex;align-items:baseline;gap:5px}
+.ent-kpi-num{font-size:15px;font-weight:700;color:var(--text-primary)}
+.ent-kpi-pct{font-size:10px;color:var(--text-muted)}
+.ent-kpi-divider{border:none;border-top:1px solid var(--border-light);margin:10px 0}
+.ent-kpi-cumplimiento{text-align:center;padding:8px 0 2px}
+.ent-kpi-cum-lbl{font-size:10px;color:var(--text-muted);margin-bottom:4px}
+.ent-kpi-cum-val{font-size:28px;font-weight:800;line-height:1}
 .ent-empty{padding:60px;text-align:center;color:var(--text-muted);font-size:13px}
 </style></head>
 <body>
@@ -640,7 +657,10 @@ a.jlink:hover{text-decoration:underline}
 </div>
 
 <div class="tab-panel" id="panel-entregables">
-  <div id="ent-resumen-wrap"></div>
+  <div class="ent-top-row">
+    <div class="ent-resumen-col" id="ent-resumen-wrap"></div>
+    <div class="ent-kpi-col" id="ent-kpi-wrap"></div>
+  </div>
   <div class="ent-toolbar">
     <div class="ent-filter-group">
       <label class="ent-label">Desde</label>
