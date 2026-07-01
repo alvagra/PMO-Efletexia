@@ -211,8 +211,16 @@ function renderTable(data){
   const data_=mainData;
   const tb=document.getElementById('table-body');
   if(!data_.length){ tb.innerHTML='<tr><td colspan="15" style="text-align:center;padding:40px;color:var(--text-muted)">Sin resultados</td></tr>'; return; }
-  tb.innerHTML=data_.map(e=>`
+  tb.innerHTML=data_.map(e=>{
+    const hoy = new Date(); hoy.setHours(0,0,0,0);
+    const fin = e.duedate ? new Date(e.duedate+'T12:00:00') : null;
+    const vencido = fin && fin < hoy;
+    const bitText = (e.bitacora||'').toLowerCase();
+    const tieneReplan = bitText.includes('replanificación de fecha fin') || bitText.includes('replanificacion de fecha fin');
+    const semaforo = vencido ? '🔴' : tieneReplan ? '🟠' : '🟢';
+    return `
     <tr data-key="${e.key}">
+      <td style="text-align:center;font-size:16px">${semaforo}</td>
       <td style="text-align:center;font-weight:600;color:var(--text-primary)">${e.prioridad||'—'}</td>
       <td class="code"><a class="jlink" href="${JIRA_BASE}${e.key}" target="_blank" onclick="event.stopPropagation()">${esc(e.codigo||e.key)}</a></td>
       <td class="proj" title="${esc(e.summary)}">${esc(e.summary)}</td>
@@ -230,8 +238,8 @@ function renderTable(data){
       <td class="muted">${e.conformidad==='Si'?'<span style="color:var(--green);font-size:15px">✓</span>':'—'}</td>
       <td class="muted">${e.docFuncional==='Si'?'<span style="color:var(--green);font-size:15px">✓</span>':e.docFuncional==='No'?'<span style="color:var(--red);font-size:15px">✕</span>':'—'}</td>
       <td><button class="btn-action" type="button" title="Cronograma y detalles" onclick="openModal('${e.key}');event.stopPropagation()">···</button></td>
-    </tr>
-  `).join('');
+    </tr>`;
+  }).join('');
 }
 
 
