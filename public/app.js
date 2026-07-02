@@ -27,8 +27,7 @@ function getSemaforoPortafolio(e) {
   const hoy = new Date(); hoy.setHours(0,0,0,0);
   const fin = e.duedate ? new Date(e.duedate+'T12:00:00') : null;
   const vencido = fin && fin < hoy;
-  const bitText = (e.bitacora||'').toLowerCase();
-  const tieneReplan = bitText.includes('replanificación de fecha fin') || bitText.includes('replanificacion de fecha fin');
+  const tieneReplan = !!e.replanificacion;
   if (vencido)     return '🔴';
   if (tieneReplan) return '<svg width="18" height="18" viewBox="0 0 18 18" style="vertical-align:middle"><circle cx="9" cy="9" r="8" fill="#F5B800"/></svg>';
   return '🟢';
@@ -71,6 +70,17 @@ function progCell(pct){
 }
 function pill(v){ return v?`<span class="pill">${v}</span>`:'<span style="color:var(--text-muted)">—</span>'; }
 function esc(s){ if(!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function extractReplanFromAdf(adf){
+  // Extrae párrafos que empiezan con "Replanificación" del campo ADF
+  if(!adf || typeof adf !== 'object') return null;
+  const parrafos = (adf.content || []).filter(n => n.type === 'paragraph');
+  for(const p of parrafos){
+    const txt = p.content ? p.content.map(c => c.text||'').join('') : '';
+    if(txt.toLowerCase().startsWith('replanificaci')) return txt.trim();
+  }
+  return null;
+}
 
 function adfToText(node){
   if(!node) return '';
@@ -155,6 +165,7 @@ const JIRA_FIELDS = [
 function parseIssue(i){
   const f=i.fields, rep=f.reporter;
   let bit=f.customfield_10829, prox=f.customfield_10862;
+  const replanificacion = (bit&&typeof bit==='object') ? extractReplanFromAdf(bit) : null;
   if(bit&&typeof bit==='object') bit=adfToText(bit).trim();
   if(prox&&typeof prox==='object') prox=adfToText(prox).trim();
   let desc=f.description;
@@ -189,6 +200,7 @@ function parseIssue(i){
     condicion:f.customfield_11170||null,
     bitacora:bit||null,
     proximosPasos:prox||null,
+    replanificacion:replanificacion||null,
     descripcion:desc||null,
   };
 }
@@ -1883,8 +1895,7 @@ function getSemaforoEnt(e) {
   const hoy = new Date(); hoy.setHours(0,0,0,0);
   const fin = e.duedate ? new Date(e.duedate+'T12:00:00') : null;
   const vencido = fin && fin < hoy;
-  const bitText = (e.bitacora||'').toLowerCase();
-  const tieneReplan = bitText.includes('replanificación de fecha fin') || bitText.includes('replanificacion de fecha fin');
+  const tieneReplan = !!e.replanificacion;
   // 1. Producción (prioridad máxima)
   const statusLow = (e.status||'').toLowerCase();
   if (statusLow === 'producción' || statusLow === 'produccion') return { color:'#14B8A6', label:'Producción', textColor:'#fff', border:'#0F766E' };
@@ -2351,7 +2362,7 @@ function showEntDetalle(event, key) {
   const tt = document.getElementById('ent-tooltip');
   document.getElementById('ent-tooltip-title').textContent = `${e.codigo||e.key} · ${e.summary}`;
   document.getElementById('ent-tooltip-fecha').textContent = `Fecha Fin: ${fmtD(e.duedate)||'—'} · ${sem.label}`;
-  document.getElementById('ent-tooltip-bit').textContent = e.bitacora || 'Sin bitácora registrada.';
+  document.getElementById('ent-tooltip-bit').textContent = e.replanificacion || e.bitacora || 'Sin información registrada.';
   const x = Math.min(event.clientX + 12, window.innerWidth - 380);
   const y = Math.min(event.clientY + 12, window.innerHeight - 300);
   tt.style.left = x + 'px';
