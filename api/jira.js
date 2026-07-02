@@ -285,7 +285,13 @@ module.exports = async function handler(req, res) {
         'customfield_11037','customfield_11070','customfield_11170'
       ];
       const issues = await fetchAllPages(auth, JIRA_CLOUD, jqlStr, EPIC_FIELDS);
-      return res.status(200).json({ issues, total: issues.length, isLast: true });
+      // DEBUG REPLAN: exponer campos de PTS-5 para identificar campo Replanificación
+      const dbg = issues.find(i => i.key === 'PTS-5');
+      const dbgF = dbg ? Object.entries(dbg.fields||{}).reduce((acc,[k,v])=>{
+        if(v!==null&&v!==undefined&&v!==''&&!(Array.isArray(v)&&!v.length)) acc[k]=v;
+        return acc;
+      },{}) : null;
+      return res.status(200).json({ issues, total: issues.length, isLast: true, _dbgKey: dbg?.key, _dbgFields: dbgF });
     }
 
   } catch (err) {
