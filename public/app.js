@@ -2215,7 +2215,7 @@ function renderEntregables() {
   const hoy = new Date(); hoy.setHours(0,0,0,0);
   const hoyIso = hoy.toISOString().slice(0,10);
 
-  const EXCLUIR_GANTT = ['backlog','desestimado'];
+  const EXCLUIR_GANTT = ['backlog','desestimado','stand by'];
   let data = (epics || []).filter(e => {
     if (SPECIAL_EPIC_KEYS.includes(e.key)) return false;
     if (!e.duedate) return false;
