@@ -1979,6 +1979,9 @@ function openEntDrawer(tipo) {
         ${epicIcon}
         <span style="font-size:13px;font-weight:600;color:var(--text-primary)">${esc(e.summary)}</span>
       </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <a href="${JIRA_BASE}${e.key}" target="_blank" onclick="event.stopPropagation()" style="font-size:11px;font-weight:600;color:var(--blue);text-decoration:none">${esc(e.codigo||e.key)}</a>
+      </div>
       <div style="font-size:11px;color:var(--text-muted);display:flex;gap:12px;flex-wrap:wrap">
         <span><span class="badge badge-${sbClass(e.status)}">${esc(e.status)}</span></span>
         ${e.sponsor?`<span>Sponsor: ${esc(e.sponsor)}</span>`:''}
