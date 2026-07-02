@@ -2049,9 +2049,18 @@ function renderKpiEjecutivo() {
   const wrap = document.getElementById('ent-kpi-wrap');
   if (!wrap) return;
 
+  const desde = document.getElementById('ent-desde')?.value || '';
+  const hasta  = document.getElementById('ent-hasta')?.value  || '';
+
   const allEpics = (epics || []).filter(e => !SPECIAL_EPIC_KEYS.includes(e.key));
   const excluded = ['stand by','backlog','desestimado','planificado'];
-  const data = allEpics.filter(e => e.duedate && !excluded.includes((e.status||'').toLowerCase()));
+  const data = allEpics.filter(e => {
+    if (!e.duedate) return false;
+    if (excluded.includes((e.status||'').toLowerCase())) return false;
+    if (desde && e.duedate < desde) return false;
+    if (hasta && e.duedate > hasta) return false;
+    return true;
+  });
   const total = data.length;
   const nStandby = allEpics.filter(e => (e.status||'').toLowerCase()==='stand by').length;
   const nBacklog  = allEpics.filter(e => (e.status||'').toLowerCase()==='backlog').length;
