@@ -282,17 +282,10 @@ module.exports = async function handler(req, res) {
         'customfield_10930','customfield_10931','customfield_10934',
         'customfield_10829','customfield_10862','customfield_10969',
         'customfield_10970','customfield_11003','customfield_11004',
-        'customfield_11037','customfield_11070','customfield_11170'
+        'customfield_11037','customfield_11070','customfield_11170','customfield_11269'
       ];
       const issues = await fetchAllPages(auth, JIRA_CLOUD, jqlStr, EPIC_FIELDS);
-      // DEBUG: traer todos los campos de PTS-5
-      const dbg5 = await jiraGet(auth, JIRA_CLOUD, '/rest/api/3/issue/PTS-5?fields=*all');
-      const f5 = dbg5.body.fields || {};
-      const nonEmpty5 = Object.entries(f5).reduce((acc,[k,v])=>{
-        if(v!==null&&v!==undefined&&v!==''&&!(Array.isArray(v)&&!v.length)&&v!==false) acc[k]=v;
-        return acc;
-      },{});
-      return res.status(200).json({ issues, total: issues.length, isLast: true, _dbg5: nonEmpty5 });
+      return res.status(200).json({ issues, total: issues.length, isLast: true });
     }
 
   } catch (err) {
