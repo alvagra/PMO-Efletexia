@@ -2215,7 +2215,9 @@ function renderEntregables() {
   const hoy = new Date(); hoy.setHours(0,0,0,0);
   const hoyIso = hoy.toISOString().slice(0,10);
 
-  const EXCLUIR_GANTT = ['backlog','desestimado','stand by'];
+  const EXCLUIR_GANTT = ['backlog','desestimado','stand by','standby','stand-by','bloqueado','blocked'];
+  // DEBUG: loguear épicas excluidas
+  (epics||[]).forEach(e=>{ if(EXCLUIR_GANTT.includes((e.status||'').toLowerCase())) console.log('[EXCLUIR]',e.key,e.status); else console.log('[INCLUIR]',e.key,e.status); });
   let data = (epics || []).filter(e => {
     if (SPECIAL_EPIC_KEYS.includes(e.key)) return false;
     if (!e.duedate) return false;
