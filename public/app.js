@@ -2123,8 +2123,9 @@ function renderResumenMensual() {
   const wrap = document.getElementById('ent-resumen-wrap');
   if (!wrap) return;
 
-  // Todos los entregables sin filtro de fechas
-  const data = (epics || []).filter(e => !SPECIAL_EPIC_KEYS.includes(e.key) && e.duedate);
+  // Todos los entregables sin filtro de fechas, excluyendo Stand By, Backlog y Desestimado
+  const EXCLUIR_RESUMEN = ['stand by','standby','stand-by','backlog','desestimado'];
+  const data = (epics || []).filter(e => !SPECIAL_EPIC_KEYS.includes(e.key) && e.duedate && !EXCLUIR_RESUMEN.includes((e.status||'').toLowerCase()));
   if (!data.length) { wrap.innerHTML = ''; return; }
 
   // Rango de meses: desde el mínimo hasta el máximo de fechas fin
@@ -2216,8 +2217,6 @@ function renderEntregables() {
   const hoyIso = hoy.toISOString().slice(0,10);
 
   const EXCLUIR_GANTT = ['backlog','desestimado','stand by','standby','stand-by','bloqueado','blocked'];
-  // DEBUG: loguear épicas excluidas
-  (epics||[]).forEach(e=>{ if(EXCLUIR_GANTT.includes((e.status||'').toLowerCase())) console.log('[EXCLUIR]',e.key,e.status); else console.log('[INCLUIR]',e.key,e.status); });
   let data = (epics || []).filter(e => {
     if (SPECIAL_EPIC_KEYS.includes(e.key)) return false;
     if (!e.duedate) return false;
