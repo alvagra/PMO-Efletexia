@@ -2050,7 +2050,7 @@ function renderKpiEjecutivo() {
   if (!wrap) return;
 
   const allEpics = (epics || []).filter(e => !SPECIAL_EPIC_KEYS.includes(e.key));
-  const excluded = ['stand by','backlog','desestimado'];
+  const excluded = ['stand by','backlog','desestimado','planificado'];
   const data = allEpics.filter(e => e.duedate && !excluded.includes((e.status||'').toLowerCase()));
   const total = data.length;
   const nStandby = allEpics.filter(e => (e.status||'').toLowerCase()==='stand by').length;
