@@ -2332,7 +2332,7 @@ function renderEntregables() {
 
     html += `<tr style="height:${ROW_H}px;background:${bg}">
       <td style="padding:4px 10px;border-right:1px solid var(--border-light);border-bottom:1px solid rgba(255,255,255,.05);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;max-width:${LABEL_W}px">
-        <div style="font-size:11px;font-weight:600;color:var(--blue)">${esc(e.codigo||e.key)}</div>
+        <div style="font-size:11px;font-weight:600;color:var(--blue)"><a href="${JIRA_BASE}${e.key}" target="_blank" onclick="event.stopPropagation()" style="color:var(--blue);text-decoration:none">${esc(e.codigo||e.key)}</a></div>
         <div style="font-size:11px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(e.summary)}">${esc(e.summary)}</div>
       </td>
       <td style="padding:0;border-bottom:1px solid rgba(255,255,255,.05);position:relative">
