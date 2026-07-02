@@ -159,13 +159,14 @@ const JIRA_FIELDS = [
   "customfield_10930","customfield_10931","customfield_10934",
   "customfield_10829","customfield_10862","customfield_10969",
   "customfield_10970","customfield_11003","customfield_11004",
-  "customfield_11037","customfield_11070","customfield_11170"
+  "customfield_11037","customfield_11070","customfield_11170","customfield_11269"
 ];
 
 function parseIssue(i){
   const f=i.fields, rep=f.reporter;
   let bit=f.customfield_10829, prox=f.customfield_10862;
-  const replanificacion = (bit&&typeof bit==='object') ? extractReplanFromAdf(bit) : null;
+  const replanRaw = f.customfield_11269;
+  const replanificacion = replanRaw ? (typeof replanRaw==='object' ? adfToText(replanRaw).trim() : replanRaw) : null;
   if(bit&&typeof bit==='object') bit=adfToText(bit).trim();
   if(prox&&typeof prox==='object') prox=adfToText(prox).trim();
   let desc=f.description;
