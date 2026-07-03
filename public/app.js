@@ -2220,6 +2220,7 @@ function renderResumenMensual() {
 function limpiarEntFiltros() {
   document.getElementById('ent-desde').value = '';
   document.getElementById('ent-hasta').value = '';
+  const s = document.getElementById('ent-search'); if(s) s.value = '';
   renderEntregables();
 }
 
@@ -2230,6 +2231,7 @@ function renderEntregables() {
 
   const desde = document.getElementById('ent-desde')?.value || '';
   const hasta = document.getElementById('ent-hasta')?.value || '';
+  const search = (document.getElementById('ent-search')?.value || '').toLowerCase().trim();
 
   const hoy = new Date(); hoy.setHours(0,0,0,0);
   const hoyIso = hoy.toISOString().slice(0,10);
@@ -2241,6 +2243,7 @@ function renderEntregables() {
     if (EXCLUIR_GANTT.includes((e.status||'').toLowerCase())) return false;
     if (desde && e.duedate < desde) return false;
     if (hasta && e.duedate > hasta) return false;
+    if (search && !(e.codigo||'').toLowerCase().includes(search) && !e.summary.toLowerCase().includes(search) && !e.key.toLowerCase().includes(search)) return false;
     return true;
   }).sort((a,b) => a.duedate.localeCompare(b.duedate));
 
