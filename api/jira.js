@@ -218,38 +218,63 @@ module.exports = async function handler(req, res) {
           });
         }
 
-        // Nivel 2: buscar los parents de los parents (épicas reales)
+        // Nivel 2: buscar los parents de los parents
         const level2Keys = [...new Set(
           Object.values(level1Map).map(v => v.parentKey).filter(Boolean)
         )];
-        const level2Map = {}; // key → {codigo, summary}
+        const level2Map = {}; // key → {codigo, summary, parentKey}
         for (let i = 0; i < level2Keys.length; i += STORY_BATCH) {
           const batch = level2Keys.slice(i, i + STORY_BATCH);
           const issues = await fetchAllPages(auth, JIRA_CLOUD,
             `key in (${batch.join(',')})`,
-            ['summary','customfield_10934']);
+            ['summary','customfield_10934','parent']);
           issues.forEach(iss => {
             level2Map[iss.key] = {
+              codigo:    iss.fields?.customfield_10934 || '',
+              summary:   iss.fields?.summary || iss.key,
+              parentKey: iss.fields?.parent?.key || ''
+            };
+          });
+        }
+
+        // Nivel 3: buscar parents de nivel 2 (para cadenas Bug→Historia→Épica)
+        const level3Keys = [...new Set(
+          Object.values(level2Map).filter(v => !v.codigo && v.parentKey).map(v => v.parentKey)
+        )];
+        const level3Map = {}; // key → {codigo, summary}
+        for (let i = 0; i < level3Keys.length; i += STORY_BATCH) {
+          const batch = level3Keys.slice(i, i + STORY_BATCH);
+          const issues = await fetchAllPages(auth, JIRA_CLOUD,
+            `key in (${batch.join(',')})`,
+            ['summary','customfield_10934']);
+          issues.forEach(iss => {
+            level3Map[iss.key] = {
               codigo:  iss.fields?.customfield_10934 || '',
               summary: iss.fields?.summary || iss.key
             };
           });
         }
 
-        // Resolver para cada subtarea: si level1 tiene código propio → épica es level1
-        // Si level1 no tiene código → épica es level2 (parent de level1)
+        // Resolver para cada subtarea subiendo niveles hasta encontrar código de épica
         storyKeys.forEach(sk => {
           const l1 = level1Map[sk];
           if(!l1) return;
           if(l1.codigo) {
-            // La historia tiene código = es ella misma la épica representativa
             epicCodigoMap[sk] = l1.codigo;
             epicNameMap[sk]   = l1.summary;
           } else if(l1.parentKey && level2Map[l1.parentKey]) {
-            // El parent de la historia es la épica real
             const l2 = level2Map[l1.parentKey];
-            epicCodigoMap[sk] = l2.codigo || l1.parentKey;
-            epicNameMap[sk]   = l2.summary;
+            if(l2.codigo) {
+              epicCodigoMap[sk] = l2.codigo;
+              epicNameMap[sk]   = l2.summary;
+            } else if(l2.parentKey && level3Map[l2.parentKey]) {
+              const l3 = level3Map[l2.parentKey];
+              epicCodigoMap[sk] = l3.codigo || l2.parentKey;
+              epicNameMap[sk]   = l3.summary;
+            } else {
+              epicCodigoMap[sk] = '';
+              epicNameMap[sk]   = l2.summary;
+            }
           } else {
             epicCodigoMap[sk] = '';
             epicNameMap[sk]   = l1.summary;
