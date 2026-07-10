@@ -228,23 +228,29 @@ module.exports = async function handler(req, res) {
             }
           });
 
-          // Para historias sin código propio, buscar el código en la épica
+          // Para historias sin código propio, buscar el código Y nombre en la épica
           const storiesNeedingEpic = Object.keys(epicCodigoMap)
             .filter(k => k.startsWith('__needsEpic__'));
           if(storiesNeedingEpic.length){
             const epicKeys = [...new Set(storiesNeedingEpic.map(k => epicCodigoMap[k]))];
             const EPIC_BATCH2 = 50;
             const epicCodigoDirect = {};
+            const epicSummaryDirect = {};
             for(let ei = 0; ei < epicKeys.length; ei += EPIC_BATCH2){
               const eBatch = epicKeys.slice(ei, ei + EPIC_BATCH2);
               const jqlEpics = `key in (${eBatch.join(',')})`;
-              const epics2 = await fetchAllPages(auth, JIRA_CLOUD, jqlEpics, ['customfield_10934']);
-              epics2.forEach(ep => { epicCodigoDirect[ep.key] = ep.fields?.customfield_10934 || ''; });
+              const epics2 = await fetchAllPages(auth, JIRA_CLOUD, jqlEpics, ['customfield_10934','summary']);
+              epics2.forEach(ep => {
+                epicCodigoDirect[ep.key] = ep.fields?.customfield_10934 || '';
+                epicSummaryDirect[ep.key] = ep.fields?.summary || ep.key;
+              });
             }
             storiesNeedingEpic.forEach(k => {
               const storyKey = k.replace('__needsEpic__','');
               const epicKey  = epicCodigoMap[k];
               epicCodigoMap[storyKey] = epicCodigoDirect[epicKey] || '';
+              // Actualizar también el nombre con el summary real de la épica
+              if(epicSummaryDirect[epicKey]) epicNameMap[storyKey] = epicSummaryDirect[epicKey];
               delete epicCodigoMap[k];
             });
           }
