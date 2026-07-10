@@ -187,7 +187,7 @@ module.exports = async function handler(req, res) {
       ];
       const subtareas = await fetchAllPages(
         auth, JIRA_CLOUD,
-        'project = PTS AND issuetype = Subtarea ORDER BY created ASC',
+        'project = PTS AND issuetype in (Subtarea, Bug) ORDER BY created ASC',
         CAP_FIELDS
       );
 
