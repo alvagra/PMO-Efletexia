@@ -201,60 +201,60 @@ module.exports = async function handler(req, res) {
       const epicNameMap = {};
       const epicCodigoMap = {};
       if (storyKeys.length) {
-        // Buscar historias en lotes de 50 usando JQL IN
         const STORY_BATCH = 50;
+        // Nivel 1: buscar los parents directos (historias o épicas)
+        const level1Map = {}; // key → {codigo, parentKey, summary}
         for (let i = 0; i < storyKeys.length; i += STORY_BATCH) {
           const batch = storyKeys.slice(i, i + STORY_BATCH);
-          const jqlStories = `key in (${batch.join(',')})`;
-          const stories = await fetchAllPages(auth, JIRA_CLOUD, jqlStories,
-            ['parent','summary','customfield_10934','issuetype']);
-          stories.forEach(story => {
-            // El parent puede ser épica directamente o puede que no devuelva fields anidados
-            const parentKey = story.fields?.parent?.key || '';
-            const parentSummary = story.fields?.parent?.fields?.summary || parentKey;
-            // Si es Bug/Error independiente (sin parent que sea historia), usar su propio summary
-            const issueType = (story.fields?.issuetype?.name || '').toLowerCase();
-            const isBugOrError = ['bug','error'].includes(issueType);
-            const epicSummary = isBugOrError
-              ? (story.fields?.summary || parentSummary)
-              : parentSummary;
-            epicNameMap[story.key] = epicSummary;
-            // El código está en la historia misma si lo tiene, sino hay que ir a la épica
-            const epicCodigo = story.fields?.customfield_10934 || '';
-            epicCodigoMap[story.key] = epicCodigo;
-            // Guardar key de la épica para buscar su código si la historia no lo tiene
-            if(!epicCodigo && story.fields?.parent?.key){
-              epicCodigoMap['__needsEpic__' + story.key] = story.fields.parent.key;
-            }
+          const issues = await fetchAllPages(auth, JIRA_CLOUD,
+            `key in (${batch.join(',')})`,
+            ['parent','summary','customfield_10934']);
+          issues.forEach(iss => {
+            level1Map[iss.key] = {
+              codigo:    iss.fields?.customfield_10934 || '',
+              summary:   iss.fields?.summary || iss.key,
+              parentKey: iss.fields?.parent?.key || ''
+            };
           });
-
-          // Para historias sin código propio, buscar el código Y nombre en la épica
-          const storiesNeedingEpic = Object.keys(epicCodigoMap)
-            .filter(k => k.startsWith('__needsEpic__'));
-          if(storiesNeedingEpic.length){
-            const epicKeys = [...new Set(storiesNeedingEpic.map(k => epicCodigoMap[k]))];
-            const EPIC_BATCH2 = 50;
-            const epicCodigoDirect = {};
-            const epicSummaryDirect = {};
-            for(let ei = 0; ei < epicKeys.length; ei += EPIC_BATCH2){
-              const eBatch = epicKeys.slice(ei, ei + EPIC_BATCH2);
-              const jqlEpics = `key in (${eBatch.join(',')})`;
-              const epics2 = await fetchAllPages(auth, JIRA_CLOUD, jqlEpics, ['customfield_10934','summary']);
-              epics2.forEach(ep => {
-                epicCodigoDirect[ep.key] = ep.fields?.customfield_10934 || '';
-                epicSummaryDirect[ep.key] = ep.fields?.summary || ep.key;
-              });
-            }
-            storiesNeedingEpic.forEach(k => {
-              const storyKey = k.replace('__needsEpic__','');
-              const epicKey  = epicCodigoMap[k];
-              epicCodigoMap[storyKey] = epicCodigoDirect[epicKey] || '';
-              // Actualizar también el nombre con el summary real de la épica
-              if(epicSummaryDirect[epicKey]) epicNameMap[storyKey] = epicSummaryDirect[epicKey];
-              delete epicCodigoMap[k];
-            });
-          }
         }
+
+        // Nivel 2: buscar los parents de los parents (épicas reales)
+        const level2Keys = [...new Set(
+          Object.values(level1Map).map(v => v.parentKey).filter(Boolean)
+        )];
+        const level2Map = {}; // key → {codigo, summary}
+        for (let i = 0; i < level2Keys.length; i += STORY_BATCH) {
+          const batch = level2Keys.slice(i, i + STORY_BATCH);
+          const issues = await fetchAllPages(auth, JIRA_CLOUD,
+            `key in (${batch.join(',')})`,
+            ['summary','customfield_10934']);
+          issues.forEach(iss => {
+            level2Map[iss.key] = {
+              codigo:  iss.fields?.customfield_10934 || '',
+              summary: iss.fields?.summary || iss.key
+            };
+          });
+        }
+
+        // Resolver para cada subtarea: si level1 tiene código propio → épica es level1
+        // Si level1 no tiene código → épica es level2 (parent de level1)
+        storyKeys.forEach(sk => {
+          const l1 = level1Map[sk];
+          if(!l1) return;
+          if(l1.codigo) {
+            // La historia tiene código = es ella misma la épica representativa
+            epicCodigoMap[sk] = l1.codigo;
+            epicNameMap[sk]   = l1.summary;
+          } else if(l1.parentKey && level2Map[l1.parentKey]) {
+            // El parent de la historia es la épica real
+            const l2 = level2Map[l1.parentKey];
+            epicCodigoMap[sk] = l2.codigo || l1.parentKey;
+            epicNameMap[sk]   = l2.summary;
+          } else {
+            epicCodigoMap[sk] = '';
+            epicNameMap[sk]   = l1.summary;
+          }
+        });
       }
 
       // Inyectar epicName en cada subtarea
