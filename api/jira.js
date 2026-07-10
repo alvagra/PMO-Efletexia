@@ -187,11 +187,11 @@ module.exports = async function handler(req, res) {
       ];
       const subtareas = await fetchAllPages(
         auth, JIRA_CLOUD,
-        'project = PTS AND issuetype in (Subtarea, Bug) ORDER BY created ASC',
+        'project = PTS AND issuetype in (Subtarea, Bug, Error) ORDER BY created ASC',
         CAP_FIELDS
       );
 
-      // 2. Obtener épica de cada subtarea: subtarea → historia (parent) → épica (parent.parent)
+      // 2. Obtener épica de cada subtarea/bug: issue → historia (parent) → épica (parent.parent)
       //    Recoger keys únicos de historias padre, buscarlas en batch
       const storyKeys = [...new Set(
         subtareas.map(s => s.fields?.parent?.key).filter(Boolean)
@@ -207,10 +207,17 @@ module.exports = async function handler(req, res) {
           const batch = storyKeys.slice(i, i + STORY_BATCH);
           const jqlStories = `key in (${batch.join(',')})`;
           const stories = await fetchAllPages(auth, JIRA_CLOUD, jqlStories,
-            ['parent','summary','customfield_10934']);
+            ['parent','summary','customfield_10934','issuetype']);
           stories.forEach(story => {
-            // story.fields.parent es la épica (nombre)
-            const epicSummary = story.fields?.parent?.fields?.summary || story.fields?.parent?.key || '';
+            // El parent puede ser épica directamente o puede que no devuelva fields anidados
+            const parentKey = story.fields?.parent?.key || '';
+            const parentSummary = story.fields?.parent?.fields?.summary || parentKey;
+            // Si es Bug/Error independiente (sin parent que sea historia), usar su propio summary
+            const issueType = (story.fields?.issuetype?.name || '').toLowerCase();
+            const isBugOrError = ['bug','error'].includes(issueType);
+            const epicSummary = isBugOrError
+              ? (story.fields?.summary || parentSummary)
+              : parentSummary;
             epicNameMap[story.key] = epicSummary;
             // El código está en la historia misma si lo tiene, sino hay que ir a la épica
             const epicCodigo = story.fields?.customfield_10934 || '';
