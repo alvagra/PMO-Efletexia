@@ -40,15 +40,9 @@ function jiraGet(auth, cloud, path) {
 
 async function fetchAllPages(auth, cloud, jql, fields) {
   const fieldsStr = Array.isArray(fields) ? fields.join(',') : fields;
-  let all = [], nextPageToken = null;
-  do {
-    const params = new URLSearchParams({ jql, fields: fieldsStr, maxResults: 100 });
-    if (nextPageToken) params.set('nextPageToken', nextPageToken);
-    const r = await jiraGet(auth, cloud, `/rest/api/3/search/jql?${params}`);
-    all = all.concat(r.issues || []);
-    nextPageToken = r.nextPageToken || null;
-  } while (nextPageToken);
-  return all;
+  const params = new URLSearchParams({ jql, fields: fieldsStr, maxResults: 200 });
+  const r = await jiraGet(auth, cloud, `/rest/api/3/search/jql?${params}`);
+  return r.issues || [];
 }
 
 // ── Semana actual (lunes–domingo) ─────────────────────────
