@@ -1902,7 +1902,7 @@ function getSemaforoEnt(e) {
   const tieneReplan = !!e.replanificacion;
   // 1. Producción (prioridad máxima)
   const statusLow = (e.status||'').toLowerCase();
-  if (statusLow === 'producción' || statusLow === 'produccion') return { color:'#14B8A6', label:'Producción', textColor:'#fff', border:'#0F766E' };
+  if (statusLow === 'producción' || statusLow === 'produccion') return { color:'#3B82F6', label:'Producción', textColor:'#fff', border:'#1D4ED8' };
   // 2. Vencido
   if (vencido)     return { color:'#ef4444', label:'Vencido',       textColor:'#fff' };
   // 3. Replanificado
@@ -2114,7 +2114,7 @@ function renderKpiEjecutivo() {
         <div class="ent-kpi-vals"><span class="ent-kpi-num" style="color:#4ade80">${nPlazo}</span><span class="ent-kpi-pct">${pct(nPlazo)}%</span></div>
       </div>
       <div class="ent-kpi-row">
-        <span class="ent-kpi-lbl"><span style="color:#14B8A6">●</span> Producción</span>
+        <span class="ent-kpi-lbl"><span style="color:#3B82F6">●</span> Producción</span>
         <div class="ent-kpi-vals"><span class="ent-kpi-num" style="color:#14B8A6">${nProd}</span><span class="ent-kpi-pct">${pct(nProd)}%</span></div>
       </div>
       <div class="ent-kpi-row">
@@ -2167,7 +2167,7 @@ function renderResumenMensual() {
     'En plazo':      '#4ade80',
     'Replanificado': '#F5B800',
     'Vencido':       '#ef4444',
-    'Producción':    '#14B8A6'
+    'Producción':    '#3B82F6'
   };
 
   // Generar todas las filas de meses en el rango
