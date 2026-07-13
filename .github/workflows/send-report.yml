@@ -154,56 +154,56 @@ jobs:
             }).join('') || `<tr><td colspan="7" style="padding:16px;text-align:center;color:#475569;font-size:12px">Sin entregables esta semana</td></tr>`;
 
             const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
-<body style="margin:0;padding:0;background:#0d1117;font-family:-apple-system,BlinkMacSystemFont,sans-serif">
-<div style="max-width:800px;margin:0 auto;padding:20px 16px">
-  <div style="border-bottom:1px solid #1e2d40;margin-bottom:16px;padding-bottom:10px;display:flex;justify-content:space-between">
-    <span style="font-size:11px;color:#475569">PMO Dashboard — Efletexia &#8594; Entregables</span>
-    <span style="font-size:11px;color:#475569">Semana: ${label}</span>
-  </div>
-  <table style="width:100%;border-collapse:collapse;margin-bottom:16px"><tr style="vertical-align:top">
-    <td style="width:55%;padding-right:20px">
-      <div style="font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Resumen mensual de entregables</div>
-      <table style="border-collapse:collapse">${resumen}</table>
-    </td>
-    <td style="background:#131c2b;border-radius:8px;padding:16px">
-      <div style="font-size:10px;color:#3B82F6;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">&#9646; Indicadores del portafolio</div>
-      <table style="width:100%;border-collapse:collapse;font-size:12px">
-        <tr><td style="padding:4px 0;color:#94a3b8">&#9679; Total entregables</td><td style="text-align:right;color:#f1f5f9;font-weight:600">${total}</td></tr>
-        <tr><td style="padding:4px 0;color:#4ade80">&#9679; En plazo</td><td style="text-align:right;color:#f1f5f9;font-weight:600">${enPlazo} <span style="color:#475569">${total?Math.round(enPlazo/total*100):0}%</span></td></tr>
-        <tr><td style="padding:4px 0;color:#3B82F6">&#9679; Producción</td><td style="text-align:right;color:#f1f5f9;font-weight:600">${prod} <span style="color:#475569">${total?Math.round(prod/total*100):0}%</span></td></tr>
-        <tr><td style="padding:4px 0;color:#F5B800">&#9679; Replanificados</td><td style="text-align:right;color:#f1f5f9;font-weight:600">${replanN} <span style="color:#475569">${total?Math.round(replanN/total*100):0}%</span></td></tr>
-        <tr><td style="padding:4px 0;color:#ef4444">&#9679; Vencidos</td><td style="text-align:right;color:#f1f5f9;font-weight:600">${venc} <span style="color:#475569">${total?Math.round(venc/total*100):0}%</span></td></tr>
-        <tr><td style="padding:4px 0;color:#F5B800">&#9888; Proyectos con Bloqueantes</td><td style="text-align:right;color:#f1f5f9;font-weight:600">${standby}</td></tr>
-        <tr><td style="padding:4px 0;color:#64748b">&#9744; Backlog</td><td style="text-align:right;color:#f1f5f9;font-weight:600">${backlog}</td></tr>
-      </table>
-      <div style="margin-top:12px;padding-top:10px;border-top:1px solid #1e2d40;text-align:center">
-        <div style="font-size:10px;color:#64748b;margin-bottom:3px">Cumplimiento General</div>
-        <div style="font-size:28px;font-weight:700;color:${cumplColor}">${cumpl}%</div>
-      </div>
-    </td>
-  </tr></table>
-  <div style="background:#131c2b;border-radius:8px;overflow:hidden;margin-bottom:12px">
-    <div style="padding:10px 16px;border-bottom:1px solid #1e2d40">
-      <span style="font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:.06em">Entregables · semana ${label}</span>
-    </div>
-    <table style="width:100%;border-collapse:collapse">
-      <thead><tr style="background:#0d1117">
-        <th style="padding:7px 8px;width:16px"></th>
-        <th style="padding:7px 8px;text-align:left;font-size:9px;color:#475569;text-transform:uppercase">Cód.</th>
-        <th style="padding:7px 8px;text-align:left;font-size:9px;color:#475569;text-transform:uppercase">Proyecto</th>
-        <th style="padding:7px 8px;text-align:left;font-size:9px;color:#475569;text-transform:uppercase">Sponsor</th>
-        <th style="padding:7px 8px;text-align:left;font-size:9px;color:#475569;text-transform:uppercase">Plan/Real</th>
-        <th style="padding:7px 8px;text-align:left;font-size:9px;color:#475569;text-transform:uppercase">Fecha fin</th>
-        <th style="padding:7px 8px;text-align:left;font-size:9px;color:#475569;text-transform:uppercase">Estado</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-  </div>
-  <div style="display:flex;justify-content:space-between;font-size:11px;color:#475569;padding:4px 0">
-    <span><span style="color:#ef4444">&#9679;</span> Vencido &nbsp;<span style="color:#F5B800">&#9679;</span> Replanificado &nbsp;<span style="color:#4ade80">&#9679;</span> En plazo &nbsp;<span style="color:#3B82F6">&#9679;</span> Producción</span>
-    <a href="https://pmo-efletexia.vercel.app" style="color:#3B82F6;text-decoration:none">Ver dashboard &#8594;</a>
-  </div>
-</div></body></html>`;
+          <body style="margin:0;padding:0;background:#0d1117;font-family:-apple-system,BlinkMacSystemFont,sans-serif">
+          <div style="max-width:800px;margin:0 auto;padding:20px 16px">
+            <div style="border-bottom:1px solid #1e2d40;margin-bottom:16px;padding-bottom:10px;display:flex;justify-content:space-between">
+              <span style="font-size:11px;color:#475569">PMO Dashboard — Efletexia &#8594; Entregables</span>
+              <span style="font-size:11px;color:#475569">Semana: ${label}</span>
+            </div>
+            <table style="width:100%;border-collapse:collapse;margin-bottom:16px"><tr style="vertical-align:top">
+              <td style="width:55%;padding-right:20px">
+                <div style="font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Resumen mensual de entregables</div>
+                <table style="border-collapse:collapse">${resumen}</table>
+              </td>
+              <td style="background:#131c2b;border-radius:8px;padding:16px">
+                <div style="font-size:10px;color:#3B82F6;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">&#9646; Indicadores del portafolio</div>
+                <table style="width:100%;border-collapse:collapse;font-size:12px">
+                  <tr><td style="padding:4px 0;color:#94a3b8">&#9679; Total entregables</td><td style="text-align:right;color:#f1f5f9;font-weight:600">${total}</td></tr>
+                  <tr><td style="padding:4px 0;color:#4ade80">&#9679; En plazo</td><td style="text-align:right;color:#f1f5f9;font-weight:600">${enPlazo} <span style="color:#475569">${total?Math.round(enPlazo/total*100):0}%</span></td></tr>
+                  <tr><td style="padding:4px 0;color:#3B82F6">&#9679; Producción</td><td style="text-align:right;color:#f1f5f9;font-weight:600">${prod} <span style="color:#475569">${total?Math.round(prod/total*100):0}%</span></td></tr>
+                  <tr><td style="padding:4px 0;color:#F5B800">&#9679; Replanificados</td><td style="text-align:right;color:#f1f5f9;font-weight:600">${replanN} <span style="color:#475569">${total?Math.round(replanN/total*100):0}%</span></td></tr>
+                  <tr><td style="padding:4px 0;color:#ef4444">&#9679; Vencidos</td><td style="text-align:right;color:#f1f5f9;font-weight:600">${venc} <span style="color:#475569">${total?Math.round(venc/total*100):0}%</span></td></tr>
+                  <tr><td style="padding:4px 0;color:#F5B800">&#9888; Proyectos con Bloqueantes</td><td style="text-align:right;color:#f1f5f9;font-weight:600">${standby}</td></tr>
+                  <tr><td style="padding:4px 0;color:#64748b">&#9744; Backlog</td><td style="text-align:right;color:#f1f5f9;font-weight:600">${backlog}</td></tr>
+                </table>
+                <div style="margin-top:12px;padding-top:10px;border-top:1px solid #1e2d40;text-align:center">
+                  <div style="font-size:10px;color:#64748b;margin-bottom:3px">Cumplimiento General</div>
+                  <div style="font-size:28px;font-weight:700;color:${cumplColor}">${cumpl}%</div>
+                </div>
+              </td>
+            </tr></table>
+            <div style="background:#131c2b;border-radius:8px;overflow:hidden;margin-bottom:12px">
+              <div style="padding:10px 16px;border-bottom:1px solid #1e2d40">
+                <span style="font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:.06em">Entregables · semana ${label}</span>
+              </div>
+              <table style="width:100%;border-collapse:collapse">
+                <thead><tr style="background:#0d1117">
+                  <th style="padding:7px 8px;width:16px"></th>
+                  <th style="padding:7px 8px;text-align:left;font-size:9px;color:#475569;text-transform:uppercase">Cód.</th>
+                  <th style="padding:7px 8px;text-align:left;font-size:9px;color:#475569;text-transform:uppercase">Proyecto</th>
+                  <th style="padding:7px 8px;text-align:left;font-size:9px;color:#475569;text-transform:uppercase">Sponsor</th>
+                  <th style="padding:7px 8px;text-align:left;font-size:9px;color:#475569;text-transform:uppercase">Plan/Real</th>
+                  <th style="padding:7px 8px;text-align:left;font-size:9px;color:#475569;text-transform:uppercase">Fecha fin</th>
+                  <th style="padding:7px 8px;text-align:left;font-size:9px;color:#475569;text-transform:uppercase">Estado</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+              </table>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:#475569;padding:4px 0">
+              <span><span style="color:#ef4444">&#9679;</span> Vencido &nbsp;<span style="color:#F5B800">&#9679;</span> Replanificado &nbsp;<span style="color:#4ade80">&#9679;</span> En plazo &nbsp;<span style="color:#3B82F6">&#9679;</span> Producción</span>
+              <a href="https://pmo-efletexia.vercel.app" style="color:#3B82F6;text-decoration:none">Ver dashboard &#8594;</a>
+            </div>
+          </div></body></html>`;
 
             const mail = await sendEmail(RESEND_KEY, ['abel.alva@dtgrupo.com'], `📊 Reporte PMO — Semana ${label}`, html);
             console.log('Resend status:', mail.status);
