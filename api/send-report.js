@@ -1,5 +1,8 @@
 const https = require('https');
 
+// Extender timeout de Vercel a 60 segundos
+module.exports.config = { maxDuration: 60 };
+
 // ── Helpers ────────────────────────────────────────────────
 function httpsPost(hostname, path, headers, body) {
   return new Promise((resolve, reject) => {
