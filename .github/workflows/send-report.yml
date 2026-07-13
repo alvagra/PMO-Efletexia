@@ -12,9 +12,9 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Enviar reporte de entregables
-        env:
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          curl -s -X POST https://pmo-efletexia.vercel.app/api/send-report \
-            -H "Authorization: Bearer ${CRON_SECRET}" \
-            -H "Content-Type: application/json"
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -X POST https://pmo-efletexia.vercel.app/api/send-report \
+            -H "Authorization: Bearer pmo-efletexia-2026" \
+            -H "Content-Type: application/json")
+          echo "$RESPONSE"
