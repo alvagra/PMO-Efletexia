@@ -21,16 +21,30 @@ let activeRecIdx = -1;
 const WARN_ICON = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#F5B800" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
 
 function getSemaforoPortafolio(e) {
-  // 1. Stand By (prioridad máxima)
+  // Stand By → ícono de advertencia (se mantiene)
   if ((e.status||'').toLowerCase() === 'stand by') return WARN_ICON;
-  // 2-4: misma lógica del semáforo existente
+
+  const statusLow = (e.status||'').toLowerCase();
   const hoy = new Date(); hoy.setHours(0,0,0,0);
   const fin = e.duedate ? new Date(e.duedate+'T12:00:00') : null;
-  const vencido = fin && fin < hoy;
-  const tieneReplan = !!e.replanificacion;
-  if (vencido)     return '🔴';
-  if (tieneReplan) return '<svg width="18" height="18" viewBox="0 0 18 18" style="vertical-align:middle"><circle cx="9" cy="9" r="8" fill="#F5B800"/></svg>';
-  return '🟢';
+
+  // Sin fecha fin → gris
+  if (!fin) return '<svg width="18" height="18" viewBox="0 0 18 18" style="vertical-align:middle"><circle cx="9" cy="9" r="8" fill="#6b7280"/></svg>';
+
+  // Producción → azul
+  if (statusLow === 'producción' || statusLow === 'produccion')
+    return '<svg width="18" height="18" viewBox="0 0 18 18" style="vertical-align:middle"><circle cx="9" cy="9" r="8" fill="#3B82F6"/></svg>';
+
+  // Vencido → rojo
+  if (fin < hoy)
+    return '<svg width="18" height="18" viewBox="0 0 18 18" style="vertical-align:middle"><circle cx="9" cy="9" r="8" fill="#ef4444"/></svg>';
+
+  // Replanificado → amarillo
+  if (!!e.replanificacion)
+    return '<svg width="18" height="18" viewBox="0 0 18 18" style="vertical-align:middle"><circle cx="9" cy="9" r="8" fill="#F5B800"/></svg>';
+
+  // En plazo → verde
+  return '<svg width="18" height="18" viewBox="0 0 18 18" style="vertical-align:middle"><circle cx="9" cy="9" r="8" fill="#4ade80"/></svg>';
 }
 
 // ── UTILS ──────────────────────────────────────────────────
