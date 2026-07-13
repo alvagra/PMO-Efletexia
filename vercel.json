@@ -2,7 +2,18 @@
   "version": 2,
   "routes": [
     { "src": "/api/jira", "dest": "/api/jira.js" },
+    { "src": "/api/send-report", "dest": "/api/send-report.js" },
     { "src": "/app.js", "dest": "/public/app.js" },
     { "src": "/(.*)", "dest": "/public/index.html" }
+  ],
+  "crons": [
+    {
+      "path": "/api/send-report",
+      "schedule": "0 21 * * 1"
+    },
+    {
+      "path": "/api/send-report",
+      "schedule": "0 23 * * 5"
+    }
   ]
 }
