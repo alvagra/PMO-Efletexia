@@ -216,24 +216,35 @@ jobs:
                 };
               });
 
-              const EXCL = ['backlog','desestimado','stand by','standby','planificado'];
+              // Mismas listas de exclusión que app.js, por sección
+              const SPECIAL_EPIC_KEYS = ['PTS-327','PTS-326'];
+              const EXCL_KPI = ['stand by','backlog','desestimado','planificado'];
+              const EXCL_RESUMEN = ['stand by','standby','stand-by','backlog','desestimado'];
+              const EXCL_GANTT = ['backlog','desestimado','stand by','standby','stand-by','bloqueado','blocked'];
+
               const actualizado = getActualizadoLabel();
-              const active = epics.filter(e => !EXCL.includes((e.status||'').toLowerCase()) && e.duedate);
-              const total = active.length;
-              const enPlazo = active.filter(e => getSemaforo(e).label==='En plazo').length;
-              const prod = active.filter(e => getSemaforo(e).label==='Producción').length;
-              const replanN = active.filter(e => getSemaforo(e).label==='Replanificado').length;
-              const venc = active.filter(e => getSemaforo(e).label==='Vencido').length;
+              const { desde: mDesde, hasta: mHasta } = getMonthRange();
+
+              // Indicadores del Portafolio: mismo alcance de mes que el Gantt, misma exclusión que renderKpiEjecutivo
+              const dataKpi = epics.filter(e => !SPECIAL_EPIC_KEYS.includes(e.key) && e.duedate && !EXCL_KPI.includes((e.status||'').toLowerCase()) && e.duedate>=mDesde && e.duedate<=mHasta);
+              const total = dataKpi.length;
+              const enPlazo = dataKpi.filter(e => getSemaforo(e).label==='En plazo').length;
+              const prod = dataKpi.filter(e => getSemaforo(e).label==='Producción').length;
+              const replanN = dataKpi.filter(e => getSemaforo(e).label==='Replanificado').length;
+              const venc = dataKpi.filter(e => getSemaforo(e).label==='Vencido').length;
               const cumpl = total>0 ? Math.round((enPlazo+prod)/total*100) : 0;
               const cumplColor = cumpl>=80?'#4ade80':cumpl>=60?'#F5B800':'#ef4444';
-              const standby = epics.filter(e => (e.status||'').toLowerCase()==='stand by').length;
-              const backlog = epics.filter(e => (e.status||'').toLowerCase()==='backlog').length;
+              const standby = epics.filter(e => !SPECIAL_EPIC_KEYS.includes(e.key) && (e.status||'').toLowerCase()==='stand by').length;
+              const backlog = epics.filter(e => !SPECIAL_EPIC_KEYS.includes(e.key) && (e.status||'').toLowerCase()==='backlog').length;
 
-              const resumen = buildResumenMensual(active);
+              // Resumen mensual: sin filtro de mes (histórico completo), igual que renderResumenMensual
+              const dataResumen = epics.filter(e => !SPECIAL_EPIC_KEYS.includes(e.key) && e.duedate && !EXCL_RESUMEN.includes((e.status||'').toLowerCase()));
+              const resumen = buildResumenMensual(dataResumen);
               const indicadores = buildIndicadores(total, enPlazo, prod, replanN, venc, standby, backlog, cumpl, cumplColor);
 
-              const { desde: mDesde, hasta: mHasta } = getMonthRange();
-              const entregablesGantt = active.filter(e => e.duedate>=mDesde && e.duedate<=mHasta).sort((a,b) => a.duedate.localeCompare(b.duedate));
+              // Gantt: mismo mes que Indicadores, misma exclusión que renderEntregables
+              const dataGantt = epics.filter(e => !SPECIAL_EPIC_KEYS.includes(e.key) && e.duedate && !EXCL_GANTT.includes((e.status||'').toLowerCase()) && e.duedate>=mDesde && e.duedate<=mHasta);
+              const entregablesGantt = dataGantt.sort((a,b) => a.duedate.localeCompare(b.duedate));
               const { days, months } = buildDaysAndMonths(mDesde, mHasta);
               const gantt = buildGantt(days, months, entregablesGantt);
 
