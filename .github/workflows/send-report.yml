@@ -34,11 +34,27 @@ jobs:
                 const req = https.request(opts, res => {
                   let d = '';
                   res.on('data', c => d += c);
-                  res.on('end', () => { try { resolve(JSON.parse(d)); } catch(e) { reject(e); } });
+                  res.on('end', () => { try { resolve({ status: res.statusCode, body: JSON.parse(d) }); } catch(e) { reject(e); } });
                 });
                 req.on('error', reject);
                 req.end();
               });
+            }
+
+            async function fetchAllPages(auth, jql, fields) {
+              let allIssues = [];
+              let nextPageToken = null;
+              do {
+                const params = new URLSearchParams({ jql, fields, maxResults: 100 });
+                if (nextPageToken) params.set('nextPageToken', nextPageToken);
+                const result = await jiraGet(auth, `/rest/api/3/search/jql?${params.toString()}`);
+                if (result.status !== 200) throw new Error(`Jira ${result.status}: ${JSON.stringify(result.body)}`);
+                const page = result.body;
+                allIssues = allIssues.concat(page.issues || []);
+                nextPageToken = page.isLast ? null : page.nextPageToken;
+                if (allIssues.length >= 2000) break;
+              } while (nextPageToken);
+              return allIssues;
             }
 
             function sendEmail(apiKey, to, subject, html) {
@@ -197,11 +213,11 @@ jobs:
               const auth = Buffer.from(`${JIRA_EMAIL}:${JIRA_TOKEN}`).toString('base64');
 
               const FIELDS = 'summary,status,duedate,customfield_10934,customfield_10725,customfield_10726,customfield_11070,customfield_11269';
-              const jql = encodeURIComponent('project = PTS AND issuetype = Epic ORDER BY created ASC');
-              const r = await jiraGet(auth, `/rest/api/3/search/jql?jql=${jql}&fields=${FIELDS}&maxResults=200`);
-              console.log('Epicas encontradas:', r.issues?.length);
+              const jql = 'project = PTS AND issuetype = Epic ORDER BY created ASC';
+              const issues = await fetchAllPages(auth, jql, FIELDS);
+              console.log('Epicas encontradas:', issues.length);
 
-              const epics = (r.issues||[]).map(i => {
+              const epics = issues.map(i => {
                 const f = i.fields||{};
                 return {
                   key: i.key,
