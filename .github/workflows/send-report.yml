@@ -23,142 +23,221 @@ jobs:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
         run: |
           node << 'SCRIPT'
-          const https = require('https');
+            const https = require('https');
 
-          function jiraGet(auth, path) {
-            return new Promise((resolve, reject) => {
-              const opts = {
-                hostname: 'efletexia.atlassian.net', path, method: 'GET',
-                headers: { 'Authorization': `Basic ${auth}`, 'Accept': 'application/json' }
-              };
-              const req = https.request(opts, res => {
-                let d = '';
-                res.on('data', c => d += c);
-                res.on('end', () => { try { resolve(JSON.parse(d)); } catch(e) { reject(e); } });
+            function jiraGet(auth, path) {
+              return new Promise((resolve, reject) => {
+                const opts = {
+                  hostname: 'efletexia.atlassian.net', path, method: 'GET',
+                  headers: { 'Authorization': `Basic ${auth}`, 'Accept': 'application/json' }
+                };
+                const req = https.request(opts, res => {
+                  let d = '';
+                  res.on('data', c => d += c);
+                  res.on('end', () => { try { resolve(JSON.parse(d)); } catch(e) { reject(e); } });
+                });
+                req.on('error', reject);
+                req.end();
               });
-              req.on('error', reject);
-              req.end();
-            });
-          }
+            }
 
-          function sendEmail(apiKey, to, subject, html) {
-            return new Promise((resolve, reject) => {
-              const data = JSON.stringify({ from: 'PMO Efletexia <onboarding@resend.dev>', to, subject, html });
-              const opts = {
-                hostname: 'api.resend.com', path: '/emails', method: 'POST',
-                headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) }
-              };
-              const req = https.request(opts, res => {
-                let d = '';
-                res.on('data', c => d += c);
-                res.on('end', () => resolve({ status: res.statusCode, body: d }));
+            function sendEmail(apiKey, to, subject, html) {
+              return new Promise((resolve, reject) => {
+                const data = JSON.stringify({ from: 'PMO Efletexia <onboarding@resend.dev>', to, subject, html });
+                const opts = {
+                  hostname: 'api.resend.com', path: '/emails', method: 'POST',
+                  headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) }
+                };
+                const req = https.request(opts, res => {
+                  let d = '';
+                  res.on('data', c => d += c);
+                  res.on('end', () => resolve({ status: res.statusCode, body: d }));
+                });
+                req.on('error', reject);
+                req.write(data);
+                req.end();
               });
-              req.on('error', reject);
-              req.write(data);
-              req.end();
-            });
-          }
+            }
 
-          function getWeekRange() {
-            const now = new Date();
-            const day = now.getDay();
-            const diff = day === 0 ? -6 : 1 - day;
-            const mon = new Date(now); mon.setDate(now.getDate() + diff); mon.setHours(0,0,0,0);
-            const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
-            const fmt = d => d.toLocaleDateString('es-PE',{day:'2-digit',month:'2-digit',year:'numeric'});
-            const iso = d => d.toISOString().slice(0,10);
-            return { desde: iso(mon), hasta: iso(sun), label: `${fmt(mon)} al ${fmt(sun)}` };
-          }
+            function getWeekRange() {
+              const now = new Date();
+              const day = now.getDay();
+              const diff = day === 0 ? -6 : 1 - day;
+              const mon = new Date(now); mon.setDate(now.getDate() + diff); mon.setHours(0,0,0,0);
+              const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+              const fmt = d => d.toLocaleDateString('es-PE',{day:'2-digit',month:'2-digit',year:'numeric'});
+              const iso = d => d.toISOString().slice(0,10);
+              return { desde: iso(mon), hasta: iso(sun), label: `${fmt(mon)} al ${fmt(sun)}` };
+            }
 
-          function adfText(node) {
-            if (!node) return '';
-            if (typeof node === 'string') return node;
-            if (node.type === 'text') return node.text || '';
-            return (node.content || []).map(adfText).join('');
-          }
+            function adfText(node) {
+              if (!node) return '';
+              if (typeof node === 'string') return node;
+              if (node.type === 'text') return node.text || '';
+              return (node.content || []).map(adfText).join('');
+            }
 
-          function getDot(e) {
-            const s = (e.status||'').toLowerCase();
-            const hoy = new Date(); hoy.setHours(0,0,0,0);
-            const fin = e.duedate ? new Date(e.duedate+'T12:00:00') : null;
-            if (!fin) return '#6b7280';
-            if (s==='producción'||s==='produccion') return '#3B82F6';
-            if (fin < hoy) return '#ef4444';
-            if (e.replan) return '#F5B800';
-            return '#4ade80';
-          }
+            const STATUS_COLORS = { 'En plazo':'#4ade80', 'Replanificado':'#F5B800', 'Vencido':'#ef4444', 'Producción':'#3B82F6' };
+            const ORDEN_ESTADOS = ['En plazo','Replanificado','Vencido','Producción'];
 
-          async function main() {
-            const JIRA_EMAIL = process.env.JIRA_EMAIL;
-            const JIRA_TOKEN = process.env.JIRA_TOKEN;
-            const RESEND_KEY = process.env.RESEND_API_KEY;
-            const auth = Buffer.from(`${JIRA_EMAIL}:${JIRA_TOKEN}`).toString('base64');
+            function getSemaforo(e) {
+              const s = (e.status||'').toLowerCase();
+              const hoy = new Date(); hoy.setHours(0,0,0,0);
+              const fin = e.duedate ? new Date(e.duedate+'T12:00:00') : null;
+              if (!fin) return { label:'Sin fecha', color:'#6b7280' };
+              if (s==='producción'||s==='produccion') return { label:'Producción', color: STATUS_COLORS['Producción'] };
+              if (fin < hoy) return { label:'Vencido', color: STATUS_COLORS['Vencido'] };
+              if (e.replan) return { label:'Replanificado', color: STATUS_COLORS['Replanificado'] };
+              return { label:'En plazo', color: STATUS_COLORS['En plazo'] };
+            }
 
-            const FIELDS = 'summary,status,duedate,customfield_10934,customfield_10725,customfield_10726,customfield_11070,customfield_11269';
-            const jql = encodeURIComponent('project = PTS AND issuetype = Epic ORDER BY created ASC');
-            const r = await jiraGet(auth, `/rest/api/3/search/jql?jql=${jql}&fields=${FIELDS}&maxResults=200`);
-            console.log('Epicas encontradas:', r.issues?.length);
+            function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
-            const epics = (r.issues||[]).map(i => {
-              const f = i.fields||{};
-              return {
-                key: i.key,
-                codigo: f.customfield_10934||i.key,
-                summary: f.summary||'',
-                status: f.status?.name||'',
-                duedate: f.duedate||null,
-                sponsor: f.customfield_11070?.value||'—',
-                planPct: f.customfield_10725!=null ? Math.round(f.customfield_10725*100) : null,
-                realPct: f.customfield_10726!=null ? Math.round(f.customfield_10726*100) : null,
-                replan: f.customfield_11269 ? adfText(f.customfield_11269).trim() : null
-              };
-            });
+            function buildResumenMensual(active) {
+              const byMonth = {};
+              active.forEach(e => {
+                const d = new Date(e.duedate+'T12:00:00');
+                const mk = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+                (byMonth[mk] = byMonth[mk] || []).push(e);
+              });
+              const mesesKeys = Object.keys(byMonth).sort();
+              const rows = mesesKeys.map(mk => {
+                const items = byMonth[mk];
+                const mesLabel = cap(new Date(mk+'-01T12:00:00').toLocaleDateString('es-PE',{month:'long',year:'numeric'}));
+                const grupos = {};
+                items.forEach(e => {
+                  const sem = getSemaforo(e);
+                  (grupos[sem.label] = grupos[sem.label] || []).push(e);
+                });
+                const bloques = ORDEN_ESTADOS.filter(o => grupos[o] && grupos[o].length).map(o => {
+                  const col = STATUS_COLORS[o];
+                  const squares = grupos[o].map(() => `<span style="display:inline-block;width:13px;height:13px;border-radius:3px;background:${col};margin-right:2px;vertical-align:middle"></span>`).join('');
+                  return `<span style="margin-right:14px;white-space:nowrap">${squares}<span style="font-size:11px;color:#64748b;margin-left:3px">${grupos[o].length}</span></span>`;
+                }).join('');
+                return `<tr><td style="padding:4px 12px 4px 0;font-size:11px;color:#64748b;white-space:nowrap;vertical-align:middle">${mesLabel}</td><td style="vertical-align:middle">${bloques}</td></tr>`;
+              }).join('');
+              return rows;
+            }
 
-            const EXCL = ['backlog','desestimado','stand by','standby','planificado'];
-            const { label, desde, hasta } = getWeekRange();
-            const active = epics.filter(e => !EXCL.includes((e.status||'').toLowerCase()) && e.duedate);
-            const total = active.length;
-            const enPlazo = active.filter(e=>getDot(e)==='#4ade80').length;
-            const prod = active.filter(e=>getDot(e)==='#3B82F6').length;
-            const replanN = active.filter(e=>getDot(e)==='#F5B800').length;
-            const venc = active.filter(e=>getDot(e)==='#ef4444').length;
-            const cumpl = total>0?Math.round((enPlazo+prod)/total*100):0;
-            const cumplColor = cumpl>=70?'#4ade80':cumpl>=50?'#F5B800':'#ef4444';
-            const standby = epics.filter(e=>(e.status||'').toLowerCase()==='stand by').length;
-            const backlog = epics.filter(e=>(e.status||'').toLowerCase()==='backlog').length;
+            function buildIndicadores(total, enPlazo, prod, replanN, venc, standby, backlog, cumpl, cumplColor) {
+              const pct = n => total ? Math.round(n/total*100) : 0;
+              return `
+                <div style="font-size:12px;font-weight:700;color:#3B82F6;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">&#128202; Indicadores del Portafolio</div>
+                <table style="width:100%;border-collapse:collapse;font-size:12px">
+                  <tr><td style="padding:4px 0;color:#94a3b8">&#128230; Total entregables</td><td style="text-align:right;color:#f1f5f9;font-weight:600">${total}</td></tr>
+                  <tr><td style="padding:4px 0;color:#94a3b8"><span style="color:#4ade80">&#9679;</span> En plazo</td><td style="text-align:right;color:#4ade80;font-weight:600">${enPlazo} <span style="color:#475569">${pct(enPlazo)}%</span></td></tr>
+                  <tr><td style="padding:4px 0;color:#94a3b8"><span style="color:#3B82F6">&#9679;</span> Producción</td><td style="text-align:right;color:#14B8A6;font-weight:600">${prod} <span style="color:#475569">${pct(prod)}%</span></td></tr>
+                  <tr><td style="padding:4px 0;color:#94a3b8"><span style="color:#F5B800">&#9679;</span> Replanificados</td><td style="text-align:right;color:#F5B800;font-weight:600">${replanN} <span style="color:#475569">${pct(replanN)}%</span></td></tr>
+                  <tr><td style="padding:4px 0;color:#94a3b8"><span style="color:#ef4444">&#9679;</span> Vencidos</td><td style="text-align:right;color:#ef4444;font-weight:600">${venc} <span style="color:#475569">${pct(venc)}%</span></td></tr>
+                  <tr><td style="padding:4px 0;color:#F5B800">&#9888; Proyectos con Bloqueantes</td><td style="text-align:right;color:#f1f5f9;font-weight:600">${standby}</td></tr>
+                  <tr><td style="padding:4px 0;color:#64748b">&#9744; Backlog</td><td style="text-align:right;color:#f1f5f9;font-weight:600">${backlog}</td></tr>
+                </table>
+                <div style="margin-top:12px;padding-top:10px;border-top:1px solid #1e2d40;text-align:center">
+                  <div style="font-size:10px;color:#64748b;margin-bottom:3px">&#128200; Cumplimiento General</div>
+                  <div style="font-size:28px;font-weight:700;color:${cumplColor}">${cumpl}%</div>
+                </div>`.split('\n').map(l => l.trim()).join('');
+            }
 
-            const meses = {};
-            active.forEach(e=>{
-              const k = new Date(e.duedate+'T12:00:00').toLocaleDateString('es-PE',{month:'long',year:'numeric'}).toUpperCase();
-              (meses[k]=meses[k]||[]).push(e);
-            });
-            const resumen = Object.entries(meses).sort().map(([m,its])=>`<tr>
-              <td style="padding:3px 12px 3px 0;font-size:11px;color:#64748b;white-space:nowrap">${m}</td>
-              <td>${its.map(e=>`<span style="display:inline-block;width:13px;height:13px;border-radius:3px;background:${getDot(e)};margin-right:2px;vertical-align:middle"></span>`).join('')}
-              <span style="font-size:11px;color:#64748b;margin-left:3px">${its.length}</span></td></tr>`).join('');
+            function buildGantt(days, months, items) {
+              const COL_W = 30;
+              if (!items.length) {
+                return '<div style="padding:16px;text-align:center;color:#475569;font-size:12px">Sin entregables esta semana</div>';
+              }
+              const monthHeader = months.map(m => `<td colspan="${m.count}" style="padding:4px 2px;font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;border-bottom:1px solid #1e2d40;text-align:center">${m.label}</td>`).join('');
+              const dayHeader = days.map(d => {
+                const bg = d.isHoy ? 'rgba(59,130,246,.25)' : d.isWE ? 'rgba(255,255,255,.04)' : 'transparent';
+                const col = d.isHoy ? '#60a5fa' : d.isWE ? '#64748b' : '#94a3b8';
+                return `<td style="width:${COL_W}px;text-align:center;font-size:9px;padding:4px 0;background:${bg};color:${col};border-bottom:1px solid #1e2d40">${d.day}</td>`;
+              }).join('');
+              const bodyRows = items.map((e, i) => {
+                const sem = getSemaforo(e);
+                const rowBg = i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,.02)';
+                const cells = days.map(d => {
+                  const cellBg = d.isHoy ? 'rgba(59,130,246,.08)' : d.isWE ? 'rgba(255,255,255,.025)' : 'transparent';
+                  if (d.iso === e.duedate) {
+                    return `<td style="padding:3px;background:${cellBg};border-bottom:1px solid rgba(255,255,255,.05)"><div style="width:22px;height:20px;border-radius:4px;background:${sem.color};margin:0 auto"></div></td>`;
+                  }
+                  return `<td style="background:${cellBg};border-bottom:1px solid rgba(255,255,255,.05)"></td>`;
+                }).join('');
+                return `<tr style="background:${rowBg}"><td style="padding:6px 10px;border-right:1px solid #1e2d40;border-bottom:1px solid rgba(255,255,255,.05);white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis"><div style="font-size:11px;font-weight:600"><a href="https://efletexia.atlassian.net/browse/${e.key}" style="color:#60a5fa;text-decoration:none">${e.codigo||e.key}</a></div><div style="font-size:11px;color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:190px">${e.summary}</div></td>${cells}</tr>`;
+              }).join('');
+              return `<div style="overflow-x:auto"><table style="border-collapse:collapse"><tr><td style="border-right:1px solid #1e2d40"></td>${monthHeader}</tr><tr><td style="border-right:1px solid #1e2d40"></td>${dayHeader}</tr>${bodyRows}</table></div>`.split('\n').map(l => l.trim()).join('');
+            }
 
-            const week = active.filter(e=>e.duedate>=desde&&e.duedate<=hasta).sort((a,b)=>a.duedate.localeCompare(b.duedate));
-            const rows = week.map(e=>{
-              const d=getDot(e);
-              const plan=e.planPct!=null?e.planPct+'%':'—';
-              const real=e.realPct!=null?e.realPct+'%':'—';
-              const fin=new Date(e.duedate+'T12:00:00').toLocaleDateString('es-PE',{day:'2-digit',month:'short',year:'numeric'});
-              return `<tr style="border-bottom:1px solid #1e2d40">
-                <td style="padding:8px"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${d}"></span></td>
-                <td style="padding:8px;font-size:11px"><a href="https://efletexia.atlassian.net/browse/${e.key}" style="color:#60a5fa;text-decoration:none;font-weight:600">${e.codigo||e.key}</a></td>
-                <td style="padding:8px;color:#e2e8f0;font-size:11px">${e.summary}</td>
-                <td style="padding:8px;color:#94a3b8;font-size:11px;white-space:nowrap">${e.sponsor||'—'}</td>
-                <td style="padding:8px;color:#94a3b8;font-size:11px;white-space:nowrap">${plan} / ${real}</td>
-                <td style="padding:8px;color:#94a3b8;font-size:11px;white-space:nowrap">${fin}</td>
-                <td style="padding:8px"><span style="background:${d}22;color:${d};padding:2px 6px;border-radius:3px;font-size:9px;font-weight:600">${e.status}</span></td></tr>`;
-            }).join('') || `<tr><td colspan="7" style="padding:16px;text-align:center;color:#475569;font-size:12px">Sin entregables esta semana</td></tr>`;
+            function buildDaysAndMonths(desde, hasta) {
+              const hoy = new Date(); hoy.setHours(0,0,0,0);
+              const hoyIso = hoy.toISOString().slice(0,10);
+              const start = new Date(desde+'T12:00:00');
+              const end = new Date(hasta+'T12:00:00');
+              const days = [];
+              let cur = new Date(start);
+              while (cur <= end) {
+                const iso = cur.toISOString().slice(0,10);
+                const dow = cur.getDay();
+                days.push({ iso, day: cur.getDate(), dow, isWE: dow===0||dow===6, isHoy: iso===hoyIso });
+                cur.setDate(cur.getDate()+1);
+              }
+              const months = [];
+              days.forEach(d => {
+                const label = new Date(d.iso+'T12:00:00').toLocaleDateString('es-PE',{month:'short',year:'numeric'}).toUpperCase();
+                if (!months.length || months[months.length-1].label !== label) months.push({ label, count: 1 });
+                else months[months.length-1].count++;
+              });
+              return { days, months };
+            }
 
-            const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head> <body style="margin:0;padding:0;background:#0d1117;font-family:-apple-system,BlinkMacSystemFont,sans-serif"> <div style="max-width:800px;margin:0 auto;padding:20px 16px">   <div style="border-bottom:1px solid #1e2d40;margin-bottom:16px;padding-bottom:10px;display:flex;justify-content:space-between">     <span style="font-size:11px;color:#475569">PMO Dashboard — Efletexia &#8594; Entregables</span>     <span style="font-size:11px;color:#475569">Semana: ${label}</span>   </div>   <table style="width:100%;border-collapse:collapse;margin-bottom:16px"><tr style="vertical-align:top">     <td style="width:55%;padding-right:20px">       <div style="font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Resumen mensual de entregables</div>       <table style="border-collapse:collapse">${resumen}</table>     </td>     <td style="background:#131c2b;border-radius:8px;padding:16px">       <div style="font-size:10px;color:#3B82F6;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">&#9646; Indicadores del portafolio</div>       <table style="width:100%;border-collapse:collapse;font-size:12px">         <tr><td style="padding:4px 0;color:#94a3b8">&#9679; Total entregables</td><td style="text-align:right;color:#f1f5f9;font-weight:600">${total}</td></tr>         <tr><td style="padding:4px 0;color:#4ade80">&#9679; En plazo</td><td style="text-align:right;color:#f1f5f9;font-weight:600">${enPlazo} <span style="color:#475569">${total?Math.round(enPlazo/total*100):0}%</span></td></tr>         <tr><td style="padding:4px 0;color:#3B82F6">&#9679; Producción</td><td style="text-align:right;color:#f1f5f9;font-weight:600">${prod} <span style="color:#475569">${total?Math.round(prod/total*100):0}%</span></td></tr>         <tr><td style="padding:4px 0;color:#F5B800">&#9679; Replanificados</td><td style="text-align:right;color:#f1f5f9;font-weight:600">${replanN} <span style="color:#475569">${total?Math.round(replanN/total*100):0}%</span></td></tr>         <tr><td style="padding:4px 0;color:#ef4444">&#9679; Vencidos</td><td style="text-align:right;color:#f1f5f9;font-weight:600">${venc} <span style="color:#475569">${total?Math.round(venc/total*100):0}%</span></td></tr>         <tr><td style="padding:4px 0;color:#F5B800">&#9888; Proyectos con Bloqueantes</td><td style="text-align:right;color:#f1f5f9;font-weight:600">${standby}</td></tr>         <tr><td style="padding:4px 0;color:#64748b">&#9744; Backlog</td><td style="text-align:right;color:#f1f5f9;font-weight:600">${backlog}</td></tr>       </table>       <div style="margin-top:12px;padding-top:10px;border-top:1px solid #1e2d40;text-align:center">         <div style="font-size:10px;color:#64748b;margin-bottom:3px">Cumplimiento General</div>         <div style="font-size:28px;font-weight:700;color:${cumplColor}">${cumpl}%</div>       </div>     </td>   </tr></table>   <div style="background:#131c2b;border-radius:8px;overflow:hidden;margin-bottom:12px">     <div style="padding:10px 16px;border-bottom:1px solid #1e2d40">       <span style="font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:.06em">Entregables · semana ${label}</span>     </div>     <table style="width:100%;border-collapse:collapse">       <thead><tr style="background:#0d1117">         <th style="padding:7px 8px;width:16px"></th>         <th style="padding:7px 8px;text-align:left;font-size:9px;color:#475569;text-transform:uppercase">Cód.</th>         <th style="padding:7px 8px;text-align:left;font-size:9px;color:#475569;text-transform:uppercase">Proyecto</th>         <th style="padding:7px 8px;text-align:left;font-size:9px;color:#475569;text-transform:uppercase">Sponsor</th>         <th style="padding:7px 8px;text-align:left;font-size:9px;color:#475569;text-transform:uppercase">Plan/Real</th>         <th style="padding:7px 8px;text-align:left;font-size:9px;color:#475569;text-transform:uppercase">Fecha fin</th>         <th style="padding:7px 8px;text-align:left;font-size:9px;color:#475569;text-transform:uppercase">Estado</th>       </tr></thead>       <tbody>${rows}</tbody>     </table>   </div>   <div style="display:flex;justify-content:space-between;font-size:11px;color:#475569;padding:4px 0">     <span><span style="color:#ef4444">&#9679;</span> Vencido &nbsp;<span style="color:#F5B800">&#9679;</span> Replanificado &nbsp;<span style="color:#4ade80">&#9679;</span> En plazo &nbsp;<span style="color:#3B82F6">&#9679;</span> Producción</span>     <a href="https://pmo-efletexia.vercel.app" style="color:#3B82F6;text-decoration:none">Ver dashboard &#8594;</a>   </div> </div></body></html>`;
+            async function main() {
+              const JIRA_EMAIL = process.env.JIRA_EMAIL;
+              const JIRA_TOKEN = process.env.JIRA_TOKEN;
+              const RESEND_KEY = process.env.RESEND_API_KEY;
+              const auth = Buffer.from(`${JIRA_EMAIL}:${JIRA_TOKEN}`).toString('base64');
 
-            const mail = await sendEmail(RESEND_KEY, ['abel.alva@dtgrupo.com'], `📊 Reporte PMO — Semana ${label}`, html);
-            console.log('Resend status:', mail.status);
-            console.log('Resend body:', mail.body);
-          }
+              const FIELDS = 'summary,status,duedate,customfield_10934,customfield_10725,customfield_10726,customfield_11070,customfield_11269';
+              const jql = encodeURIComponent('project = PTS AND issuetype = Epic ORDER BY created ASC');
+              const r = await jiraGet(auth, `/rest/api/3/search/jql?jql=${jql}&fields=${FIELDS}&maxResults=200`);
+              console.log('Epicas encontradas:', r.issues?.length);
 
-          main().catch(e => { console.error(e); process.exit(1); });
+              const epics = (r.issues||[]).map(i => {
+                const f = i.fields||{};
+                return {
+                  key: i.key,
+                  codigo: f.customfield_10934||i.key,
+                  summary: f.summary||'',
+                  status: f.status?.name||'',
+                  duedate: f.duedate||null,
+                  sponsor: f.customfield_11070?.value||'—',
+                  planPct: f.customfield_10725!=null ? Math.round(f.customfield_10725*100) : null,
+                  realPct: f.customfield_10726!=null ? Math.round(f.customfield_10726*100) : null,
+                  replan: f.customfield_11269 ? adfText(f.customfield_11269).trim() : null
+                };
+              });
+
+              const EXCL = ['backlog','desestimado','stand by','standby','planificado'];
+              const { label, desde, hasta } = getWeekRange();
+              const active = epics.filter(e => !EXCL.includes((e.status||'').toLowerCase()) && e.duedate);
+              const total = active.length;
+              const enPlazo = active.filter(e => getSemaforo(e).label==='En plazo').length;
+              const prod = active.filter(e => getSemaforo(e).label==='Producción').length;
+              const replanN = active.filter(e => getSemaforo(e).label==='Replanificado').length;
+              const venc = active.filter(e => getSemaforo(e).label==='Vencido').length;
+              const cumpl = total>0 ? Math.round((enPlazo+prod)/total*100) : 0;
+              const cumplColor = cumpl>=80?'#4ade80':cumpl>=60?'#F5B800':'#ef4444';
+              const standby = epics.filter(e => (e.status||'').toLowerCase()==='stand by').length;
+              const backlog = epics.filter(e => (e.status||'').toLowerCase()==='backlog').length;
+
+              const resumen = buildResumenMensual(active);
+              const indicadores = buildIndicadores(total, enPlazo, prod, replanN, venc, standby, backlog, cumpl, cumplColor);
+
+              const week = active.filter(e => e.duedate>=desde && e.duedate<=hasta).sort((a,b) => a.duedate.localeCompare(b.duedate));
+              const { days, months } = buildDaysAndMonths(desde, hasta);
+              const gantt = buildGantt(days, months, week);
+
+              const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="margin:0;padding:0;background:#0d1117;font-family:-apple-system,BlinkMacSystemFont,sans-serif"><div style="max-width:820px;margin:0 auto;padding:20px 16px"><div style="border-bottom:1px solid #1e2d40;margin-bottom:16px;padding-bottom:10px;display:flex;justify-content:space-between"><span style="font-size:11px;color:#475569">PMO Dashboard — Efletexia &#8594; Entregables</span><span style="font-size:11px;color:#475569">Semana: ${label}</span></div><table style="width:100%;border-collapse:collapse;margin-bottom:16px"><tr style="vertical-align:top"><td style="width:55%;padding-right:20px"><div style="font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Resumen mensual de entregables</div><table style="border-collapse:collapse">${resumen}</table></td><td style="background:#131c2b;border-radius:8px;padding:16px">${indicadores}</td></tr></table><div style="background:#131c2b;border-radius:8px;overflow:hidden;margin-bottom:12px"><div style="padding:10px 16px;border-bottom:1px solid #1e2d40"><span style="font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:.06em">Entregables · semana ${label}</span></div>${gantt}</div><div style="display:flex;justify-content:space-between;font-size:11px;color:#475569;padding:4px 0"><span><span style="color:#ef4444">&#9679;</span> Vencido &nbsp;<span style="color:#F5B800">&#9679;</span> Replanificado &nbsp;<span style="color:#4ade80">&#9679;</span> En plazo &nbsp;<span style="color:#3B82F6">&#9679;</span> Producción</span><a href="https://pmo-efletexia.vercel.app" style="color:#3B82F6;text-decoration:none">Ver dashboard &#8594;</a></div></div></body></html>`;
+
+              const mail = await sendEmail(RESEND_KEY, ['abel.alva@dtgrupo.com'], `📊 Reporte PMO — Semana ${label}`, html);
+              console.log('Resend status:', mail.status);
+              console.log('Resend body:', mail.body);
+            }
+
+            main().catch(e => { console.error(e); process.exit(1); });
           SCRIPT
