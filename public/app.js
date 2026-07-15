@@ -386,7 +386,7 @@ async function loadData(manual=false){
     populateSelect('s-sponsor', epics.map(e=>e.sponsor).filter(Boolean),'Todos');
     populateSelect('s-pais',    epics.map(e=>e.pais).filter(Boolean),'Todos');
     populateSelect('s-cat',     epics.map(e=>e.categoria).filter(Boolean),'Todas');
-    populateSelect('s-app',     epics.map(e=>e.aplicacion).filter(Boolean),'Todas');
+    populateSelect('s-app',     APLICACIONES_JIRA,'Todas');
     populateSelect('s-area',    epics.map(e=>e.area).filter(Boolean),'Todas');
 
     document.getElementById('last-update').textContent='Actualizado '+new Date().toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'});
@@ -1090,6 +1090,8 @@ function estaDeVacaciones(nombre, fecha) {
   if (!rangos) return false;
   return rangos.some(([ini, fin]) => fecha >= ini && fecha <= fin);
 }
+
+const APLICACIONES_JIRA = ['Qubo','Robots','Simulador','T1','T2','TC','Viax'];
 
 const FERIADOS = {
   'Peru': new Set([
