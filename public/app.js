@@ -201,6 +201,7 @@ function parseIssue(i){
     pais:f.customfield_10592?f.customfield_10592.value:null,
     area:f.customfield_10930?f.customfield_10930.value:null,
     categoria:f.customfield_10659?f.customfield_10659.value:null,
+    aplicacion:f.customfield_11203?f.customfield_11203.value:null,
     planPct:f.customfield_10725!==undefined?f.customfield_10725:null,
     realPct:f.customfield_10726!==undefined?f.customfield_10726:null,
     desvioPct:f.customfield_10759!==undefined?f.customfield_10759:null,
@@ -292,6 +293,7 @@ function getFiltered(){
   const sp = document.getElementById('s-sponsor').value;
   const p  = document.getElementById('s-pais').value;
   const c  = document.getElementById('s-cat').value;
+  const ap = document.getElementById('s-app').value;
   const a  = document.getElementById('s-area').value;
   const ck = [...document.querySelectorAll('.estados-grid input:checked')].map(x=>x.value);
   return epics.filter(e=>{
@@ -300,6 +302,7 @@ function getFiltered(){
     if(sp && e.sponsor!==sp) return false;
     if(p  && e.pais!==p)    return false;
     if(c  && e.categoria!==c) return false;
+    if(ap && e.aplicacion!==ap) return false;
     if(a  && e.area!==a)    return false;
     if(ck.length && !ck.includes(e.status)) return false;
     return true;
@@ -317,7 +320,7 @@ function sortedData(data){
   });
 }
 
-['s-search','s-sponsor','s-pais','s-cat','s-area'].forEach(id=>{
+['s-search','s-sponsor','s-pais','s-cat','s-app','s-area'].forEach(id=>{
   const el=document.getElementById(id);
   if(el) el.addEventListener('input',()=>renderTable(sortedData(getFiltered())));
 });
@@ -326,7 +329,7 @@ document.querySelectorAll('.estados-grid input').forEach(cb=>{
 });
 document.getElementById('btn-limpiar').addEventListener('click',()=>{
   document.getElementById('s-search').value='';
-  ['s-sponsor','s-pais','s-cat','s-area'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  ['s-sponsor','s-pais','s-cat','s-app','s-area'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
   document.querySelectorAll('.estados-grid input').forEach(cb=>cb.checked=false);
   sortCol=null; sortDir=1;
   document.querySelectorAll('#panel-portafolio thead th').forEach(t=>{
@@ -383,6 +386,7 @@ async function loadData(manual=false){
     populateSelect('s-sponsor', epics.map(e=>e.sponsor).filter(Boolean),'Todos');
     populateSelect('s-pais',    epics.map(e=>e.pais).filter(Boolean),'Todos');
     populateSelect('s-cat',     epics.map(e=>e.categoria).filter(Boolean),'Todas');
+    populateSelect('s-app',     epics.map(e=>e.aplicacion).filter(Boolean),'Todas');
     populateSelect('s-area',    epics.map(e=>e.area).filter(Boolean),'Todas');
 
     document.getElementById('last-update').textContent='Actualizado '+new Date().toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'});
