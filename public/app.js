@@ -173,7 +173,8 @@ const JIRA_FIELDS = [
   "customfield_10930","customfield_10931","customfield_10934",
   "customfield_10829","customfield_10862","customfield_10969",
   "customfield_10970","customfield_11003","customfield_11004",
-  "customfield_11037","customfield_11070","customfield_11170","customfield_11269"
+  "customfield_11037","customfield_11070","customfield_11170","customfield_11269",
+  "customfield_11203"
 ];
 
 function parseIssue(i){
