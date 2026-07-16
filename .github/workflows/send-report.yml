@@ -296,11 +296,13 @@ jobs:
           WHATSAPP_PHONE_ID: ${{ secrets.WHATSAPP_PHONE_ID }}
           WHATSAPP_TO: ${{ secrets.WHATSAPP_TO }}
         run: |
-          MEDIA_ID=$(curl -s -X POST "https://graph.facebook.com/v21.0/${WHATSAPP_PHONE_ID}/media" \
+          UPLOAD_RESPONSE=$(curl -s -X POST "https://graph.facebook.com/v21.0/${WHATSAPP_PHONE_ID}/media" \
             -H "Authorization: Bearer ${WHATSAPP_TOKEN}" \
             -F "messaging_product=whatsapp" \
             -F "type=image/png" \
-            -F "file=@report.png;type=image/png" | jq -r '.id')
+            -F "file=@report.png;type=image/png")
+          echo "Respuesta de subida: $UPLOAD_RESPONSE"
+          MEDIA_ID=$(echo "$UPLOAD_RESPONSE" | jq -r '.id')
           echo "Media ID: $MEDIA_ID"
           curl -s -X POST "https://graph.facebook.com/v21.0/${WHATSAPP_PHONE_ID}/messages" \
             -H "Authorization: Bearer ${WHATSAPP_TOKEN}" \
