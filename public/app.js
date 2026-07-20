@@ -62,6 +62,14 @@ function sbClass(s){
   };
   return map[s.toLowerCase()]||'backlog';
 }
+// Clasificación de 4 estados usada en las barras del Gantt (detalle de épica), para respetar la leyenda: Completado/En curso/Pendiente/Bloqueado
+function ganttLegendCls(s){
+  const v = (s||'').toLowerCase();
+  if(['producción','produccion','finalizada','cerrado','done','closed'].includes(v)) return 'gb-done';
+  if(['blocked','bloqueado','bloqued'].includes(v)) return 'gb-bloq';
+  if(['análisis','analisis','desarrollo','pruebas','en curso','review'].includes(v)) return 'gb-open';
+  return 'gb-pend';
+}
 function fmtD(iso){
   if(!iso) return null;
   const d = new Date(iso+'T12:00:00');
@@ -488,7 +496,7 @@ function buildGantt(e, stories){
   const bL=Math.max(0,(diffD(aS,pS)/total)*100);
   const bR=Math.min(100,(diffD(aS,pE)/total)*100);
   const bW=Math.max(.5,bR-bL);
-  const bc='gb-'+sbClass(e.status);
+  const bc=ganttLegendCls(e.status);
   const dur=diffD(pS,pE);
   const durWork=workDays(pS,pE);
   const elapsed=workDays(pS,TODAY);
@@ -534,7 +542,7 @@ function buildGantt(e, stories){
     stories.forEach(story=>{
       const sf=story.fields;
       const sNom=sf.summary||story.key;
-      const sStatus=sf.status?sf.status.name:'', sCls='gb-'+sbClass(sStatus);
+      const sStatus=sf.status?sf.status.name:'', sCls=ganttLegendCls(sStatus);
       const sStart=sf.customfield_10015||null, sEnd=sf.duedate||null;
       const sPos=barPos(sStart, sEnd);
       const sBarHtml=sPos?`<div class="g-bar ${sCls}" style="left:${sPos.l.toFixed(2)}%;width:${sPos.w.toFixed(2)}%"></div>`:'';
@@ -574,7 +582,7 @@ function buildGantt(e, stories){
       </div>`;
       (sf._subtasks||[]).forEach(sub=>{
         const tf=sub.fields, tNom=tf.summary||sub.key, tAsig=tf.assignee?tf.assignee.displayName:'';
-        const tStatus=tf.status?tf.status.name:'', tCls='gb-'+sbClass(tStatus);
+        const tStatus=tf.status?tf.status.name:'', tCls=ganttLegendCls(tStatus);
         const tStart=tf.customfield_10015||null, tEnd=tf.duedate||null;
         const tPos=barPos(tStart, tEnd);
         const tBarHtml=tPos?`<div class="g-bar ${tCls}" style="left:${tPos.l.toFixed(2)}%;width:${tPos.w.toFixed(2)}%"></div>`:'';
