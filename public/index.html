@@ -493,6 +493,18 @@ a.jlink:hover{text-decoration:underline}
       <label class="filter-label" for="s-app">Aplicación</label>
       <select id="s-app" class="filter-input"><option value="">Todas</option></select>
     </div>
+    <div class="filter-group">
+      <label class="filter-label" for="s-sem">Semáforo</label>
+      <select id="s-sem" class="filter-input">
+        <option value="">Todos</option>
+        <option value="produccion">Producción</option>
+        <option value="vencido">Vencido</option>
+        <option value="replanificado">Replanificado</option>
+        <option value="enplazo">En plazo</option>
+        <option value="sinfecha">Sin fecha</option>
+        <option value="standby">Stand By</option>
+      </select>
+    </div>
     <div class="estados-wrap">
       <div class="filter-label">Estado</div>
       <div class="estados-grid">
@@ -513,7 +525,17 @@ a.jlink:hover{text-decoration:underline}
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>CSV
     </button>
   </div>
-  <div class="table-info" id="table-info"></div>
+  <div class="table-info" id="table-info" style="justify-content:space-between">
+    <span id="table-info-text"></span>
+    <div class="semaforo-legend" style="display:flex;gap:14px;align-items:center;font-size:11px;color:var(--text-muted)">
+      <span style="display:flex;align-items:center;gap:5px"><svg width="10" height="10"><circle cx="5" cy="5" r="5" fill="#3B82F6"/></svg>Producción</span>
+      <span style="display:flex;align-items:center;gap:5px"><svg width="10" height="10"><circle cx="5" cy="5" r="5" fill="#ef4444"/></svg>Vencido</span>
+      <span style="display:flex;align-items:center;gap:5px"><svg width="10" height="10"><circle cx="5" cy="5" r="5" fill="#F5B800"/></svg>Replanificado</span>
+      <span style="display:flex;align-items:center;gap:5px"><svg width="10" height="10"><circle cx="5" cy="5" r="5" fill="#4ade80"/></svg>En plazo</span>
+      <span style="display:flex;align-items:center;gap:5px"><svg width="10" height="10"><circle cx="5" cy="5" r="5" fill="#6b7280"/></svg>Sin fecha</span>
+      <span style="display:flex;align-items:center;gap:5px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#F5B800" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Stand By</span>
+    </div>
+  </div>
   <div class="table-wrap">
     <table>
       <thead>
