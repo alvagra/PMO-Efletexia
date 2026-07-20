@@ -20,31 +20,24 @@ let activeRecIdx = -1;
 // ── SEMÁFORO PORTAFOLIO (columna Semaforización) ────────────
 const WARN_ICON = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#F5B800" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
 
-function getSemaforoPortafolio(e) {
-  // Stand By → ícono de advertencia (se mantiene)
-  if ((e.status||'').toLowerCase() === 'stand by') return WARN_ICON;
+const SEMAFORO_COLORS = { produccion:'#3B82F6', vencido:'#ef4444', replanificado:'#F5B800', enplazo:'#4ade80', sinfecha:'#6b7280' };
 
+function getSemaforoCategoria(e) {
+  if ((e.status||'').toLowerCase() === 'stand by') return 'standby';
   const statusLow = (e.status||'').toLowerCase();
   const hoy = new Date(); hoy.setHours(0,0,0,0);
   const fin = e.duedate ? new Date(e.duedate+'T12:00:00') : null;
+  if (!fin) return 'sinfecha';
+  if (statusLow === 'producción' || statusLow === 'produccion') return 'produccion';
+  if (fin < hoy) return 'vencido';
+  if (!!e.replanificacion) return 'replanificado';
+  return 'enplazo';
+}
 
-  // Sin fecha fin → gris
-  if (!fin) return '<svg width="18" height="18" viewBox="0 0 18 18" style="vertical-align:middle"><circle cx="9" cy="9" r="8" fill="#6b7280"/></svg>';
-
-  // Producción → azul
-  if (statusLow === 'producción' || statusLow === 'produccion')
-    return '<svg width="18" height="18" viewBox="0 0 18 18" style="vertical-align:middle"><circle cx="9" cy="9" r="8" fill="#3B82F6"/></svg>';
-
-  // Vencido → rojo
-  if (fin < hoy)
-    return '<svg width="18" height="18" viewBox="0 0 18 18" style="vertical-align:middle"><circle cx="9" cy="9" r="8" fill="#ef4444"/></svg>';
-
-  // Replanificado → amarillo
-  if (!!e.replanificacion)
-    return '<svg width="18" height="18" viewBox="0 0 18 18" style="vertical-align:middle"><circle cx="9" cy="9" r="8" fill="#F5B800"/></svg>';
-
-  // En plazo → verde
-  return '<svg width="18" height="18" viewBox="0 0 18 18" style="vertical-align:middle"><circle cx="9" cy="9" r="8" fill="#4ade80"/></svg>';
+function getSemaforoPortafolio(e) {
+  const cat = getSemaforoCategoria(e);
+  if (cat === 'standby') return WARN_ICON;
+  return `<svg width="18" height="18" viewBox="0 0 18 18" style="vertical-align:middle"><circle cx="9" cy="9" r="8" fill="${SEMAFORO_COLORS[cat]}"/></svg>`;
 }
 
 // ── UTILS ──────────────────────────────────────────────────
@@ -262,7 +255,7 @@ function updateKpis(data){
 function renderTable(data){
   const mainData = data.filter(e=>!SPECIAL_EPIC_KEYS.includes(e.key));
   updateKpis(mainData);
-  const info=document.getElementById('table-info');
+  const info=document.getElementById('table-info-text');
   if(info) info.innerHTML=`Mostrando <strong>${mainData.length}</strong> de ${epics.filter(e=>!SPECIAL_EPIC_KEYS.includes(e.key)).length} épicas`;
   const data_=mainData;
   const tb=document.getElementById('table-body');
@@ -303,6 +296,7 @@ function getFiltered(){
   const p  = document.getElementById('s-pais').value;
   const c  = document.getElementById('s-cat').value;
   const ap = document.getElementById('s-app').value;
+  const sem = document.getElementById('s-sem').value;
   const a  = document.getElementById('s-area').value;
   const ck = [...document.querySelectorAll('.estados-grid input:checked')].map(x=>x.value);
   return epics.filter(e=>{
@@ -312,6 +306,7 @@ function getFiltered(){
     if(p  && e.pais!==p)    return false;
     if(c  && e.categoria!==c) return false;
     if(ap && e.aplicacion!==ap) return false;
+    if(sem && getSemaforoCategoria(e)!==sem) return false;
     if(a  && e.area!==a)    return false;
     if(ck.length && !ck.includes(e.status)) return false;
     return true;
@@ -329,7 +324,7 @@ function sortedData(data){
   });
 }
 
-['s-search','s-sponsor','s-pais','s-cat','s-app','s-area'].forEach(id=>{
+['s-search','s-sponsor','s-pais','s-cat','s-app','s-sem','s-area'].forEach(id=>{
   const el=document.getElementById(id);
   if(el) el.addEventListener('input',()=>renderTable(sortedData(getFiltered())));
 });
@@ -338,7 +333,7 @@ document.querySelectorAll('.estados-grid input').forEach(cb=>{
 });
 document.getElementById('btn-limpiar').addEventListener('click',()=>{
   document.getElementById('s-search').value='';
-  ['s-sponsor','s-pais','s-cat','s-app','s-area'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  ['s-sponsor','s-pais','s-cat','s-app','s-sem','s-area'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
   document.querySelectorAll('.estados-grid input').forEach(cb=>cb.checked=false);
   sortCol=null; sortDir=1;
   document.querySelectorAll('#panel-portafolio thead th').forEach(t=>{
