@@ -65,10 +65,10 @@ function sbClass(s){
 // Clasificación de 4 estados usada en las barras del Gantt (detalle de épica), para respetar la leyenda: Completado/En curso/Pendiente/Bloqueado
 function ganttLegendCls(s){
   const v = (s||'').toLowerCase();
-  if(['producción','produccion','finalizada','cerrado','done','closed'].includes(v)) return 'gb-done';
-  if(['blocked','bloqueado','bloqued'].includes(v)) return 'gb-bloq';
-  if(['análisis','analisis','desarrollo','pruebas','en curso','review'].includes(v)) return 'gb-open';
-  return 'gb-pend';
+  if(v==='finalizada') return 'gb-done';
+  if(v==='blocked'||v==='bloqueado'||v==='bloqued') return 'gb-bloq';
+  if(v==='en curso'||v==='review') return 'gb-open';
+  return 'gb-pend'; // incluye 'tareas por hacer' y cualquier otro estado
 }
 function fmtD(iso){
   if(!iso) return null;
