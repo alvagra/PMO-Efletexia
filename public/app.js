@@ -297,6 +297,7 @@ function getFiltered(){
   const c  = document.getElementById('s-cat').value;
   const ap = document.getElementById('s-app').value;
   const sem = document.getElementById('s-sem').value;
+  const df = document.getElementById('s-df').value;
   const a  = document.getElementById('s-area').value;
   const ck = [...document.querySelectorAll('.estados-grid input:checked')].map(x=>x.value);
   return epics.filter(e=>{
@@ -307,6 +308,7 @@ function getFiltered(){
     if(c  && e.categoria!==c) return false;
     if(ap && e.aplicacion!==ap) return false;
     if(sem && getSemaforoCategoria(e)!==sem) return false;
+    if(df && e.docFuncional!==df) return false;
     if(a  && e.area!==a)    return false;
     if(ck.length && !ck.includes(e.status)) return false;
     return true;
@@ -324,7 +326,7 @@ function sortedData(data){
   });
 }
 
-['s-search','s-sponsor','s-pais','s-cat','s-app','s-sem','s-area'].forEach(id=>{
+['s-search','s-sponsor','s-pais','s-cat','s-app','s-sem','s-df','s-area'].forEach(id=>{
   const el=document.getElementById(id);
   if(el) el.addEventListener('input',()=>renderTable(sortedData(getFiltered())));
 });
@@ -333,7 +335,7 @@ document.querySelectorAll('.estados-grid input').forEach(cb=>{
 });
 document.getElementById('btn-limpiar').addEventListener('click',()=>{
   document.getElementById('s-search').value='';
-  ['s-sponsor','s-pais','s-cat','s-app','s-sem','s-area'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  ['s-sponsor','s-pais','s-cat','s-app','s-sem','s-df','s-area'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
   document.querySelectorAll('.estados-grid input').forEach(cb=>cb.checked=false);
   sortCol=null; sortDir=1;
   document.querySelectorAll('#panel-portafolio thead th').forEach(t=>{
