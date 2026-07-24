@@ -2291,7 +2291,7 @@ function renderEntregables() {
   const totalDays = Math.round((ganttEnd - ganttStart) / 86400000);
   const COL_W = 28; // px por día
   const ROW_H = 36;
-  const LABEL_W = 220;
+  const LABEL_W = 320;
   const ganttW = totalDays * COL_W;
 
   // Construir cabeceras: meses y días
@@ -2328,16 +2328,16 @@ function renderEntregables() {
   </colgroup>
   <thead>
     <tr class="ent-hdr-months">
-      <th style="background:var(--bg-base);border-bottom:1px solid var(--border-light);border-right:1px solid var(--border-light);padding:4px 10px;font-size:11px;color:var(--text-muted);text-align:left">Proyecto</th>
-      <th style="padding:0;background:var(--bg-base);border-bottom:1px solid var(--border-light)">
+      <th style="background:var(--bg-base);border-bottom:1px solid var(--border-light);border-right:1px solid var(--border-light);padding:4px 10px;font-size:11px;color:var(--text-muted);text-align:left;position:sticky;top:0;z-index:6;height:24px">Proyecto</th>
+      <th style="padding:0;background:var(--bg-base);border-bottom:1px solid var(--border-light);position:sticky;top:0;z-index:5;height:24px">
         <div style="display:flex">`;
   months.forEach(m => {
     html += `<div style="width:${m.count*COL_W}px;min-width:${m.count*COL_W}px;padding:4px 6px;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;border-right:1px solid var(--border-light);overflow:hidden;white-space:nowrap">${m.label}</div>`;
   });
   html += `</div></th></tr>
     <tr class="ent-hdr-days">
-      <th style="background:var(--bg-base);border-bottom:1px solid var(--border-light);border-right:1px solid var(--border-light)"></th>
-      <th style="padding:0;background:var(--bg-base);border-bottom:1px solid var(--border-light)">
+      <th style="background:var(--bg-base);border-bottom:1px solid var(--border-light);border-right:1px solid var(--border-light);position:sticky;top:24px;z-index:6;height:22px"></th>
+      <th style="padding:0;background:var(--bg-base);border-bottom:1px solid var(--border-light);position:sticky;top:24px;z-index:5;height:22px">
         <div style="display:flex">`;
   days.forEach(d => {
     const bg = d.isHoy ? 'rgba(59,130,246,.25)' : d.isWE ? 'rgba(255,255,255,.03)' : 'transparent';
