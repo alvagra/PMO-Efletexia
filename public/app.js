@@ -2320,33 +2320,30 @@ function renderEntregables() {
     return Math.round((d - ganttStart) / 86400000) * COL_W;
   }
 
+  const totalW = LABEL_W + ganttW;
+
   let html = `<div style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 180px)">
-  <table class="ent-gantt-tbl" style="border-collapse:collapse;table-layout:fixed">
-  <colgroup>
-    <col style="width:${LABEL_W}px;min-width:${LABEL_W}px">
-    <col style="width:${ganttW}px;min-width:${ganttW}px">
-  </colgroup>
-  <thead>
-    <tr class="ent-hdr-months">
-      <th style="background:var(--bg-base);border-bottom:1px solid var(--border-light);border-right:1px solid var(--border-light);padding:4px 10px;font-size:11px;color:var(--text-muted);text-align:left;position:sticky;top:0;z-index:6;height:24px">Proyecto</th>
-      <th style="padding:0;background:var(--bg-base);border-bottom:1px solid var(--border-light);position:sticky;top:0;z-index:5;height:24px">
-        <div style="display:flex">`;
+  <div class="ent-gantt-tbl" style="width:${totalW}px">
+    <div style="position:sticky;top:0;z-index:6;background:var(--bg-base)">
+      <div style="display:flex">
+        <div style="width:${LABEL_W}px;min-width:${LABEL_W}px;background:var(--bg-base);border-bottom:1px solid var(--border-light);border-right:1px solid var(--border-light);padding:4px 10px;font-size:11px;color:var(--text-muted);display:flex;align-items:center;box-sizing:border-box">Proyecto</div>
+        <div style="display:flex;border-bottom:1px solid var(--border-light)">`;
   months.forEach(m => {
-    html += `<div style="width:${m.count*COL_W}px;min-width:${m.count*COL_W}px;padding:4px 6px;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;border-right:1px solid var(--border-light);overflow:hidden;white-space:nowrap">${m.label}</div>`;
+    html += `<div style="width:${m.count*COL_W}px;min-width:${m.count*COL_W}px;padding:4px 6px;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;border-right:1px solid var(--border-light);overflow:hidden;white-space:nowrap;box-sizing:border-box">${m.label}</div>`;
   });
-  html += `</div></th></tr>
-    <tr class="ent-hdr-days">
-      <th style="background:var(--bg-base);border-bottom:1px solid var(--border-light);border-right:1px solid var(--border-light);position:sticky;top:24px;z-index:6;height:22px"></th>
-      <th style="padding:0;background:var(--bg-base);border-bottom:1px solid var(--border-light);position:sticky;top:24px;z-index:5;height:22px">
-        <div style="display:flex">`;
+  html += `</div>
+      </div>
+      <div style="display:flex">
+        <div style="width:${LABEL_W}px;min-width:${LABEL_W}px;background:var(--bg-base);border-bottom:1px solid var(--border-light);border-right:1px solid var(--border-light);box-sizing:border-box"></div>
+        <div style="display:flex;border-bottom:1px solid var(--border-light)">`;
   days.forEach(d => {
     const bg = d.isHoy ? 'rgba(59,130,246,.25)' : d.isWE ? 'rgba(255,255,255,.03)' : 'transparent';
     const col = d.isHoy ? '#60a5fa' : d.isWE ? 'var(--text-dim)' : 'var(--text-muted)';
-    html += `<div style="width:${COL_W}px;min-width:${COL_W}px;text-align:center;font-size:9px;padding:3px 0;background:${bg};color:${col};border-right:1px solid rgba(255,255,255,.04)">${d.day}</div>`;
+    html += `<div style="width:${COL_W}px;min-width:${COL_W}px;text-align:center;font-size:9px;padding:3px 0;background:${bg};color:${col};border-right:1px solid rgba(255,255,255,.04);box-sizing:border-box">${d.day}</div>`;
   });
-  html += `</div></th></tr>
-  </thead>
-  <tbody>`;
+  html += `</div>
+      </div>
+    </div>`;
 
   // Línea de hoy (posición)
   const hoyX = xOf(hoyIso);
@@ -2362,12 +2359,12 @@ function renderEntregables() {
 
     const bg = i%2===0 ? 'transparent' : 'rgba(255,255,255,.015)';
 
-    html += `<tr style="height:${ROW_H}px;background:${bg}">
-      <td style="padding:4px 10px;border-right:1px solid var(--border-light);border-bottom:1px solid rgba(255,255,255,.05);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;max-width:${LABEL_W}px">
+    html += `<div style="display:flex;height:${ROW_H}px;background:${bg}">
+      <div style="width:${LABEL_W}px;min-width:${LABEL_W}px;padding:4px 10px;border-right:1px solid var(--border-light);border-bottom:1px solid rgba(255,255,255,.05);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;box-sizing:border-box">
         <div style="font-size:11px;font-weight:600;color:var(--blue)"><a href="${JIRA_BASE}${e.key}" target="_blank" onclick="event.stopPropagation()" style="color:var(--blue);text-decoration:none">${esc(e.codigo||e.key)}</a></div>
         <div style="font-size:11px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(e.summary)}">${esc(e.summary)}</div>
-      </td>
-      <td style="padding:0;border-bottom:1px solid rgba(255,255,255,.05);position:relative">
+      </div>
+      <div style="width:${ganttW}px;min-width:${ganttW}px;border-bottom:1px solid rgba(255,255,255,.05);position:relative;box-sizing:border-box">
         <!-- grid lines fin de semana -->
         <div style="display:flex;height:100%;position:absolute;inset:0">`;
     days.forEach(d => {
@@ -2382,11 +2379,11 @@ function renderEntregables() {
         </div>
         <!-- línea de hoy -->
         <div style="position:absolute;top:0;bottom:0;left:${hoyX}px;width:2px;background:#3b82f6;opacity:.6;pointer-events:none"></div>
-      </td>
-    </tr>`;
+      </div>
+    </div>`;
   });
 
-  html += `</tbody></table></div>`;
+  html += `</div></div>`;
   wrap.innerHTML = html;
 }
 
