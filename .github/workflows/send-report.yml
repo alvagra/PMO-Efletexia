@@ -165,7 +165,7 @@ jobs:
             }
 
             function buildGantt(days, months, items) {
-              const COL_W = 24;
+              const COL_W = 9;
               if (!items.length) {
                 return '<div style="padding:16px;text-align:center;color:#475569;font-size:12px">Sin entregables esta semana</div>';
               }
@@ -173,7 +173,7 @@ jobs:
               const dayHeader = days.map(d => {
                 const bg = d.isHoy ? 'rgba(59,130,246,.25)' : d.isWE ? 'rgba(255,255,255,.04)' : 'transparent';
                 const col = d.isHoy ? '#60a5fa' : d.isWE ? '#64748b' : '#94a3b8';
-                return `<td style="width:${COL_W}px;text-align:center;font-size:9px;padding:4px 0;background:${bg};color:${col};border-bottom:1px solid #1e2d40">${d.day}</td>`;
+                return `<td style="width:${COL_W}px;text-align:center;font-size:6px;padding:4px 0;background:${bg};color:${col};border-bottom:1px solid #1e2d40">${d.day}</td>`;
               }).join('');
               const bodyRows = items.map((e, i) => {
                 const sem = getSemaforo(e);
@@ -181,7 +181,7 @@ jobs:
                 const cells = days.map(d => {
                   const cellBg = d.isHoy ? 'rgba(59,130,246,.08)' : d.isWE ? 'rgba(255,255,255,.025)' : 'transparent';
                   if (d.iso === e.duedate) {
-                    return `<td style="padding:3px;background:${cellBg};border-bottom:1px solid rgba(255,255,255,.05)"><div style="width:18px;height:18px;border-radius:4px;background:${sem.color};margin:0 auto"></div></td>`;
+                    return `<td style="padding:1px;background:${cellBg};border-bottom:1px solid rgba(255,255,255,.05)"><div style="width:7px;height:7px;border-radius:2px;background:${sem.color};margin:0 auto"></div></td>`;
                   }
                   return `<td style="background:${cellBg};border-bottom:1px solid rgba(255,255,255,.05)"></td>`;
                 }).join('');
