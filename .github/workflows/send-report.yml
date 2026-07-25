@@ -136,8 +136,8 @@ jobs:
                   (grupos[sem.label] = grupos[sem.label] || []).push(e);
                 });
                 const bloques = ORDEN_ESTADOS.filter(o => grupos[o] && grupos[o].length).map(o => {
-                  const col = STATUS_COLORS[o];
-                  const squares = grupos[o].map(() => `<span style="display:inline-block;width:13px;height:13px;border-radius:3px;background:${col};margin-right:2px;vertical-align:middle"></span>`).join('');
+                  const cls = { 'En plazo':'p', 'Producción':'b', 'Replanificado':'r', 'Vencido':'v' }[o] || 'mn';
+                  const squares = grupos[o].map(() => `<span class="sq ${cls}"></span>`).join('');
                   return `<span style="margin-right:14px;white-space:nowrap">${squares}<span style="font-size:11px;color:#64748b;margin-left:3px">${grupos[o].length}</span></span>`;
                 }).join('');
                 return `<tr><td style="padding:4px 12px 4px 0;font-size:11px;color:#64748b;white-space:nowrap;vertical-align:middle">${mesLabel}</td><td style="vertical-align:middle">${bloques}</td></tr>`;
@@ -167,28 +167,28 @@ jobs:
             function buildGantt(days, months, items) {
               const COL_W = 9;
               if (!items.length) {
-                return '<div style="padding:16px;text-align:center;color:#475569;font-size:12px">Sin entregables esta semana</div>';
+                return '<div style="padding:16px;text-align:center;color:#475569;font-size:12px">Sin entregables en este período</div>';
               }
-              const monthHeader = months.map(m => `<td colspan="${m.count}" style="padding:4px 2px;font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;border-bottom:1px solid #1e2d40;text-align:center">${m.label}</td>`).join('');
+              const COLOR_CLASS = { 'En plazo':'p', 'Producción':'b', 'Replanificado':'r', 'Vencido':'v', 'Sin fecha':'mn' };
+              const monthHeader = months.map(m => `<td colspan="${m.count}" class="mh">${m.label}</td>`).join('');
               const dayHeader = days.map(d => {
-                const bg = d.isHoy ? 'rgba(59,130,246,.25)' : d.isWE ? 'rgba(255,255,255,.04)' : 'transparent';
-                const col = d.isHoy ? '#60a5fa' : d.isWE ? '#64748b' : '#94a3b8';
-                return `<td style="width:${COL_W}px;text-align:center;font-size:6px;padding:4px 0;background:${bg};color:${col};border-bottom:1px solid #1e2d40">${d.day}</td>`;
+                const cls = d.isHoy ? 'dh dn' : d.isWE ? 'dh dw' : 'dh';
+                return `<td class="${cls}">${d.day}</td>`;
               }).join('');
               const bodyRows = items.map((e, i) => {
                 const sem = getSemaforo(e);
                 const rowBg = i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,.02)';
-                const cells = days.map(d => {
-                  const cellBg = d.isHoy ? 'rgba(59,130,246,.08)' : d.isWE ? 'rgba(255,255,255,.025)' : 'transparent';
-                  if (d.iso === e.duedate) {
-                    return `<td style="padding:1px;background:${cellBg};border-bottom:1px solid rgba(255,255,255,.05)"><div style="width:7px;height:7px;border-radius:2px;background:${sem.color};margin:0 auto"></div></td>`;
-                  }
-                  return `<td style="background:${cellBg};border-bottom:1px solid rgba(255,255,255,.05)"></td>`;
-                }).join('');
-                return `<tr style="background:${rowBg}"><td style="padding:6px 10px;border-right:1px solid #1e2d40;border-bottom:1px solid rgba(255,255,255,.05);white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis"><div style="font-size:11px;font-weight:600"><a href="https://efletexia.atlassian.net/browse/${e.key}" style="color:#60a5fa;text-decoration:none">${e.codigo||e.key}</a></div><div style="font-size:11px;color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:190px">${e.summary}</div></td>${cells}</tr>`;
+                const idx = days.findIndex(d => d.iso === e.duedate);
+                const before = idx > 0 ? idx : 0;
+                const after = idx >= 0 ? (days.length - idx - 1) : days.length;
+                const spBefore = before > 0 ? `<td class="gc" colspan="${before}"></td>` : '';
+                const spAfter = after > 0 ? `<td class="gc" colspan="${after}"></td>` : '';
+                const marker = idx >= 0 ? `<td class="gc"><div class="mk ${COLOR_CLASS[sem.label]||'mn'}"></div></td>` : '';
+                return `<tr style="background:${rowBg}"><td class="lbl"><div class="lc"><a class="la" href="https://efletexia.atlassian.net/browse/${e.key}">${e.codigo||e.key}</a></div><div class="ls">${e.summary}</div></td>${spBefore}${marker}${spAfter}</tr>`;
               }).join('');
               return `<div style="overflow-x:auto"><table style="border-collapse:collapse"><tr><td style="border-right:1px solid #1e2d40"></td>${monthHeader}</tr><tr><td style="border-right:1px solid #1e2d40"></td>${dayHeader}</tr>${bodyRows}</table></div>`.split('\n').map(l => l.trim()).join('');
             }
+
 
             function buildDaysAndMonths(desde, hasta) {
               const hoy = new Date(); hoy.setHours(0,0,0,0);
@@ -270,7 +270,7 @@ jobs:
               const { days, months } = buildDaysAndMonths(mDesde, mHasta);
               const gantt = buildGantt(days, months, entregablesGantt);
 
-              const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="margin:0;padding:0;background:#0d1117;font-family:-apple-system,BlinkMacSystemFont,sans-serif"><div style="max-width:900px;margin:0 auto;padding:20px 16px"><div style="font-size:13px;color:#cbd5e1;line-height:1.6;margin-bottom:18px">Estimados:<br><br>Se envía el reporte de avance de los proyectos. En el reporte podrán ver los entregables completados y aquellos que se encuentran en proceso.</div><div style="border-bottom:1px solid #1e2d40;margin-bottom:16px;padding-bottom:10px;display:flex;justify-content:space-between"><span style="font-size:11px;color:#475569">PMO Dashboard — Efletexia &#8594; Entregables</span><span style="font-size:11px;color:#475569">Actualizado ${actualizado} &nbsp;·&nbsp; <a href="https://pmo-efletexia.vercel.app" style="color:#3B82F6;text-decoration:none">Ver dashboard &#8594;</a></span></div><table style="width:100%;border-collapse:collapse;margin-bottom:16px"><tr style="vertical-align:top"><td style="width:55%;padding-right:20px"><div style="font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Resumen mensual de entregables</div><table style="border-collapse:collapse">${resumen}</table></td><td style="background:#131c2b;border-radius:8px;padding:16px">${indicadores}</td></tr></table><div style="background:#131c2b;border-radius:8px;overflow:hidden;margin-bottom:12px"><div style="padding:10px 16px;border-bottom:1px solid #1e2d40"><span style="font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:.06em">Entregables</span></div>${gantt}</div><div style="font-size:11px;color:#475569;padding:4px 0"><span style="color:#ef4444">&#9679;</span> Vencido &nbsp;<span style="color:#F5B800">&#9679;</span> Replanificado &nbsp;<span style="color:#4ade80">&#9679;</span> En plazo &nbsp;<span style="color:#3B82F6">&#9679;</span> Producción</div><div style="font-size:13px;color:#cbd5e1;line-height:1.6;margin-top:18px">Atentamente<br><br>Abel Alva</div></div></body></html>`;
+              const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>.mh{padding:4px 2px;font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;border-bottom:1px solid #1e2d40;text-align:center}.dh{width:9px;text-align:center;font-size:6px;padding:4px 0;background:transparent;color:#94a3b8;border-bottom:1px solid #1e2d40}.dw{background:rgba(255,255,255,.04);color:#64748b}.dn{background:rgba(59,130,246,.25);color:#60a5fa}.gc{border-bottom:1px solid rgba(255,255,255,.05);padding:1px;text-align:center}.mk{width:7px;height:7px;border-radius:2px;margin:0 auto}.sq{display:inline-block;width:13px;height:13px;border-radius:3px;margin-right:2px;vertical-align:middle}.p{background:#4ade80}.b{background:#3B82F6}.r{background:#F5B800}.v{background:#ef4444}.mn{background:#6b7280}.lbl{padding:6px 10px;border-right:1px solid #1e2d40;border-bottom:1px solid rgba(255,255,255,.05);white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis}.lc{font-size:11px;font-weight:600}.la{color:#60a5fa;text-decoration:none}.ls{font-size:11px;color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:190px}</style></head><body style="margin:0;padding:0;background:#0d1117;font-family:-apple-system,BlinkMacSystemFont,sans-serif"><div style="max-width:900px;margin:0 auto;padding:20px 16px"><div style="font-size:13px;color:#cbd5e1;line-height:1.6;margin-bottom:18px">Estimados:<br><br>Se envía el reporte de avance de los proyectos. En el reporte podrán ver los entregables completados y aquellos que se encuentran en proceso.</div><div style="border-bottom:1px solid #1e2d40;margin-bottom:16px;padding-bottom:10px;display:flex;justify-content:space-between"><span style="font-size:11px;color:#475569">PMO Dashboard — Efletexia &#8594; Entregables</span><span style="font-size:11px;color:#475569">Actualizado ${actualizado} &nbsp;·&nbsp; <a href="https://pmo-efletexia.vercel.app" style="color:#3B82F6;text-decoration:none">Ver dashboard &#8594;</a></span></div><table style="width:100%;border-collapse:collapse;margin-bottom:16px"><tr style="vertical-align:top"><td style="width:55%;padding-right:20px"><div style="font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Resumen mensual de entregables</div><table style="border-collapse:collapse">${resumen}</table></td><td style="background:#131c2b;border-radius:8px;padding:16px">${indicadores}</td></tr></table><div style="background:#131c2b;border-radius:8px;overflow:hidden;margin-bottom:12px"><div style="padding:10px 16px;border-bottom:1px solid #1e2d40"><span style="font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:.06em">Entregables</span></div>${gantt}</div><div style="font-size:11px;color:#475569;padding:4px 0"><span style="color:#ef4444">&#9679;</span> Vencido &nbsp;<span style="color:#F5B800">&#9679;</span> Replanificado &nbsp;<span style="color:#4ade80">&#9679;</span> En plazo &nbsp;<span style="color:#3B82F6">&#9679;</span> Producción</div><div style="font-size:13px;color:#cbd5e1;line-height:1.6;margin-top:18px">Atentamente<br><br>Abel Alva</div></div></body></html>`;
 
               fs.writeFileSync('report.html', html);
               const mail = await sendEmail(BREVO_KEY, ['abel.alva@dtgrupo.com', 'marcos.fidel@efletexia.com', 'andres.medina@efletexia.com', 'roxana.peralta@dtgrupo.com'], `📊 Reporte PMO — ${actualizado}`, html);
