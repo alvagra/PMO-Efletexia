@@ -962,7 +962,7 @@ function renderRecursos(){
         } else {
           r.proyectosMes.forEach((p,i)=>{
             const color = ROW_COLORS[i % ROW_COLORS.length];
-            matrizHtml += `<tr><td class="rec-matrix-projcol" title="${esc(p.nombre)}">${esc(p.nombre)}</td>`;
+            matrizHtml += `<tr><td class="rec-matrix-projcol" title="${esc(p.key)} · ${esc(p.nombre)}">${esc(p.key)} · ${esc(p.nombre)}</td>`;
             diasDelMesActual.forEach(iso=>{
               const dow=new Date(iso+'T12:00:00').getDay(); const isWE=dow===0||dow===6;
               const asignado = p.dias.includes(iso);
