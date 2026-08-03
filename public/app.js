@@ -953,8 +953,7 @@ function renderRecursos(){
           const dt = new Date(iso+'T12:00:00');
           const dow = dt.getDay();
           const isWE = dow===0||dow===6;
-          const isFer = !isWE && feriadosPais.has(iso);
-          matrizHtml += `<th class="${isWE?'rec-matrix-we':isFer?'rec-matrix-holiday':''}">${dt.getDate()}</th>`;
+          matrizHtml += `<th class="${isWE?'rec-matrix-we':''}">${dt.getDate()}</th>`;
         });
         matrizHtml += `</tr></thead><tbody>`;
 
