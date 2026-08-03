@@ -839,6 +839,7 @@ function recomputeRecursos(){
     const epica=f._epicaParent||null;
     const epicaKey=epica?epica.key:null;
     const epicaNom=epica?(epica.summary||epica.key):'Sin épica';
+    const epicaCodigo=epica?.codigo||epicaKey;
     const area=f.customfield_10930?f.customfield_10930.value:null;
     const pais=f.customfield_10592?f.customfield_10592.value:null;
     const bloq=f.customfield_11003?f.customfield_11003.value:null;
@@ -853,7 +854,7 @@ function recomputeRecursos(){
     if(area&&!p.area) p.area=area;
     if(pais&&!p.pais) p.pais=pais;
     if(epicaKey){
-      if(!p.epicasMap[epicaKey]) p.epicasMap[epicaKey]={key:epicaKey,nombre:epicaNom,horasEst:0,horasPend:0,actividades:0,pendientes:0,tareas:[]};
+      if(!p.epicasMap[epicaKey]) p.epicasMap[epicaKey]={key:epicaKey,nombre:epicaNom,codigo:epicaCodigo,horasEst:0,horasPend:0,actividades:0,pendientes:0,tareas:[]};
       p.epicasMap[epicaKey].horasEst+=horasEst; p.epicasMap[epicaKey].horasPend+=horasPend;
       p.epicasMap[epicaKey].actividades++;
       if(!isDone) p.epicasMap[epicaKey].pendientes++;
@@ -893,7 +894,7 @@ function recomputeRecursos(){
           diasAsignados.add(t.fecha);
         }
       });
-      return { key:e.key, nombre:e.nombre, horas:+horasMes.toFixed(1), dias:[...diasAsignados] };
+      return { key:e.key, nombre:e.nombre, codigo:e.codigo||e.key, horas:+horasMes.toFixed(1), dias:[...diasAsignados] };
     }).filter(pr => pr.horas > 0).sort((a,b)=>b.horas-a.horas);
 
     return {
@@ -962,7 +963,7 @@ function renderRecursos(){
         } else {
           r.proyectosMes.forEach((p,i)=>{
             const color = ROW_COLORS[i % ROW_COLORS.length];
-            matrizHtml += `<tr><td class="rec-matrix-projcol" title="${esc(p.key)} · ${esc(p.nombre)}">${esc(p.key)} · ${esc(p.nombre)}</td>`;
+            matrizHtml += `<tr><td class="rec-matrix-projcol" title="${esc(p.codigo)} · ${esc(p.nombre)}">${esc(p.codigo)} · ${esc(p.nombre)}</td>`;
             diasDelMesActual.forEach(iso=>{
               const dow=new Date(iso+'T12:00:00').getDay(); const isWE=dow===0||dow===6;
               const asignado = p.dias.includes(iso);
