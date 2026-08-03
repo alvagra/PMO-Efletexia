@@ -944,6 +944,7 @@ function renderRecursos(){
         const enVacRec = estaDeVacaciones(r.nombre, hoyIso);
         const vacBadgeRec = enVacRec ? ' <span style="background:rgba(99,102,241,.2);color:#818cf8;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;margin-left:4px">V</span>' : '';
         const disponibleColor = r.horasDisponibles<=0 ? 'var(--red)' : r.horasDisponibles<r.horasPlanificadas*0.2 ? 'var(--yellow)' : 'var(--green)';
+        const feriadosPais = FERIADOS[r.pais] || new Set();
 
         // Cabecera de días
         let matrizHtml = `<div class="rec-matrix-scroll"><table class="rec-matrix-tbl">
@@ -952,14 +953,18 @@ function renderRecursos(){
           const dt = new Date(iso+'T12:00:00');
           const dow = dt.getDay();
           const isWE = dow===0||dow===6;
-          matrizHtml += `<th class="${isWE?'rec-matrix-we':''}">${dt.getDate()}</th>`;
+          const isFer = !isWE && feriadosPais.has(iso);
+          matrizHtml += `<th class="${isWE?'rec-matrix-we':isFer?'rec-matrix-holiday':''}">${dt.getDate()}</th>`;
         });
         matrizHtml += `</tr></thead><tbody>`;
 
         if(!r.proyectosMes.length){
           matrizHtml += `<tr><td class="rec-matrix-projcol">Sin proyectos este mes</td>${diasDelMesActual.map(iso=>{
             const dow=new Date(iso+'T12:00:00').getDay(); const isWE=dow===0||dow===6;
-            return `<td class="${isWE?'rec-matrix-we':''}"></td>`;
+            const isFer = !isWE && feriadosPais.has(iso);
+            if(isWE) return `<td class="rec-matrix-we"></td>`;
+            if(isFer) return `<td><div class="rec-matrix-cell rec-matrix-holiday">F</div></td>`;
+            return `<td></td>`;
           }).join('')}</tr>`;
         } else {
           r.proyectosMes.forEach((p,i)=>{
@@ -967,10 +972,13 @@ function renderRecursos(){
             matrizHtml += `<tr><td class="rec-matrix-projcol" title="${esc(p.codigo)} · ${esc(p.nombre)}">${esc(p.codigo)} · ${esc(p.nombre)}</td>`;
             diasDelMesActual.forEach(iso=>{
               const dow=new Date(iso+'T12:00:00').getDay(); const isWE=dow===0||dow===6;
+              const isFer = !isWE && feriadosPais.has(iso);
               const asignado = p.dias.includes(iso);
               const esVac = asignado && estaDeVacaciones(r.nombre, iso);
               if(isWE){
                 matrizHtml += `<td class="rec-matrix-we"></td>`;
+              } else if(isFer){
+                matrizHtml += `<td><div class="rec-matrix-cell rec-matrix-holiday">F</div></td>`;
               } else if(esVac){
                 matrizHtml += `<td><div class="rec-matrix-cell rec-matrix-leave">L</div></td>`;
               } else if(asignado){
