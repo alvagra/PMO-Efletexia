@@ -943,7 +943,6 @@ function renderRecursos(){
       cardsWrap.innerHTML = filtered.map(r=>{
         const enVacRec = estaDeVacaciones(r.nombre, hoyIso);
         const vacBadgeRec = enVacRec ? ' <span style="background:rgba(99,102,241,.2);color:#818cf8;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;margin-left:4px">V</span>' : '';
-        const disponibleColor = r.horasDisponibles<=0 ? 'var(--red)' : r.horasDisponibles<r.horasPlanificadas*0.2 ? 'var(--yellow)' : 'var(--green)';
         const feriadosPais = FERIADOS[r.pais] || new Set();
 
         // Cabecera de días
@@ -996,10 +995,6 @@ function renderRecursos(){
         return `<div class="rec-card">
           <div class="rec-card-header">
             <span class="rec-card-name">${esc(r.nombre)}</span>${vacBadgeRec}
-          </div>
-          <div class="rec-card-stats">
-            <div class="rec-card-stat"><span class="rec-card-stat-lbl">Horas planificadas del mes</span><span class="rec-card-stat-val">${r.horasPlanificadas}h</span></div>
-            <div class="rec-card-stat"><span class="rec-card-stat-lbl">Horas disponibles</span><span class="rec-card-stat-val" style="color:${disponibleColor}">${r.horasDisponibles}h</span></div>
           </div>
           ${matrizHtml}
           <button class="rec-ver-btn rec-card-ver-btn" onclick="verRecurso('${esc(r.nombre)}')">Ver →</button>
