@@ -750,9 +750,11 @@ document.getElementById('modal-overlay').addEventListener('click',function(ev){ 
 (function initRecursos(){
   const today=new Date().toISOString().split('T')[0];
   const fi=document.getElementById('rec-fecha-corte');
-  if(fi){ fi.value=today; fi.addEventListener('change',()=>{ if(recursos.length>0) renderRecursos(); }); }
+  if(fi){ fi.value=today; fi.addEventListener('change',()=>{ if(recursos.length>0) recomputeRecursos(); }); }
   document.getElementById('rec-search').addEventListener('input', renderRecursos);
 })();
+
+let recHistoriasCache = [];
 
 async function loadRecursos(){
   recursosLoaded=true;
@@ -762,104 +764,12 @@ async function loadRecursos(){
     const respRec=await fetch('/api/jira',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'recursos'})});
     if(!respRec.ok) throw new Error('Error recursos '+respRec.status);
     const dataRec=await respRec.json();
-    const historias=dataRec.issues||[];
-
-    const CAPACITY=168;
-    const today=new Date(); today.setHours(0,0,0,0);
-    const fechaCorteEl=document.getElementById('rec-fecha-corte');
-    const fechaCorte=fechaCorteEl&&fechaCorteEl.value?new Date(fechaCorteEl.value+'T12:00:00'):today;
-    const mesActual=fechaCorte.getMonth();
-    const anioActual=fechaCorte.getFullYear();
-    const diasMes=new Date(anioActual,mesActual+1,0).getDate();
-    const diaCorte=fechaCorte.getDate();
-    const horasTranscurridas=Math.round((diaCorte/diasMes)*CAPACITY);
-    const horasFuturas=CAPACITY-horasTranscurridas;
-    const mesNombre=fechaCorte.toLocaleDateString('es-PE',{month:'long',year:'numeric'});
-    const avanceMes=Math.round((diaCorte/diasMes)*100);
-    const infoBar=document.getElementById('rec-corte-info');
-    if(infoBar) infoBar.innerHTML=`<span style="color:var(--text-muted);font-size:12px">
-      ${mesNombre} &nbsp;|&nbsp; Capacidad: <span style="color:var(--blue)">${CAPACITY}h</span>
-      &nbsp;|&nbsp; Transcurridas: <span style="color:var(--text-muted)">${horasTranscurridas}h</span>
-      &nbsp;|&nbsp; Futuras: <span style="color:var(--yellow)">${horasFuturas}h</span>
-      &nbsp;|&nbsp; Avance mes: <span style="color:var(--green)">${avanceMes}%</span></span>`;
-
-    const byPerson={};
-    historias.forEach(h=>{
-      const f=h.fields;
-      const nombre=f.assignee?f.assignee.displayName:'Sin asignar';
-      const horasEst=f.customfield_11136||0;
-      const horasPend=f.customfield_11137||0;
-      const horasCerr=Math.max(0,horasEst-horasPend);
-      const epica=f._epicaParent||null;
-      const epicaKey=epica?epica.key:null;
-      const epicaNom=epica?(epica.summary||epica.key):'Sin épica';
-      const area=f.customfield_10930?f.customfield_10930.value:null;
-      const pais=f.customfield_10592?f.customfield_10592.value:null;
-      const bloq=f.customfield_11003?f.customfield_11003.value:null;
-      const status=f.status?f.status.name:'';
-      const isDone=['Finalizada','Producción','En producción','Cerrado','Done','Closed'].includes(status);
-      if(!byPerson[nombre]) byPerson[nombre]={nombre,area,pais,horasEst:0,horasPend:0,horasCerr:0,totalHistorias:0,entregasPend:0,bloqueantes:0,epicasMap:{}};
-      const p=byPerson[nombre];
-      p.horasEst+=horasEst; p.horasPend+=horasPend; p.horasCerr+=horasCerr;
-      p.totalHistorias++;
-      if(!isDone) p.entregasPend++;
-      if(bloq==='Si') p.bloqueantes++;
-      if(area&&!p.area) p.area=area;
-      if(pais&&!p.pais) p.pais=pais;
-      if(epicaKey){
-        if(!p.epicasMap[epicaKey]) p.epicasMap[epicaKey]={key:epicaKey,nombre:epicaNom,horasEst:0,horasPend:0,actividades:0,pendientes:0,tareas:[]};
-        p.epicasMap[epicaKey].horasEst+=horasEst; p.epicasMap[epicaKey].horasPend+=horasPend;
-        p.epicasMap[epicaKey].actividades++;
-        if(!isDone) p.epicasMap[epicaKey].pendientes++;
-        p.epicasMap[epicaKey].tareas.push({key:h.key,nombre:f.summary||h.key,status,isDone,horasEst,horasPend,fechaInicio:f.customfield_10015||null,fechaFin:f.duedate||null,fecha:f.customfield_10015||f.duedate||null,updated:f.updated||null});
-      }
-    });
+    recHistoriasCache=dataRec.issues||[];
 
     // Asegurar que capRows (horas registradas, misma fuente que Capacity) esté cargado — sin duplicar el fetch si ya se cargó
     if(!capacityLoaded) await loadCapacity();
 
-    recursos = Object.values(byPerson).map(p => {
-      const nom = findNomenclaturaByNombre(p.nombre);
-      const pais = nom?.pais || p.pais;
-      const area = nom?.area || p.area;
-
-      // Horas Planificadas del mes = días laborables (sin fines de semana, feriados del país ni vacaciones) × 8h
-      const diasLab = diasLaborablesDelMes(anioActual, mesActual, pais, p.nombre);
-      const horasPlanificadas = diasLab.length * 8;
-
-      // Horas Registradas del mes = misma fuente que Capacity (capRows), sin recalcular
-      const ymPrefix = `${anioActual}-${String(mesActual+1).padStart(2,'0')}`;
-      const horasRegistradas = capRows
-        .filter(r => (findNomenclaturaByNombre(r.persona)?.nombre || r.persona) === p.nombre && r.fecha && r.fecha.startsWith(ymPrefix))
-        .reduce((s,r) => s + r.horas, 0);
-      const horasDisponibles = Math.max(0, horasPlanificadas - horasRegistradas);
-
-      // Proyectos del mes: distribuir horas estimadas de cada subtarea entre su fecha inicio y fin, contando solo el mes filtrado
-      const proyectosMes = Object.values(p.epicasMap).map(e => {
-        let horasMes = 0;
-        (e.tareas||[]).forEach(t => {
-          if(t.fechaInicio && t.fechaFin){
-            horasMes += distribuirHoras(t.horasEst, t.fechaInicio, t.fechaFin, pais)
-              .filter(d => d.fecha.startsWith(ymPrefix))
-              .reduce((s,d) => s + d.horas, 0);
-          } else if(t.fecha && t.fecha.startsWith(ymPrefix)) {
-            // Fallback si falta alguna fecha: contar la hora estimada completa si su única fecha cae en el mes
-            horasMes += t.horasEst;
-          }
-        });
-        return { key:e.key, nombre:e.nombre, horas:+horasMes.toFixed(1) };
-      }).filter(pr => pr.horas > 0).sort((a,b)=>b.horas-a.horas);
-
-      return {
-        nombre:p.nombre, area, pais,
-        proyectos:Object.keys(p.epicasMap).length,
-        horasPend:p.horasPend, horasTotal:p.horasEst, horasCerr:p.horasCerr,
-        horasLibre:Math.max(0,CAPACITY-p.horasEst),
-        entregasPend:p.entregasPend, bloqueantes:p.bloqueantes,
-        proyectosDetalle:Object.values(p.epicasMap).map(e=>({key:e.key,nombre:e.nombre,horasTotal:e.horasEst,horasPend:e.horasPend,actividades:e.actividades,pendientes:e.pendientes,tareas:e.tareas||[]})).sort((a,b)=>b.horasTotal-a.horasTotal),
-        horasPlanificadas, horasRegistradas:+horasRegistradas.toFixed(1), horasDisponibles:+horasDisponibles.toFixed(1), proyectosMes,
-      };
-    }).filter(r=>r.nombre!=='Sin asignar').sort((a,b)=>b.horasPend-a.horasPend);
+    recomputeRecursos();
 
     // Populate área pills
     const areas=[...new Set(recursos.map(r=>r.area).filter(Boolean))].sort();
@@ -887,12 +797,117 @@ async function loadRecursos(){
       renderRecursos();
     });
     document.getElementById('rec-pais-sel').addEventListener('change', renderRecursos);
-
-    renderRecursos();
   }catch(err){
     console.error('Error recursos:', err);
     if(info) info.textContent='Error al cargar recursos: '+err.message;
   }
+}
+
+// Días del mes seleccionado (para las columnas de la matriz Bloque 1 y para recalcular al cambiar la fecha de corte)
+let recAnioActual = TODAY.getFullYear();
+let recMesActual  = TODAY.getMonth();
+
+function recomputeRecursos(){
+  const historias = recHistoriasCache;
+  const CAPACITY=168;
+  const today=new Date(); today.setHours(0,0,0,0);
+  const fechaCorteEl=document.getElementById('rec-fecha-corte');
+  const fechaCorte=fechaCorteEl&&fechaCorteEl.value?new Date(fechaCorteEl.value+'T12:00:00'):today;
+  const mesActual=fechaCorte.getMonth();
+  const anioActual=fechaCorte.getFullYear();
+  recMesActual=mesActual; recAnioActual=anioActual;
+  const diasMes=new Date(anioActual,mesActual+1,0).getDate();
+  const diaCorte=fechaCorte.getDate();
+  const horasTranscurridas=Math.round((diaCorte/diasMes)*CAPACITY);
+  const horasFuturas=CAPACITY-horasTranscurridas;
+  const mesNombre=fechaCorte.toLocaleDateString('es-PE',{month:'long',year:'numeric'});
+  const avanceMes=Math.round((diaCorte/diasMes)*100);
+  const infoBar=document.getElementById('rec-corte-info');
+  if(infoBar) infoBar.innerHTML=`<span style="color:var(--text-muted);font-size:12px">
+    ${mesNombre} &nbsp;|&nbsp; Capacidad: <span style="color:var(--blue)">${CAPACITY}h</span>
+    &nbsp;|&nbsp; Transcurridas: <span style="color:var(--text-muted)">${horasTranscurridas}h</span>
+    &nbsp;|&nbsp; Futuras: <span style="color:var(--yellow)">${horasFuturas}h</span>
+    &nbsp;|&nbsp; Avance mes: <span style="color:var(--green)">${avanceMes}%</span></span>`;
+
+  const byPerson={};
+  historias.forEach(h=>{
+    const f=h.fields;
+    const nombre=f.assignee?f.assignee.displayName:'Sin asignar';
+    const horasEst=f.customfield_11136||0;
+    const horasPend=f.customfield_11137||0;
+    const horasCerr=Math.max(0,horasEst-horasPend);
+    const epica=f._epicaParent||null;
+    const epicaKey=epica?epica.key:null;
+    const epicaNom=epica?(epica.summary||epica.key):'Sin épica';
+    const area=f.customfield_10930?f.customfield_10930.value:null;
+    const pais=f.customfield_10592?f.customfield_10592.value:null;
+    const bloq=f.customfield_11003?f.customfield_11003.value:null;
+    const status=f.status?f.status.name:'';
+    const isDone=['Finalizada','Producción','En producción','Cerrado','Done','Closed'].includes(status);
+    if(!byPerson[nombre]) byPerson[nombre]={nombre,area,pais,horasEst:0,horasPend:0,horasCerr:0,totalHistorias:0,entregasPend:0,bloqueantes:0,epicasMap:{}};
+    const p=byPerson[nombre];
+    p.horasEst+=horasEst; p.horasPend+=horasPend; p.horasCerr+=horasCerr;
+    p.totalHistorias++;
+    if(!isDone) p.entregasPend++;
+    if(bloq==='Si') p.bloqueantes++;
+    if(area&&!p.area) p.area=area;
+    if(pais&&!p.pais) p.pais=pais;
+    if(epicaKey){
+      if(!p.epicasMap[epicaKey]) p.epicasMap[epicaKey]={key:epicaKey,nombre:epicaNom,horasEst:0,horasPend:0,actividades:0,pendientes:0,tareas:[]};
+      p.epicasMap[epicaKey].horasEst+=horasEst; p.epicasMap[epicaKey].horasPend+=horasPend;
+      p.epicasMap[epicaKey].actividades++;
+      if(!isDone) p.epicasMap[epicaKey].pendientes++;
+      p.epicasMap[epicaKey].tareas.push({key:h.key,nombre:f.summary||h.key,status,isDone,horasEst,horasPend,fechaInicio:f.customfield_10015||null,fechaFin:f.duedate||null,fecha:f.customfield_10015||f.duedate||null,updated:f.updated||null});
+    }
+  });
+
+  recursos = Object.values(byPerson).map(p => {
+    const nom = findNomenclaturaByNombre(p.nombre);
+    const pais = nom?.pais || p.pais;
+    const area = nom?.area || p.area;
+
+    // Horas Planificadas del mes = días laborables (sin fines de semana, feriados del país ni vacaciones) × 8h
+    const diasLab = diasLaborablesDelMes(anioActual, mesActual, pais, p.nombre);
+    const horasPlanificadas = diasLab.length * 8;
+
+    // Horas Registradas del mes = misma fuente que Capacity (capRows), sin recalcular
+    const ymPrefix = `${anioActual}-${String(mesActual+1).padStart(2,'0')}`;
+    const horasRegistradas = capRows
+      .filter(r => (findNomenclaturaByNombre(r.persona)?.nombre || r.persona) === p.nombre && r.fecha && r.fecha.startsWith(ymPrefix))
+      .reduce((s,r) => s + r.horas, 0);
+    const horasDisponibles = Math.max(0, horasPlanificadas - horasRegistradas);
+
+    // Proyectos del mes: distribuir horas estimadas de cada subtarea entre su fecha inicio y fin, contando solo el mes filtrado.
+    // También se guarda el set de días asignados a cada proyecto, para la matriz día a día del Bloque 1.
+    const proyectosMes = Object.values(p.epicasMap).map(e => {
+      let horasMes = 0;
+      const diasAsignados = new Set();
+      (e.tareas||[]).forEach(t => {
+        if(t.fechaInicio && t.fechaFin){
+          distribuirHoras(t.horasEst, t.fechaInicio, t.fechaFin, pais)
+            .filter(d => d.fecha.startsWith(ymPrefix))
+            .forEach(d => { horasMes += d.horas; diasAsignados.add(d.fecha); });
+        } else if(t.fecha && t.fecha.startsWith(ymPrefix)) {
+          // Fallback si falta alguna fecha: contar la hora estimada completa si su única fecha cae en el mes
+          horasMes += t.horasEst;
+          diasAsignados.add(t.fecha);
+        }
+      });
+      return { key:e.key, nombre:e.nombre, horas:+horasMes.toFixed(1), dias:[...diasAsignados] };
+    }).filter(pr => pr.horas > 0).sort((a,b)=>b.horas-a.horas);
+
+    return {
+      nombre:p.nombre, area, pais,
+      proyectos:Object.keys(p.epicasMap).length,
+      horasPend:p.horasPend, horasTotal:p.horasEst, horasCerr:p.horasCerr,
+      horasLibre:Math.max(0,CAPACITY-p.horasEst),
+      entregasPend:p.entregasPend, bloqueantes:p.bloqueantes,
+      proyectosDetalle:Object.values(p.epicasMap).map(e=>({key:e.key,nombre:e.nombre,horasTotal:e.horasEst,horasPend:e.horasPend,actividades:e.actividades,pendientes:e.pendientes,tareas:e.tareas||[]})).sort((a,b)=>b.horasTotal-a.horasTotal),
+      horasPlanificadas, horasRegistradas:+horasRegistradas.toFixed(1), horasDisponibles:+horasDisponibles.toFixed(1), proyectosMes,
+    };
+  }).filter(r=>r.nombre!=='Sin asignar').sort((a,b)=>b.horasPend-a.horasPend);
+
+  renderRecursos();
 }
 
 function renderRecursos(){
@@ -914,7 +929,9 @@ function renderRecursos(){
   const info=document.getElementById('rec-table-info');
   if(info) info.textContent=`Mostrando ${filtered.length} de ${recursos.length} recursos`;
 
-  // ── Bloque 1: tarjetas por recurso ──────────────────────
+  // ── Bloque 1: tarjetas por recurso con matriz día a día ─
+  const ROW_COLORS = ['#4d7c3f','#2891c9','#d97a24','#1e3a5f','#8b3fa8','#b5442e'];
+  const diasDelMesActual = getDiasDelMes(recAnioActual, recMesActual);
   const cardsWrap=document.getElementById('rec-cards-wrap');
   if(cardsWrap){
     if(!filtered.length){
@@ -925,9 +942,46 @@ function renderRecursos(){
         const enVacRec = estaDeVacaciones(r.nombre, hoyIso);
         const vacBadgeRec = enVacRec ? ' <span style="background:rgba(99,102,241,.2);color:#818cf8;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;margin-left:4px">V</span>' : '';
         const disponibleColor = r.horasDisponibles<=0 ? 'var(--red)' : r.horasDisponibles<r.horasPlanificadas*0.2 ? 'var(--yellow)' : 'var(--green)';
-        const proyectosHtml = r.proyectosMes.length
-          ? r.proyectosMes.map(p=>`<div class="rec-card-proj-row"><span class="rec-card-proj-name" title="${esc(p.nombre)}">${esc(p.nombre)}</span><span class="rec-card-proj-hrs">${p.horas}h</span></div>`).join('')
-          : '<div class="rec-card-proj-empty">Sin proyectos este mes</div>';
+
+        // Cabecera de días
+        let matrizHtml = `<div class="rec-matrix-scroll"><table class="rec-matrix-tbl">
+          <thead><tr><th class="rec-matrix-projcol">Proyecto</th>`;
+        diasDelMesActual.forEach(iso=>{
+          const dt = new Date(iso+'T12:00:00');
+          const dow = dt.getDay();
+          const isWE = dow===0||dow===6;
+          matrizHtml += `<th class="${isWE?'rec-matrix-we':''}">${dt.getDate()}</th>`;
+        });
+        matrizHtml += `</tr></thead><tbody>`;
+
+        if(!r.proyectosMes.length){
+          matrizHtml += `<tr><td class="rec-matrix-projcol">Sin proyectos este mes</td>${diasDelMesActual.map(iso=>{
+            const dow=new Date(iso+'T12:00:00').getDay(); const isWE=dow===0||dow===6;
+            return `<td class="${isWE?'rec-matrix-we':''}"></td>`;
+          }).join('')}</tr>`;
+        } else {
+          r.proyectosMes.forEach((p,i)=>{
+            const color = ROW_COLORS[i % ROW_COLORS.length];
+            matrizHtml += `<tr><td class="rec-matrix-projcol" title="${esc(p.nombre)}">${esc(p.nombre)}</td>`;
+            diasDelMesActual.forEach(iso=>{
+              const dow=new Date(iso+'T12:00:00').getDay(); const isWE=dow===0||dow===6;
+              const asignado = p.dias.includes(iso);
+              const esVac = asignado && estaDeVacaciones(r.nombre, iso);
+              if(isWE){
+                matrizHtml += `<td class="rec-matrix-we"></td>`;
+              } else if(esVac){
+                matrizHtml += `<td><div class="rec-matrix-cell rec-matrix-leave">L</div></td>`;
+              } else if(asignado){
+                matrizHtml += `<td><div class="rec-matrix-cell" style="background:${color}">X</div></td>`;
+              } else {
+                matrizHtml += `<td></td>`;
+              }
+            });
+            matrizHtml += `</tr>`;
+          });
+        }
+        matrizHtml += `</tbody></table></div>`;
+
         return `<div class="rec-card">
           <div class="rec-card-header">
             <span class="rec-card-name">${esc(r.nombre)}</span>${vacBadgeRec}
@@ -936,7 +990,7 @@ function renderRecursos(){
             <div class="rec-card-stat"><span class="rec-card-stat-lbl">Horas planificadas del mes</span><span class="rec-card-stat-val">${r.horasPlanificadas}h</span></div>
             <div class="rec-card-stat"><span class="rec-card-stat-lbl">Horas disponibles</span><span class="rec-card-stat-val" style="color:${disponibleColor}">${r.horasDisponibles}h</span></div>
           </div>
-          <div class="rec-card-projects">${proyectosHtml}</div>
+          ${matrizHtml}
           <button class="rec-ver-btn rec-card-ver-btn" onclick="verRecurso('${esc(r.nombre)}')">Ver →</button>
         </div>`;
       }).join('');
