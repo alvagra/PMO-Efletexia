@@ -968,7 +968,7 @@ function renderRecursos(){
         } else {
           r.proyectosMes.forEach((p,i)=>{
             const color = ROW_COLOR;
-            matrizHtml += `<tr><td class="rec-matrix-projcol" title="${esc(p.codigo)} · ${esc(p.nombre)}"><a href="${JIRA_BASE}${esc(p.key)}" target="_blank" style="color:inherit;text-decoration:none" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${esc(p.codigo)} · ${esc(p.nombre)}</a></td>`;
+            matrizHtml += `<tr><td class="rec-matrix-projcol" title="${esc(p.codigo)} · ${esc(p.nombre)}"><a href="${JIRA_BASE}${esc(p.key)}" target="_blank" style="color:var(--blue);text-decoration:none">${esc(p.codigo)}</a> · ${esc(p.nombre)}</td>`;
             diasDelMesActual.forEach(iso=>{
               const dow=new Date(iso+'T12:00:00').getDay(); const isWE=dow===0||dow===6;
               const isFer = !isWE && feriadosPais.has(iso);
