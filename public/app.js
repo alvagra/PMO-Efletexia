@@ -882,19 +882,19 @@ function recomputeRecursos(){
     // También se guarda el set de días asignados a cada proyecto, para la matriz día a día del Bloque 1.
     const proyectosMes = Object.values(p.epicasMap).map(e => {
       let horasMes = 0;
-      const diasAsignados = new Set();
+      const diasHoras = {}; // fecha -> horas estimadas ese día (campo "Horas estimadas" de Jira, distribuido/prorrateado)
       (e.tareas||[]).forEach(t => {
         if(t.fechaInicio && t.fechaFin){
           distribuirHoras(t.horasEst, t.fechaInicio, t.fechaFin, pais)
             .filter(d => d.fecha.startsWith(ymPrefix))
-            .forEach(d => { horasMes += d.horas; diasAsignados.add(d.fecha); });
+            .forEach(d => { horasMes += d.horas; diasHoras[d.fecha] = (diasHoras[d.fecha]||0) + d.horas; });
         } else if(t.fecha && t.fecha.startsWith(ymPrefix)) {
           // Fallback si falta alguna fecha: contar la hora estimada completa si su única fecha cae en el mes
           horasMes += t.horasEst;
-          diasAsignados.add(t.fecha);
+          diasHoras[t.fecha] = (diasHoras[t.fecha]||0) + t.horasEst;
         }
       });
-      return { key:e.key, nombre:e.nombre, codigo:e.codigo||e.key, horas:+horasMes.toFixed(1), dias:[...diasAsignados] };
+      return { key:e.key, nombre:e.nombre, codigo:e.codigo||e.key, horas:+horasMes.toFixed(1), diasHoras, dias:Object.keys(diasHoras) };
     }).filter(pr => pr.horas > 0).sort((a,b)=>b.horas-a.horas);
 
     return {
@@ -973,7 +973,9 @@ function renderRecursos(){
               } else if(esVac){
                 matrizHtml += `<td><div class="rec-matrix-cell rec-matrix-leave">L</div></td>`;
               } else if(asignado){
-                matrizHtml += `<td><div class="rec-matrix-cell" style="background:${color}">X</div></td>`;
+                const hVal = p.diasHoras[iso];
+                const hLabel = hVal % 1 === 0 ? hVal : hVal.toFixed(1);
+                matrizHtml += `<td><div class="rec-matrix-cell" style="background:${color}">${hLabel}</div></td>`;
               } else {
                 matrizHtml += `<td></td>`;
               }
