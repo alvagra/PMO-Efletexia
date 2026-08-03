@@ -216,6 +216,27 @@ a.jlink:hover{text-decoration:underline}
 .rec-corte-label{font-size:10px;color:var(--blue);text-transform:uppercase;letter-spacing:.5px;font-weight:600;display:flex;align-items:center;gap:6px}
 .rec-date-input{background:var(--bg-elevated);border:1px solid var(--blue);border-radius:5px;padding:4px 10px;font-size:12px;color:var(--blue);font-family:var(--font);outline:none;cursor:pointer;height:30px}
 .rec-table-wrap{overflow-x:auto}
+.rec-cards-wrap{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;padding:16px 20px}
+.rec-card{background:var(--bg-elevated);border:1px solid var(--border-light);border-radius:8px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.rec-card-header{font-size:14px;font-weight:600;color:var(--text-primary)}
+.rec-card-name{color:var(--text-primary)}
+.rec-card-stats{display:flex;flex-direction:column;gap:4px;padding:8px 0;border-top:1px solid var(--border-light);border-bottom:1px solid var(--border-light)}
+.rec-card-stat{display:flex;justify-content:space-between;align-items:center;font-size:12px}
+.rec-card-stat-lbl{color:var(--text-muted)}
+.rec-card-stat-val{font-weight:700;font-size:13px}
+.rec-card-projects{display:flex;flex-direction:column;gap:4px;max-height:140px;overflow-y:auto}
+.rec-card-proj-row{display:flex;justify-content:space-between;gap:8px;font-size:12px}
+.rec-card-proj-name{color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rec-card-proj-hrs{color:var(--text-muted);flex-shrink:0}
+.rec-card-proj-empty{font-size:12px;color:var(--text-dim)}
+.rec-card-ver-btn{align-self:flex-end}
+.rec-chart-wrap{padding:16px 20px}
+.rec-chart-title{font-size:12px;color:var(--text-muted);margin-bottom:10px}
+.rec-chart-row{display:flex;align-items:center;gap:10px;padding:5px 0}
+.rec-chart-label{width:150px;font-size:12px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0}
+.rec-chart-track{flex:1;height:14px;background:var(--bg-hover);border-radius:4px;overflow:hidden}
+.rec-chart-fill{height:100%;background:var(--blue);border-radius:4px}
+.rec-chart-val{width:60px;font-size:12px;color:var(--text-muted);text-align:right;flex-shrink:0}
 .rec-table{width:100%;border-collapse:collapse;font-size:12px}
 .rec-table thead tr{background:var(--bg-surface);border-bottom:2px solid var(--border);position:sticky;top:0;z-index:10}
 .rec-table thead th{padding:9px 12px;text-align:left;color:var(--text-muted);font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;border-right:1px solid var(--border-light);cursor:pointer;user-select:none}
@@ -578,11 +599,6 @@ a.jlink:hover{text-decoration:underline}
 <div class="tab-panel" id="panel-recursos">
   <div class="rec-kpis" id="rec-kpis">
     <div class="kpi"><div class="kpi-label">Recursos</div><div class="kpi-value c-white" id="rec-kpi-total">—</div></div>
-    <div class="kpi"><div class="kpi-label">Alta Carga</div><div class="kpi-value c-red" id="rec-kpi-alta">—</div><div class="kpi-sub">≥40h pend.</div></div>
-    <div class="kpi"><div class="kpi-label">Media Carga</div><div class="kpi-value c-yellow" id="rec-kpi-media">—</div><div class="kpi-sub">20–39h</div></div>
-    <div class="kpi"><div class="kpi-label">Baja Carga</div><div class="kpi-value c-green" id="rec-kpi-baja">—</div><div class="kpi-sub">&lt;20h</div></div>
-    <div class="kpi"><div class="kpi-label">Horas Pend. Total</div><div class="kpi-value c-cyan" id="rec-kpi-horas">—</div></div>
-    <div class="kpi"><div class="kpi-label">Entregas Pend.</div><div class="kpi-value c-yellow" id="rec-kpi-entregas">—</div></div>
   </div>
 
   <!-- Filtros Recursos: búsqueda + área + país -->
@@ -612,29 +628,14 @@ a.jlink:hover{text-decoration:underline}
   </div>
 
   <div class="rec-table-info" id="rec-table-info">Sin datos cargados</div>
-  <div class="rec-table-wrap">
-    <table class="rec-table">
-      <thead>
-        <tr>
-          <th>Recurso ↕</th>
-          <th>Área</th>
-          <th>Proyectos ↕</th>
-          <th>Horas Pend. ↕</th>
-          <th>Horas Total ↕</th>
-          <th>Entregas Pend. ↕</th>
-          <th>Distribución Carga Mensual</th>
-          <th>Bloqueantes ↕</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody id="rec-table-body">
-        <tr><td colspan="9" class="rec-empty">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="margin-bottom:10px;opacity:.3;display:block;margin-left:auto;margin-right:auto"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4.418 3.582-8 8-8s8 3.582 8 8"/></svg>
-          Los datos de recursos se cargarán al abrir esta pestaña
-        </td></tr>
-      </tbody>
-    </table>
+
+  <!-- BLOQUE 1: Recursos por Proyecto -->
+  <div class="rec-cards-wrap" id="rec-cards-wrap">
+    <div class="rec-empty">Los datos de recursos se cargarán al abrir esta pestaña</div>
   </div>
+
+  <!-- BLOQUE 2: Dashboard Horas por Mes -->
+  <div class="rec-chart-wrap" id="rec-chart-wrap"></div>
 </div>
 
 
