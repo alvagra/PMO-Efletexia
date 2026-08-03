@@ -118,12 +118,25 @@ module.exports = async function handler(req, res) {
       }
 
       // Enriquecer cada subtarea con la épica de su tarea padre
+      // También se trae el campo "Código" (customfield_10934) de la épica — mismo campo usado en Portafolio/Capacity
+      const epicaKeysUnicas = [...new Set(
+        Object.values(tareaMap).map(t => t.fields?.parent?.key).filter(Boolean)
+      )];
+      const epicaCodigoMap = {};
+      for (let i = 0; i < epicaKeysUnicas.length; i += CHUNK) {
+        const batch = epicaKeysUnicas.slice(i, i + CHUNK);
+        const epicasIss = await fetchAllPages(auth, JIRA_CLOUD,
+          `key in (${batch.join(',')})`,
+          ['summary', 'customfield_10934']);
+        epicasIss.forEach(iss => { epicaCodigoMap[iss.key] = iss.fields?.customfield_10934 || ''; });
+      }
+
       issues.forEach(sub => {
         const tareaKey = sub.fields.parent?.key;
         const tarea = tareaKey ? tareaMap[tareaKey] : null;
         sub.fields._tareaParent  = tarea ? { key: tarea.key, summary: tarea.fields?.summary } : null;
         sub.fields._epicaParent  = tarea?.fields?.parent
-          ? { key: tarea.fields.parent.key, summary: tarea.fields.parent.fields?.summary }
+          ? { key: tarea.fields.parent.key, summary: tarea.fields.parent.fields?.summary, codigo: epicaCodigoMap[tarea.fields.parent.key] || '' }
           : null;
       });
 
