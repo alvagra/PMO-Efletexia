@@ -931,7 +931,7 @@ function renderRecursos(){
   if(info) info.textContent=`Mostrando ${filtered.length} de ${recursos.length} recursos`;
 
   // ── Bloque 1: tarjetas por recurso con matriz día a día ─
-  const ROW_COLORS = ['#4d7c3f','#2891c9','#d97a24','#1e3a5f','#8b3fa8','#b5442e'];
+  const ROW_COLOR = '#4d7c3f'; // color único (verde) para todas las celdas de horas
   const diasDelMesActual = getDiasDelMes(recAnioActual, recMesActual);
   const cardsWrap=document.getElementById('rec-cards-wrap');
   if(cardsWrap){
@@ -962,7 +962,7 @@ function renderRecursos(){
           }).join('')}</tr>`;
         } else {
           r.proyectosMes.forEach((p,i)=>{
-            const color = ROW_COLORS[i % ROW_COLORS.length];
+            const color = ROW_COLOR;
             matrizHtml += `<tr><td class="rec-matrix-projcol" title="${esc(p.codigo)} · ${esc(p.nombre)}">${esc(p.codigo)} · ${esc(p.nombre)}</td>`;
             diasDelMesActual.forEach(iso=>{
               const dow=new Date(iso+'T12:00:00').getDay(); const isWE=dow===0||dow===6;
