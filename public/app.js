@@ -864,17 +864,18 @@ function recomputeRecursos(){
 
   recursos = Object.values(byPerson).map(p => {
     const nom = findNomenclaturaByNombre(p.nombre);
+    const nombreCompleto = nom?.nombre || p.nombre;
     const pais = nom?.pais || p.pais;
     const area = nom?.area || p.area;
 
     // Horas Planificadas del mes = días laborables (sin fines de semana, feriados del país ni vacaciones) × 8h
-    const diasLab = diasLaborablesDelMes(anioActual, mesActual, pais, p.nombre);
+    const diasLab = diasLaborablesDelMes(anioActual, mesActual, pais, nombreCompleto);
     const horasPlanificadas = diasLab.length * 8;
 
     // Horas Registradas del mes = misma fuente que Capacity (capRows), sin recalcular
     const ymPrefix = `${anioActual}-${String(mesActual+1).padStart(2,'0')}`;
     const horasRegistradas = capRows
-      .filter(r => (findNomenclaturaByNombre(r.persona)?.nombre || r.persona) === p.nombre && r.fecha && r.fecha.startsWith(ymPrefix))
+      .filter(r => (findNomenclaturaByNombre(r.persona)?.nombre || r.persona) === nombreCompleto && r.fecha && r.fecha.startsWith(ymPrefix))
       .reduce((s,r) => s + r.horas, 0);
     const horasDisponibles = Math.max(0, horasPlanificadas - horasRegistradas);
 
@@ -898,7 +899,7 @@ function recomputeRecursos(){
     }).filter(pr => pr.horas > 0).sort((a,b)=>b.horas-a.horas);
 
     return {
-      nombre:p.nombre, area, pais,
+      nombre:nombreCompleto, area, pais,
       proyectos:Object.keys(p.epicasMap).length,
       horasPend:p.horasPend, horasTotal:p.horasEst, horasCerr:p.horasCerr,
       horasLibre:Math.max(0,CAPACITY-p.horasEst),
