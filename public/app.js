@@ -811,18 +811,55 @@ async function loadRecursos(){
         p.epicasMap[epicaKey].horasEst+=horasEst; p.epicasMap[epicaKey].horasPend+=horasPend;
         p.epicasMap[epicaKey].actividades++;
         if(!isDone) p.epicasMap[epicaKey].pendientes++;
-        p.epicasMap[epicaKey].tareas.push({key:h.key,nombre:f.summary||h.key,status,isDone,horasEst,horasPend,fecha:f.customfield_10015||f.duedate||null,updated:f.updated||null});
+        p.epicasMap[epicaKey].tareas.push({key:h.key,nombre:f.summary||h.key,status,isDone,horasEst,horasPend,fechaInicio:f.customfield_10015||null,fechaFin:f.duedate||null,fecha:f.customfield_10015||f.duedate||null,updated:f.updated||null});
       }
     });
 
-    recursos=Object.values(byPerson).map(p=>({
-      nombre:p.nombre, area:p.area, pais:p.pais,
-      proyectos:Object.keys(p.epicasMap).length,
-      horasPend:p.horasPend, horasTotal:p.horasEst, horasCerr:p.horasCerr,
-      horasLibre:Math.max(0,CAPACITY-p.horasEst),
-      entregasPend:p.entregasPend, bloqueantes:p.bloqueantes,
-      proyectosDetalle:Object.values(p.epicasMap).map(e=>({key:e.key,nombre:e.nombre,horasTotal:e.horasEst,horasPend:e.horasPend,actividades:e.actividades,pendientes:e.pendientes,tareas:e.tareas||[]})).sort((a,b)=>b.horasTotal-a.horasTotal),
-    })).filter(r=>r.nombre!=='Sin asignar').sort((a,b)=>b.horasPend-a.horasPend);
+    // Asegurar que capRows (horas registradas, misma fuente que Capacity) esté cargado — sin duplicar el fetch si ya se cargó
+    if(!capacityLoaded) await loadCapacity();
+
+    recursos = Object.values(byPerson).map(p => {
+      const nom = findNomenclaturaByNombre(p.nombre);
+      const pais = nom?.pais || p.pais;
+      const area = nom?.area || p.area;
+
+      // Horas Planificadas del mes = días laborables (sin fines de semana, feriados del país ni vacaciones) × 8h
+      const diasLab = diasLaborablesDelMes(anioActual, mesActual, pais, p.nombre);
+      const horasPlanificadas = diasLab.length * 8;
+
+      // Horas Registradas del mes = misma fuente que Capacity (capRows), sin recalcular
+      const ymPrefix = `${anioActual}-${String(mesActual+1).padStart(2,'0')}`;
+      const horasRegistradas = capRows
+        .filter(r => (findNomenclaturaByNombre(r.persona)?.nombre || r.persona) === p.nombre && r.fecha && r.fecha.startsWith(ymPrefix))
+        .reduce((s,r) => s + r.horas, 0);
+      const horasDisponibles = Math.max(0, horasPlanificadas - horasRegistradas);
+
+      // Proyectos del mes: distribuir horas estimadas de cada subtarea entre su fecha inicio y fin, contando solo el mes filtrado
+      const proyectosMes = Object.values(p.epicasMap).map(e => {
+        let horasMes = 0;
+        (e.tareas||[]).forEach(t => {
+          if(t.fechaInicio && t.fechaFin){
+            horasMes += distribuirHoras(t.horasEst, t.fechaInicio, t.fechaFin, pais)
+              .filter(d => d.fecha.startsWith(ymPrefix))
+              .reduce((s,d) => s + d.horas, 0);
+          } else if(t.fecha && t.fecha.startsWith(ymPrefix)) {
+            // Fallback si falta alguna fecha: contar la hora estimada completa si su única fecha cae en el mes
+            horasMes += t.horasEst;
+          }
+        });
+        return { key:e.key, nombre:e.nombre, horas:+horasMes.toFixed(1) };
+      }).filter(pr => pr.horas > 0).sort((a,b)=>b.horas-a.horas);
+
+      return {
+        nombre:p.nombre, area, pais,
+        proyectos:Object.keys(p.epicasMap).length,
+        horasPend:p.horasPend, horasTotal:p.horasEst, horasCerr:p.horasCerr,
+        horasLibre:Math.max(0,CAPACITY-p.horasEst),
+        entregasPend:p.entregasPend, bloqueantes:p.bloqueantes,
+        proyectosDetalle:Object.values(p.epicasMap).map(e=>({key:e.key,nombre:e.nombre,horasTotal:e.horasEst,horasPend:e.horasPend,actividades:e.actividades,pendientes:e.pendientes,tareas:e.tareas||[]})).sort((a,b)=>b.horasTotal-a.horasTotal),
+        horasPlanificadas, horasRegistradas:+horasRegistradas.toFixed(1), horasDisponibles:+horasDisponibles.toFixed(1), proyectosMes,
+      };
+    }).filter(r=>r.nombre!=='Sin asignar').sort((a,b)=>b.horasPend-a.horasPend);
 
     // Populate área pills
     const areas=[...new Set(recursos.map(r=>r.area).filter(Boolean))].sort();
@@ -871,72 +908,59 @@ function renderRecursos(){
     return true;
   });
 
-  const total=filtered.length;
-  const alta=filtered.filter(r=>r.horasPend>=40).length;
-  const media=filtered.filter(r=>r.horasPend>=20&&r.horasPend<40).length;
-  const baja=filtered.filter(r=>r.horasPend<20).length;
-  const totalH=filtered.reduce((a,r)=>a+r.horasPend,0);
-  const totalE=filtered.reduce((a,r)=>a+r.entregasPend,0);
   const sk=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
-  sk('rec-kpi-total',total||'—'); sk('rec-kpi-alta',alta||'0'); sk('rec-kpi-media',media||'0');
-  sk('rec-kpi-baja',baja||'0'); sk('rec-kpi-horas',totalH?totalH+'h':'—'); sk('rec-kpi-entregas',totalE||'—');
+  sk('rec-kpi-total',filtered.length||'—');
 
   const info=document.getElementById('rec-table-info');
   if(info) info.textContent=`Mostrando ${filtered.length} de ${recursos.length} recursos`;
-  const tbody=document.getElementById('rec-table-body');
-  if(!tbody) return;
-  if(!filtered.length){
-    tbody.innerHTML=`<tr><td colspan="9" class="rec-empty">
-      ${recursos.length===0?'Los datos de recursos se cargarán al abrir esta pestaña':'Sin resultados para los filtros aplicados'}
-    </td></tr>`;
-    return;
+
+  // ── Bloque 1: tarjetas por recurso ──────────────────────
+  const cardsWrap=document.getElementById('rec-cards-wrap');
+  if(cardsWrap){
+    if(!filtered.length){
+      cardsWrap.innerHTML = `<div class="rec-empty">${recursos.length===0?'Los datos de recursos se cargarán al abrir esta pestaña':'Sin resultados para los filtros aplicados'}</div>`;
+    } else {
+      const hoyIso = new Date().toISOString().slice(0,10);
+      cardsWrap.innerHTML = filtered.map(r=>{
+        const enVacRec = estaDeVacaciones(r.nombre, hoyIso);
+        const vacBadgeRec = enVacRec ? ' <span style="background:rgba(99,102,241,.2);color:#818cf8;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;margin-left:4px">V</span>' : '';
+        const disponibleColor = r.horasDisponibles<=0 ? 'var(--red)' : r.horasDisponibles<r.horasPlanificadas*0.2 ? 'var(--yellow)' : 'var(--green)';
+        const proyectosHtml = r.proyectosMes.length
+          ? r.proyectosMes.map(p=>`<div class="rec-card-proj-row"><span class="rec-card-proj-name" title="${esc(p.nombre)}">${esc(p.nombre)}</span><span class="rec-card-proj-hrs">${p.horas}h</span></div>`).join('')
+          : '<div class="rec-card-proj-empty">Sin proyectos este mes</div>';
+        return `<div class="rec-card">
+          <div class="rec-card-header">
+            <span class="rec-card-name">${esc(r.nombre)}</span>${vacBadgeRec}
+          </div>
+          <div class="rec-card-stats">
+            <div class="rec-card-stat"><span class="rec-card-stat-lbl">Horas planificadas del mes</span><span class="rec-card-stat-val">${r.horasPlanificadas}h</span></div>
+            <div class="rec-card-stat"><span class="rec-card-stat-lbl">Horas disponibles</span><span class="rec-card-stat-val" style="color:${disponibleColor}">${r.horasDisponibles}h</span></div>
+          </div>
+          <div class="rec-card-projects">${proyectosHtml}</div>
+          <button class="rec-ver-btn rec-card-ver-btn" onclick="verRecurso('${esc(r.nombre)}')">Ver →</button>
+        </div>`;
+      }).join('');
+    }
   }
 
-  // Área badge helper
-  function areaClass(a){
-    const m={'Desarrollo':'rec-area-desarrollo','Data':'rec-area-data','PMO':'rec-area-pmo','PM':'rec-area-pm','Torre de Control':'rec-area-torre','Soporte TI':'rec-area-soporte'};
-    return m[a]||'rec-area-default';
+  // ── Bloque 2: gráfico de barras — horas planificadas por recurso ──
+  const chartWrap=document.getElementById('rec-chart-wrap');
+  if(chartWrap){
+    if(!filtered.length){
+      chartWrap.innerHTML = '';
+    } else {
+      const maxH = Math.max(...filtered.map(r=>r.horasPlanificadas), 1);
+      chartWrap.innerHTML = `<div class="rec-chart-title">Horas planificadas por recurso — este mes</div>` +
+        filtered.map(r=>{
+          const pct = Math.round(r.horasPlanificadas / maxH * 100);
+          return `<div class="rec-chart-row">
+            <span class="rec-chart-label" title="${esc(r.nombre)}">${esc(r.nombre)}</span>
+            <div class="rec-chart-track"><div class="rec-chart-fill" style="width:${pct}%"></div></div>
+            <span class="rec-chart-val">${r.horasPlanificadas}h</span>
+          </div>`;
+        }).join('');
+    }
   }
-
-  tbody.innerHTML=filtered.map(r=>{
-    const hClass=r.horasPend>=40?'rec-hours-high':r.horasPend>=20?'rec-hours-med':r.horasPend>0?'rec-hours-low':'rec-hours-zero';
-    const eClass=r.entregasPend>10?'rec-entregas-high':'rec-entregas-low';
-    const totalH2=r.horasCerr+r.horasPend+r.horasLibre;
-    const pCerr=totalH2>0?(r.horasCerr/totalH2*100).toFixed(1):0;
-    const pPend=totalH2>0?(r.horasPend/totalH2*100).toFixed(1):0;
-    const ocupPct=totalH2>0?Math.round((r.horasCerr+r.horasPend)/totalH2*100):0;
-    const ocupColor=ocupPct>=90?'var(--red)':ocupPct>=70?'var(--yellow)':'var(--green)';
-    const areaBadge=r.area?`<span class="rec-area-badge ${areaClass(r.area)}">${esc(r.area)}</span>`:'—';
-    const distBar=`<div class="rec-dist-cell">
-      <div style="position:relative">
-        <div class="rec-dist-bar-wrap">
-          <div class="rec-dist-cerr" style="width:${pCerr}%"></div>
-          <div class="rec-dist-pend" style="width:${pPend}%"></div>
-        </div>
-        <div style="position:absolute;right:4px;top:-1px;font-size:10px;font-weight:700;color:${ocupColor}">${ocupPct}%</div>
-      </div>
-      <div class="rec-dist-labels">
-        <span class="rec-dist-lbl"><span class="rec-dist-dot" style="background:var(--green)"></span>${r.horasCerr}h cerr.</span>
-        <span class="rec-dist-lbl"><span class="rec-dist-dot" style="background:var(--yellow)"></span>${r.horasPend}h pend.</span>
-        <span class="rec-dist-lbl"><span class="rec-dist-dot" style="background:var(--bg-elevated);border:1px solid var(--border)"></span>${r.horasLibre}h libre</span>
-      </div>
-    </div>`;
-    const bloqHtml=r.bloqueantes>0?`<span class="rec-bloq rec-bloq-warn">⚠ ${r.bloqueantes}</span>`:`<span class="rec-bloq rec-bloq-ok">✓</span>`;
-    const hoyIso = new Date().toISOString().slice(0,10);
-    const enVacRec = estaDeVacaciones(r.nombre, hoyIso);
-    const vacBadgeRec = enVacRec ? ' <span style="background:rgba(99,102,241,.2);color:#818cf8;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;margin-left:4px">V</span>' : '';
-    return `<tr${enVacRec ? ' style="opacity:.7"' : ''}>
-      <td><span class="rec-name">${esc(r.nombre)}</span>${vacBadgeRec}</td>
-      <td>${areaBadge}</td>
-      <td style="text-align:center">${r.proyectos}</td>
-      <td><span class="${hClass}">${r.horasPend}h</span></td>
-      <td style="color:var(--text-muted)">${r.horasTotal}h</td>
-      <td><span class="${eClass}">${r.entregasPend}</span></td>
-      <td>${distBar}</td>
-      <td>${bloqHtml}</td>
-      <td><button class="rec-ver-btn" onclick="verRecurso('${esc(r.nombre)}')">Ver →</button></td>
-    </tr>`;
-  }).join('');
 }
 
 // ── RECURSO DETAIL MODAL ───────────────────────────────────
@@ -1175,6 +1199,30 @@ function distribuirHoras(horasTotal, fechaInicio, fechaFin, pais) {
   if(!dias.length) return [];
   const hPorDia = +(horasTotal / dias.length).toFixed(2);
   return dias.map(fecha => ({ fecha, horas: hPorDia }));
+}
+
+// Días calendario de un mes (usado por el calendario de Capacity y por Recursos)
+function getDiasDelMes(year, month){
+  const firstDay = new Date(year, month, 1);
+  const lastDay  = new Date(year, month+1, 0);
+  const dias = [];
+  const cur = new Date(firstDay);
+  while(cur <= lastDay){
+    dias.push(cur.toISOString().slice(0,10));
+    cur.setDate(cur.getDate()+1);
+  }
+  return dias;
+}
+// Días laborables de un mes para una persona: excluye fines de semana, feriados de su país y vacaciones (misma lógica que Capacity)
+function diasLaborablesDelMes(year, month, pais, nombrePersona){
+  const feriados = FERIADOS[pais] || new Set();
+  return getDiasDelMes(year, month).filter(iso => {
+    const dow = new Date(iso+'T12:00:00').getDay();
+    if(dow===0||dow===6) return false;
+    if(feriados.has(iso)) return false;
+    if(estaDeVacaciones(nombrePersona, iso)) return false;
+    return true;
+  });
 }
 
 // ── State ──────────────────────────────────────────────────
@@ -1467,12 +1515,7 @@ function renderCalendar(filtered, personas, weeksByPersona){
   const DOW_LABELS = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
 
   // Build array of all days in month
-  const days = [];
-  const cur = new Date(firstDay);
-  while(cur <= lastDay){
-    days.push(cur.toISOString().slice(0,10));
-    cur.setDate(cur.getDate()+1);
-  }
+  const days = getDiasDelMes(year, month);
 
   // Index filtered rows by persona+date
   const idx = {}; // idx[persona][fecha] = [rows]
