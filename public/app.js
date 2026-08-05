@@ -881,29 +881,46 @@ function recomputeRecursos(){
 
     // Proyectos del mes: distribuir horas estimadas de cada subtarea entre su fecha inicio y fin, contando solo el mes filtrado.
     // También se guarda el set de días asignados a cada proyecto, para la matriz día a día del Bloque 1.
+    // Y el detalle de tareas del mes (con su porción de horas), para que el popup "Ver" coincida con la matriz.
     const proyectosMes = Object.values(p.epicasMap).map(e => {
-      let horasMes = 0;
+      let horasMes = 0, horasPendMes = 0, pendientesMes = 0;
       const diasHoras = {}; // fecha -> horas estimadas ese día (campo "Horas estimadas" de Jira, distribuido/prorrateado)
+      const tareasMes = [];
       (e.tareas||[]).forEach(t => {
+        let horasTareaMes = 0;
         if(t.fechaInicio && t.fechaFin){
           distribuirHoras(t.horasEst, t.fechaInicio, t.fechaFin, pais)
             .filter(d => d.fecha.startsWith(ymPrefix))
-            .forEach(d => { horasMes += d.horas; diasHoras[d.fecha] = (diasHoras[d.fecha]||0) + d.horas; });
+            .forEach(d => { horasMes += d.horas; horasTareaMes += d.horas; diasHoras[d.fecha] = (diasHoras[d.fecha]||0) + d.horas; });
         } else if(t.fecha && t.fecha.startsWith(ymPrefix)) {
           // Fallback si falta alguna fecha: contar la hora estimada completa si su única fecha cae en el mes
-          horasMes += t.horasEst;
+          horasMes += t.horasEst; horasTareaMes = t.horasEst;
           diasHoras[t.fecha] = (diasHoras[t.fecha]||0) + t.horasEst;
         }
+        if(horasTareaMes > 0){
+          tareasMes.push({...t, horasMes:+horasTareaMes.toFixed(1)});
+          horasPendMes += t.horasPend;
+          if(!t.isDone) pendientesMes++;
+        }
       });
-      return { key:e.key, nombre:e.nombre, codigo:e.codigo||e.key, horas:+horasMes.toFixed(1), diasHoras, dias:Object.keys(diasHoras) };
+      return {
+        key:e.key, nombre:e.nombre, codigo:e.codigo||e.key,
+        horas:+horasMes.toFixed(1), diasHoras, dias:Object.keys(diasHoras),
+        actividades:tareasMes.length, pendientes:pendientesMes, horasPend:+horasPendMes.toFixed(1),
+        tareas:tareasMes,
+      };
     }).filter(pr => pr.horas > 0).sort((a,b)=>b.horas-a.horas);
+
+    const proyectosMesCount = proyectosMes.length;
+    const horasPendMesTotal = +proyectosMes.reduce((s,pr)=>s+pr.horasPend,0).toFixed(1);
+    const entregasPendMesTotal = proyectosMes.reduce((s,pr)=>s+pr.pendientes,0);
 
     return {
       nombre:nombreCompleto, area, pais,
-      proyectos:Object.keys(p.epicasMap).length,
-      horasPend:p.horasPend, horasTotal:p.horasEst, horasCerr:p.horasCerr,
+      proyectos:proyectosMesCount,
+      horasPend:horasPendMesTotal, horasTotal:p.horasEst, horasCerr:p.horasCerr,
       horasLibre:Math.max(0,CAPACITY-p.horasEst),
-      entregasPend:p.entregasPend, bloqueantes:p.bloqueantes,
+      entregasPend:entregasPendMesTotal, bloqueantes:p.bloqueantes,
       proyectosDetalle:Object.values(p.epicasMap).map(e=>({key:e.key,nombre:e.nombre,horasTotal:e.horasEst,horasPend:e.horasPend,actividades:e.actividades,pendientes:e.pendientes,tareas:e.tareas||[]})).sort((a,b)=>b.horasTotal-a.horasTotal),
       horasPlanificadas, horasRegistradas:+horasRegistradas.toFixed(1), horasDisponibles:+horasDisponibles.toFixed(1), proyectosMes,
     };
@@ -1030,21 +1047,21 @@ function verRecurso(nombre){
   activeRecIdx=recursos.indexOf(r);
   document.getElementById('rec-modal-name').textContent=r.nombre;
   document.getElementById('rec-modal-area').textContent=r.area||'—';
-  const proyectos=r.proyectosDetalle||[];
-  const totalHrs=proyectos.reduce((a,p)=>a+(p.horasTotal||0),0);
+  const proyectos=r.proyectosMes||[];
+  const totalHrs=proyectos.reduce((a,p)=>a+(p.horas||0),0);
   const statsHtml=`<div class="rec-modal-stats">
     <div class="rec-modal-stat"><div class="rec-modal-stat-val c-blue">${r.proyectos}</div><div class="rec-modal-stat-lbl">Proyectos</div></div>
     <div class="rec-modal-stat"><div class="rec-modal-stat-val" style="color:${r.horasPend>=40?'var(--red)':r.horasPend>=20?'var(--yellow)':'var(--green)'}">${r.horasPend}h</div><div class="rec-modal-stat-lbl">Horas Pend.</div></div>
     <div class="rec-modal-stat"><div class="rec-modal-stat-val" style="color:${r.entregasPend>10?'var(--red)':'var(--green)'}">${r.entregasPend}</div><div class="rec-modal-stat-lbl">Entregas Pend.</div></div>
   </div>`;
   let partRows=proyectos.length&&totalHrs>0
-    ? proyectos.map(p=>{const pct=Math.round((p.horasTotal/totalHrs)*100);return`<div class="rec-part-row"><span class="rec-part-name" title="${esc(p.nombre)}">${esc(p.nombre)}</span><div class="rec-part-bar-wrap"><div class="rec-part-bar-fill" style="width:${pct}%"></div></div><span class="rec-part-pct">${pct}%</span><span class="rec-part-hrs">${p.horasTotal}h</span></div>`;}).join('')+`<div class="rec-part-total">Total: ${totalHrs}h</div>`
-    : '<div style="color:var(--text-dim);font-size:12px">Sin datos</div>';
+    ? proyectos.map(p=>{const pct=Math.round((p.horas/totalHrs)*100);return`<div class="rec-part-row"><span class="rec-part-name" title="${esc(p.nombre)}">${esc(p.nombre)}</span><div class="rec-part-bar-wrap"><div class="rec-part-bar-fill" style="width:${pct}%"></div></div><span class="rec-part-pct">${pct}%</span><span class="rec-part-hrs">${p.horas}h</span></div>`;}).join('')+`<div class="rec-part-total">Total: ${totalHrs}h</div>`
+    : '<div style="color:var(--text-dim);font-size:12px">Sin datos este mes</div>';
   let projCards=proyectos.length
     ? proyectos.map((p,i)=>`<div class="rec-proj-card">
         <div class="rec-proj-card-left">
           <div class="rec-proj-card-name">${esc(p.nombre)}</div>
-          <div class="rec-proj-card-meta">${p.actividades} act · ${p.horasTotal}h · ${p.horasPend}h pend.</div>
+          <div class="rec-proj-card-meta">${p.actividades} act · ${p.horas}h · ${p.horasPend}h pend.</div>
         </div>
         <span class="rec-proj-pend-badge ${p.pendientes>0?'has-pend':'no-pend'}">${p.pendientes} pend.</span>
         <button class="rec-proj-link" title="Ver detalle" onclick="verProyecto(${i});event.stopPropagation()">
@@ -1075,7 +1092,7 @@ function clsActStatus(status) {
 
 function verProyecto(epicIdx){
   const r=recursos[activeRecIdx]; if(!r) return;
-  const p=(r.proyectosDetalle||[])[epicIdx]; if(!p) return;
+  const p=(r.proyectosMes||[])[epicIdx]; if(!p) return;
   const epicaGlobal=epics.find(e=>e.key===p.key);
   const estado=epicaGlobal?epicaGlobal.status:'—';
   const area=epicaGlobal?epicaGlobal.area:(r.area||'—');
@@ -1089,14 +1106,14 @@ function verProyecto(epicIdx){
   const sbCls={'Backlog':'backlog','Análisis':'analisis','Desarrollo':'desarrollo','Pruebas':'pruebas','Producción':'produccion','Planificado':'planificado','Stand by':'standby','Desestimado':'desestimado'}[estado]||'backlog';
   const tareas=(p.tareas||[]).slice().sort((a,b)=>(b.updated||b.fecha||'').localeCompare(a.updated||a.fecha||''));
   const tareasHtml=tareas.length
-    ?tareas.map(t=>{ const st=clsActStatus(t.status); return `<div class="det-task-row"><span class="det-task-date">${fmtD(t.fecha)||'—'}</span><span class="det-task-name" title="${esc(t.nombre)}">${esc(t.nombre)}</span><span class="det-task-hrs">${t.horasEst}h</span><span class="det-task-status"><span class="det-badge det-badge-${st.cls}">${st.label}</span></span></div>`; }).join('')
+    ?tareas.map(t=>{ const st=clsActStatus(t.status); return `<div class="det-task-row"><span class="det-task-date">${fmtD(t.fecha)||'—'}</span><span class="det-task-name" title="${esc(t.nombre)}">${esc(t.nombre)}</span><span class="det-task-hrs">${t.horasMes}h</span><span class="det-task-status"><span class="det-badge det-badge-${st.cls}">${st.label}</span></span></div>`; }).join('')
     :'<div style="color:var(--text-muted);font-size:12px;padding:8px 0">Sin actividades registradas</div>';
   document.getElementById('det-title').textContent=p.nombre;
   document.getElementById('det-body').innerHTML=`
     <div class="det-stats">
       <div class="det-stat"><div class="det-stat-val" style="color:var(--blue)">${p.actividades}</div><div class="det-stat-lbl">Actividades</div></div>
       <div class="det-stat"><div class="det-stat-val" style="color:${p.horasPend>=40?'var(--red)':p.horasPend>=20?'var(--yellow)':'var(--green)'}">${p.horasPend}h</div><div class="det-stat-lbl">Horas Pend.</div></div>
-      <div class="det-stat"><div class="det-stat-val" style="color:var(--blue)">${p.horasTotal}h</div><div class="det-stat-lbl">Horas Total</div></div>
+      <div class="det-stat"><div class="det-stat-val" style="color:var(--blue)">${p.horas}h</div><div class="det-stat-lbl">Horas del mes</div></div>
     </div>
     <div class="det-sec">
       <div class="det-sec-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Proyecto</div>
