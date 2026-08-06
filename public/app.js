@@ -797,10 +797,31 @@ async function loadRecursos(){
     const paisSel=document.getElementById('rec-pais-sel');
     if(paisSel) paisSel.innerHTML=`<option value="">Todos los países</option>`+paises.map(p=>`<option>${p}</option>`).join('');
 
+    // Populate dropdown de usuarios (checkbox múltiple)
+    const usuarios=[...new Set(recursos.map(r=>r.nombre).filter(Boolean))].sort();
+    const userPanel=document.getElementById('rec-user-dd-panel');
+    const userBtn=document.getElementById('rec-user-dd-btn');
+    const userCount=document.getElementById('rec-user-dd-count');
+    if(userPanel){
+      userPanel.innerHTML=usuarios.map(u=>`<label class="rec-user-dd-item"><input type="checkbox" class="rec-user-cb" value="${esc(u)}">${esc(u)}</label>`).join('');
+      userPanel.querySelectorAll('.rec-user-cb').forEach(cb=>{
+        cb.addEventListener('change',()=>{
+          const n=userPanel.querySelectorAll('.rec-user-cb:checked').length;
+          if(userCount) userCount.textContent = n>0 ? `(${n})` : '';
+          renderRecursos();
+        });
+      });
+    }
+    if(userBtn && userPanel){
+      userBtn.addEventListener('click',(ev)=>{ ev.stopPropagation(); userPanel.classList.toggle('open'); });
+      document.addEventListener('click',(ev)=>{ if(!document.getElementById('rec-user-dd')?.contains(ev.target)) userPanel.classList.remove('open'); });
+    }
+
     document.getElementById('rec-limpiar-btn').addEventListener('click',()=>{
       document.getElementById('rec-search').value='';
       document.querySelectorAll('.rec-area-btn').forEach(b=>b.classList.remove('active'));
       if(paisSel) paisSel.value='';
+      if(userPanel){ userPanel.querySelectorAll('.rec-user-cb').forEach(cb=>cb.checked=false); if(userCount) userCount.textContent=''; }
       renderRecursos();
     });
     document.getElementById('rec-pais-sel').addEventListener('change', renderRecursos);
@@ -932,11 +953,13 @@ function renderRecursos(){
   const activeAreaBtn=document.querySelector('.rec-area-btn.active');
   const area=activeAreaBtn?activeAreaBtn.dataset.area:'';
   const pais=document.getElementById('rec-pais-sel')?.value||'';
+  const usuariosSel=[...document.querySelectorAll('.rec-user-cb:checked')].map(cb=>cb.value);
 
   let filtered=recursos.filter(r=>{
     if(search&&!r.nombre.toLowerCase().includes(search)&&!r.proyectosDetalle.some(p=>p.nombre.toLowerCase().includes(search))) return false;
     if(area&&r.area!==area) return false;
     if(pais&&r.pais!==pais) return false;
+    if(usuariosSel.length && !usuariosSel.includes(r.nombre)) return false;
     return true;
   });
 
@@ -993,7 +1016,7 @@ function renderRecursos(){
           const tareasRows = tareasOrdenadas.map(t=>{
             const st = clsActStatus(t.status);
             return `<tr>
-              <td>${esc(t.nombre)}</td>
+              <td><span class="rec-tarea-nombre" onclick="this.classList.toggle('expandida')">${esc(t.nombre)}</span></td>
               <td>${t.responsable?`<a href="#" onclick="verRecurso('${esc(t.responsable)}');return false" style="color:var(--blue);text-decoration:none">${esc(t.responsable)}</a>`:'—'}</td>
               <td>${fmtD(t.fechaInicio)||'—'}</td>
               <td>${fmtD(t.fechaFin)||'—'}</td>
@@ -1180,8 +1203,8 @@ const NOMENCLATURA = {
   'AR':  { nombre: 'Alexander Romero',   pais: 'Peru',      area: 'Desarrollo' },
   'HR':  { nombre: 'Hamhner Remuzgo',    pais: 'Peru',      area: 'Soporte TI', alias: ['soporte efletexia'] },
   'AA':  { nombre: 'Abel Alva',          pais: 'Peru',      area: 'PMO' },
-  'RP':  { nombre: 'Roxana Peralta',     pais: 'Peru',      area: 'PM' },
-  'ALL': { nombre: 'Alberto Llosa',      pais: 'Peru',      area: 'PM' },
+  'RP':  { nombre: 'Roxana Peralta',     pais: 'Peru',      area: 'Desarrollo' },
+  'ALL': { nombre: 'Alberto Llosa',      pais: 'Peru',      area: 'Desarrollo' },
   'FF':  { nombre: 'Farah Fidel',        pais: 'Mexico',    area: 'Comercial' },
   'JM':  { nombre: 'Juan Menco',         pais: 'Colombia',  area: 'Comercial' },
   'CC':  { nombre: 'Cesar Castañeda',    pais: 'Peru',      area: 'TC' },
