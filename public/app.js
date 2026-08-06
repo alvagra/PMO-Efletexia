@@ -858,7 +858,9 @@ function recomputeRecursos(){
       p.epicasMap[epicaKey].horasEst+=horasEst; p.epicasMap[epicaKey].horasPend+=horasPend;
       p.epicasMap[epicaKey].actividades++;
       if(!isDone) p.epicasMap[epicaKey].pendientes++;
-      p.epicasMap[epicaKey].tareas.push({key:h.key,nombre:f.summary||h.key,status,isDone,horasEst,horasPend,fechaInicio:f.customfield_10015||null,fechaFin:f.duedate||null,fecha:f.customfield_10015||f.duedate||null,updated:f.updated||null});
+      let contexto = f._tareaParent?.description || null;
+      if(contexto && typeof contexto==='object') contexto = adfToText(contexto).trim();
+      p.epicasMap[epicaKey].tareas.push({key:h.key,nombre:f.summary||h.key,status,isDone,horasEst,horasPend,fechaInicio:f.customfield_10015||null,fechaFin:f.duedate||null,fecha:f.customfield_10015||f.duedate||null,updated:f.updated||null,contexto});
     }
   });
 
@@ -948,9 +950,7 @@ function renderRecursos(){
   const info=document.getElementById('rec-table-info');
   if(info) info.textContent=`Mostrando ${filtered.length} de ${recursos.length} recursos`;
 
-  // ── Bloque 1: tarjetas por recurso con matriz día a día ─
-  const ROW_COLOR = '#4d7c3f'; // color único (verde) para todas las celdas de horas
-  const diasDelMesActual = getDiasDelMes(recAnioActual, recMesActual);
+  // ── Bloque 1: tarjetas por recurso con tabla de tareas por proyecto ─
   const cardsWrap=document.getElementById('rec-cards-wrap');
   if(cardsWrap){
     if(!filtered.length){
@@ -960,60 +960,40 @@ function renderRecursos(){
       cardsWrap.innerHTML = filtered.map(r=>{
         const enVacRec = estaDeVacaciones(r.nombre, hoyIso);
         const vacBadgeRec = enVacRec ? ' <span style="background:rgba(99,102,241,.2);color:#818cf8;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;margin-left:4px">V</span>' : '';
-        const feriadosPais = FERIADOS[r.pais] || new Set();
 
-        // Cabecera de días
-        let matrizHtml = `<div class="rec-matrix-scroll"><table class="rec-matrix-tbl">
-          <thead><tr><th class="rec-matrix-projcol">Proyecto</th>`;
-        diasDelMesActual.forEach(iso=>{
-          const dt = new Date(iso+'T12:00:00');
-          const dow = dt.getDay();
-          const isWE = dow===0||dow===6;
-          matrizHtml += `<th class="${isWE?'rec-matrix-we':''}">${dt.getDate()}</th>`;
-        });
-        matrizHtml += `</tr></thead><tbody>`;
-
+        let proyectosHtml;
         if(!r.proyectosMes.length){
-          matrizHtml += `<tr><td class="rec-matrix-projcol">Sin proyectos este mes</td>${diasDelMesActual.map(iso=>{
-            const dow=new Date(iso+'T12:00:00').getDay(); const isWE=dow===0||dow===6;
-            const isFer = !isWE && feriadosPais.has(iso);
-            if(isWE) return `<td class="rec-matrix-we"></td>`;
-            if(isFer) return `<td><div class="rec-matrix-cell rec-matrix-holiday">F</div></td>`;
-            return `<td></td>`;
-          }).join('')}</tr>`;
+          proyectosHtml = '<div class="rec-card-proj-empty">Sin proyectos este mes</div>';
         } else {
-          r.proyectosMes.forEach((p,i)=>{
-            const color = ROW_COLOR;
-            matrizHtml += `<tr><td class="rec-matrix-projcol" title="${esc(p.codigo)} · ${esc(p.nombre)}"><a href="${JIRA_BASE}${esc(p.key)}" target="_blank" style="color:var(--blue);text-decoration:none">${esc(p.codigo)}</a> · ${esc(p.nombre)}</td>`;
-            diasDelMesActual.forEach(iso=>{
-              const dow=new Date(iso+'T12:00:00').getDay(); const isWE=dow===0||dow===6;
-              const isFer = !isWE && feriadosPais.has(iso);
-              const asignado = p.dias.includes(iso);
-              const esVac = asignado && estaDeVacaciones(r.nombre, iso);
-              if(isWE){
-                matrizHtml += `<td class="rec-matrix-we"></td>`;
-              } else if(isFer){
-                matrizHtml += `<td><div class="rec-matrix-cell rec-matrix-holiday">F</div></td>`;
-              } else if(esVac){
-                matrizHtml += `<td><div class="rec-matrix-cell rec-matrix-leave">L</div></td>`;
-              } else if(asignado){
-                const hVal = p.diasHoras[iso];
-                const hLabel = hVal % 1 === 0 ? hVal : hVal.toFixed(1);
-                matrizHtml += `<td><div class="rec-matrix-cell" style="background:${color}">${hLabel}</div></td>`;
-              } else {
-                matrizHtml += `<td></td>`;
-              }
-            });
-            matrizHtml += `</tr>`;
-          });
+          proyectosHtml = r.proyectosMes.map(p=>{
+            const tareasRows = (p.tareas||[]).map(t=>{
+              const st = clsActStatus(t.status);
+              return `<tr>
+                <td>${esc(t.nombre)}</td>
+                <td class="rec-tarea-contexto" title="${esc(t.contexto||'')}">${esc(t.contexto||'—')}</td>
+                <td>${fmtD(t.fechaInicio)||'—'}</td>
+                <td>${fmtD(t.fechaFin)||'—'}</td>
+                <td>${t.horasEst}h</td>
+                <td><span class="det-badge det-badge-${st.cls}">${st.label}</span></td>
+              </tr>`;
+            }).join('');
+            return `<div class="rec-proj-block">
+              <div class="rec-proj-block-header">
+                <a href="${JIRA_BASE}${esc(p.key)}" target="_blank" style="color:var(--blue);text-decoration:none">${esc(p.codigo)}</a> · ${esc(p.nombre)}
+              </div>
+              <table class="rec-tarea-tbl">
+                <thead><tr><th>Tarea</th><th>Contexto del desarrollo</th><th>Inicio</th><th>Fin</th><th>Horas</th><th>Estado</th></tr></thead>
+                <tbody>${tareasRows}</tbody>
+              </table>
+            </div>`;
+          }).join('');
         }
-        matrizHtml += `</tbody></table></div>`;
 
         return `<div class="rec-card">
           <div class="rec-card-header">
             <span class="rec-card-name">${esc(r.nombre)}</span>${vacBadgeRec}
           </div>
-          ${matrizHtml}
+          ${proyectosHtml}
           <button class="rec-ver-btn rec-card-ver-btn" onclick="verRecurso('${esc(r.nombre)}')">Ver →</button>
         </div>`;
       }).join('');
@@ -1106,7 +1086,7 @@ function verProyecto(epicIdx){
   const sbCls={'Backlog':'backlog','Análisis':'analisis','Desarrollo':'desarrollo','Pruebas':'pruebas','Producción':'produccion','Planificado':'planificado','Stand by':'standby','Desestimado':'desestimado'}[estado]||'backlog';
   const tareas=(p.tareas||[]).slice().sort((a,b)=>(b.updated||b.fecha||'').localeCompare(a.updated||a.fecha||''));
   const tareasHtml=tareas.length
-    ?tareas.map(t=>{ const st=clsActStatus(t.status); return `<div class="det-task-row"><span class="det-task-date">${fmtD(t.fecha)||'—'}</span><span class="det-task-name" title="${esc(t.nombre)}">${esc(t.nombre)}</span><span class="det-task-hrs">${t.horasMes}h</span><span class="det-task-status"><span class="det-badge det-badge-${st.cls}">${st.label}</span></span></div>`; }).join('')
+    ?tareas.map(t=>{ const st=clsActStatus(t.status); return `<div class="det-task-row"><span class="det-task-date">${fmtD(t.fecha)||'—'}</span><span class="det-task-name" title="${esc(t.nombre)}">${esc(t.nombre)}</span><span class="det-task-hrs">${t.horasEst}h</span><span class="det-task-status"><span class="det-badge det-badge-${st.cls}">${st.label}</span></span></div>`; }).join('')
     :'<div style="color:var(--text-muted);font-size:12px;padding:8px 0">Sin actividades registradas</div>';
   document.getElementById('det-title').textContent=p.nombre;
   document.getElementById('det-body').innerHTML=`
