@@ -118,20 +118,23 @@ module.exports = async function handler(req, res) {
       }
 
       // Enriquecer cada subtarea con la épica de su tarea padre
-      // También se traen los campos "Código" (customfield_10934) y "Contexto del desarrollo" (customfield_11335) de la épica
+      // También se traen los campos "Código" (customfield_10934), "Contexto del desarrollo" (customfield_11335),
+      // "Fecha de inicio" (customfield_10015) y "Fecha de vencimiento" (duedate) de la épica
       const epicaKeysUnicas = [...new Set(
         Object.values(tareaMap).map(t => t.fields?.parent?.key).filter(Boolean)
       )];
       const epicaCodigoMap = {};
       const epicaContextoMap = {};
+      const epicaFechasMap = {};
       for (let i = 0; i < epicaKeysUnicas.length; i += CHUNK) {
         const batch = epicaKeysUnicas.slice(i, i + CHUNK);
         const epicasIss = await fetchAllPages(auth, JIRA_CLOUD,
           `key in (${batch.join(',')})`,
-          ['summary', 'customfield_10934', 'customfield_11335']);
+          ['summary', 'customfield_10934', 'customfield_11335', 'customfield_10015', 'duedate']);
         epicasIss.forEach(iss => {
           epicaCodigoMap[iss.key] = iss.fields?.customfield_10934 || '';
           epicaContextoMap[iss.key] = iss.fields?.customfield_11335 || null;
+          epicaFechasMap[iss.key] = { inicio: iss.fields?.customfield_10015 || null, fin: iss.fields?.duedate || null };
         });
       }
 
@@ -140,7 +143,7 @@ module.exports = async function handler(req, res) {
         const tarea = tareaKey ? tareaMap[tareaKey] : null;
         sub.fields._tareaParent  = tarea ? { key: tarea.key, summary: tarea.fields?.summary } : null;
         sub.fields._epicaParent  = tarea?.fields?.parent
-          ? { key: tarea.fields.parent.key, summary: tarea.fields.parent.fields?.summary, codigo: epicaCodigoMap[tarea.fields.parent.key] || '', contexto: epicaContextoMap[tarea.fields.parent.key] || null }
+          ? { key: tarea.fields.parent.key, summary: tarea.fields.parent.fields?.summary, codigo: epicaCodigoMap[tarea.fields.parent.key] || '', contexto: epicaContextoMap[tarea.fields.parent.key] || null, fechaInicio: epicaFechasMap[tarea.fields.parent.key]?.inicio || null, fechaFin: epicaFechasMap[tarea.fields.parent.key]?.fin || null }
           : null;
       });
 
