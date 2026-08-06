@@ -1178,6 +1178,7 @@ const NOMENCLATURA = {
   'DV':  { nombre: 'Daniel Valencia',    pais: 'Colombia',  area: 'Desarrollo' },
   'SD':  { nombre: 'Steven Díaz',        pais: 'Colombia',  area: 'Desarrollo', alias: ['stiven d','stiven diaz','steven d'] },
   'AR':  { nombre: 'Alexander Romero',   pais: 'Peru',      area: 'Desarrollo' },
+  'SE':  { nombre: 'Soporte Efletexia',  pais: 'Peru',      area: 'Desarrollo' },
   'HR':  { nombre: 'Hamhner Remuzgo',    pais: 'Peru',      area: 'Soporte TI' },
   'AA':  { nombre: 'Abel Alva',          pais: 'Peru',      area: 'PMO' },
   'RP':  { nombre: 'Roxana Peralta',     pais: 'Peru',      area: 'PM' },
