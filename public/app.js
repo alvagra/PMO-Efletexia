@@ -976,11 +976,10 @@ function renderRecursos(){
           const p = proyectosPorKey[key];
           let tareasFiltradas = p.tareas||[];
           if(hayRango){
-            // Mismo criterio que el filtro Desde/Hasta de Entregables: se filtra por Fecha Fin de la tarea
+            // Desde -> Fecha de Inicio de la subtarea; Hasta -> Fecha Fin de la subtarea
             tareasFiltradas = tareasFiltradas.filter(t=>{
-              if(!t.fechaFin) return false;
-              if(rangoDesde && t.fechaFin < rangoDesde) return false;
-              if(rangoHasta && t.fechaFin > rangoHasta) return false;
+              if(rangoDesde && (!t.fechaInicio || t.fechaInicio < rangoDesde)) return false;
+              if(rangoHasta && (!t.fechaFin || t.fechaFin > rangoHasta)) return false;
               return true;
             });
           }
