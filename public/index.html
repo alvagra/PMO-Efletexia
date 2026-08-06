@@ -210,6 +210,15 @@ a.jlink:hover{text-decoration:underline}
 .rec-area-btn:hover{background:var(--border);color:var(--text-primary)}
 .rec-area-btn.active{background:var(--blue-bg);border-color:var(--blue);color:#fff}
 .rec-pais-sel{background:var(--bg-base);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:11px;color:var(--text-primary);height:30px;outline:none;font-family:var(--font);cursor:pointer}
+.rec-user-dd{position:relative}
+.rec-user-dd-btn{background:var(--bg-base);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:11px;color:var(--text-primary);height:30px;font-family:var(--font);cursor:pointer}
+.rec-user-dd-btn:hover{border-color:var(--blue)}
+#rec-user-dd-count{color:var(--blue);font-weight:600}
+.rec-user-dd-panel{display:none;position:absolute;top:36px;left:0;z-index:20;background:var(--bg-elevated);border:1px solid var(--border-light);border-radius:8px;padding:8px;min-width:220px;max-height:280px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+.rec-user-dd-panel.open{display:block}
+.rec-user-dd-item{display:flex;align-items:center;gap:8px;padding:5px 6px;font-size:12px;color:var(--text-primary);border-radius:4px;cursor:pointer}
+.rec-user-dd-item:hover{background:var(--bg-hover)}
+.rec-user-dd-item input{cursor:pointer}
 .rec-limpiar{background:var(--bg-elevated);border:1px solid var(--border);border-radius:5px;padding:4px 12px;font-size:11px;color:var(--blue);cursor:pointer;font-family:var(--font);display:flex;align-items:center;gap:4px;margin-left:auto}
 .rec-limpiar:hover{background:var(--border)}
 .rec-corte{background:var(--bg-surface);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;gap:10px}
@@ -235,6 +244,8 @@ a.jlink:hover{text-decoration:underline}
 .rec-tarea-tbl{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}
 .rec-tarea-tbl th{text-align:left;color:var(--text-muted);font-weight:500;padding:6px 8px;border-bottom:1px solid var(--border-light);background:var(--bg-elevated)}
 .rec-tarea-tbl td{padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.04);color:var(--text-secondary);word-break:break-word}
+.rec-tarea-nombre{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+.rec-tarea-nombre.expandida{white-space:normal;overflow:visible}
 .rec-card-proj-empty{font-size:12px;color:var(--text-dim);padding:8px 0}
 .rec-chart-wrap{padding:16px 20px}
 .rec-chart-title{font-size:12px;color:var(--text-muted);margin-bottom:10px}
@@ -617,6 +628,10 @@ a.jlink:hover{text-decoration:underline}
     <select id="rec-pais-sel" class="rec-pais-sel filter-input">
       <option value="">Todos los países</option>
     </select>
+    <div class="rec-user-dd" id="rec-user-dd">
+      <button type="button" class="rec-user-dd-btn" id="rec-user-dd-btn">Usuario <span id="rec-user-dd-count"></span> ▾</button>
+      <div class="rec-user-dd-panel" id="rec-user-dd-panel"></div>
+    </div>
     <button class="rec-limpiar" id="rec-limpiar-btn">
       <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l10 10M13 3L3 13"/></svg>Limpiar
     </button>
