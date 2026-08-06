@@ -1267,8 +1267,9 @@ function distribuirHoras(horasTotal, fechaInicio, fechaFin, pais) {
   if(!horasTotal || !fechaInicio || !fechaFin) return [];
   const feriados = FERIADOS[pais] || new Set();
   const dias = [];
-  const cur = new Date(fechaInicio + 'T12:00:00');
-  const end = new Date(fechaFin   + 'T12:00:00');
+  let cur = new Date(fechaInicio + 'T12:00:00');
+  let end = new Date(fechaFin   + 'T12:00:00');
+  if(cur > end){ const tmp=cur; cur=end; end=tmp; } // fechas invertidas en Jira: se corrige el orden para no perder la tarea
   while(cur <= end){
     const dow = cur.getDay();
     const iso = cur.toISOString().slice(0,10);
