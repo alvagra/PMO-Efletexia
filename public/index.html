@@ -631,6 +631,13 @@ a.jlink:hover{text-decoration:underline}
     </div>
     <input type="date" id="rec-fecha-corte" class="rec-date-input"/>
     <div id="rec-corte-info" style="margin-left:16px;font-size:12px;color:var(--text-muted)"></div>
+    <div style="display:flex;align-items:center;gap:8px;margin-left:24px">
+      <span style="font-size:11px;color:var(--text-muted)">Desde</span>
+      <input type="date" id="rec-rango-desde" class="rec-date-input"/>
+      <span style="font-size:11px;color:var(--text-muted)">Hasta</span>
+      <input type="date" id="rec-rango-hasta" class="rec-date-input"/>
+      <button id="rec-rango-limpiar" class="rec-ver-btn" style="font-size:11px;padding:4px 10px">Limpiar rango</button>
+    </div>
   </div>
 
   <div class="rec-table-info" id="rec-table-info">Sin datos cargados</div>
