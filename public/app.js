@@ -840,6 +840,8 @@ function recomputeRecursos(){
     const epicaKey=epica?epica.key:null;
     const epicaNom=epica?(epica.summary||epica.key):'Sin épica';
     const epicaCodigo=epica?.codigo||epicaKey;
+    let epicaContexto=epica?.contexto||null;
+    if(epicaContexto && typeof epicaContexto==='object') epicaContexto = adfToText(epicaContexto).trim();
     const area=f.customfield_10930?f.customfield_10930.value:null;
     const pais=f.customfield_10592?f.customfield_10592.value:null;
     const bloq=f.customfield_11003?f.customfield_11003.value:null;
@@ -854,14 +856,12 @@ function recomputeRecursos(){
     if(area&&!p.area) p.area=area;
     if(pais&&!p.pais) p.pais=pais;
     if(epicaKey){
-      if(!p.epicasMap[epicaKey]) p.epicasMap[epicaKey]={key:epicaKey,nombre:epicaNom,codigo:epicaCodigo,horasEst:0,horasPend:0,actividades:0,pendientes:0,tareas:[]};
+      if(!p.epicasMap[epicaKey]) p.epicasMap[epicaKey]={key:epicaKey,nombre:epicaNom,codigo:epicaCodigo,contexto:epicaContexto,horasEst:0,horasPend:0,actividades:0,pendientes:0,tareas:[]};
       p.epicasMap[epicaKey].horasEst+=horasEst; p.epicasMap[epicaKey].horasPend+=horasPend;
       p.epicasMap[epicaKey].actividades++;
       if(!isDone) p.epicasMap[epicaKey].pendientes++;
-      let contexto = f._tareaParent?.description || null;
-      if(contexto && typeof contexto==='object') contexto = adfToText(contexto).trim();
       const tareaParentKey = f._tareaParent?.key || null;
-      p.epicasMap[epicaKey].tareas.push({key:h.key,nombre:f.summary||h.key,status,isDone,horasEst,horasPend,fechaInicio:f.customfield_10015||null,fechaFin:f.duedate||null,fecha:f.customfield_10015||f.duedate||null,updated:f.updated||null,contexto,tareaParentKey});
+      p.epicasMap[epicaKey].tareas.push({key:h.key,nombre:f.summary||h.key,status,isDone,horasEst,horasPend,fechaInicio:f.customfield_10015||null,fechaFin:f.duedate||null,fecha:f.customfield_10015||f.duedate||null,updated:f.updated||null,tareaParentKey});
     }
   });
 
@@ -907,7 +907,7 @@ function recomputeRecursos(){
         }
       });
       return {
-        key:e.key, nombre:e.nombre, codigo:e.codigo||e.key,
+        key:e.key, nombre:e.nombre, codigo:e.codigo||e.key, contexto:e.contexto||null,
         horas:+horasMes.toFixed(1), diasHoras, dias:Object.keys(diasHoras),
         actividades:tareasMes.length, pendientes:pendientesMes, horasPend:+horasPendMes.toFixed(1),
         tareas:tareasMes,
@@ -974,29 +974,19 @@ function renderRecursos(){
               if(!b.fechaInicio) return -1;
               return a.fechaInicio.localeCompare(b.fechaInicio);
             });
-            // Agrupar subtareas por su Historia padre, para fusionar la celda de Contexto del desarrollo (es el mismo texto para todas las subtareas de una misma historia)
-            const grupos = [];
-            const grupoPorTarea = {};
-            tareasOrdenadas.forEach(t=>{
-              const gKey = t.tareaParentKey || t.key;
-              if(!grupoPorTarea[gKey]){ grupoPorTarea[gKey] = { contexto:t.contexto, items:[] }; grupos.push(grupoPorTarea[gKey]); }
-              grupoPorTarea[gKey].items.push(t);
-            });
-            const tareasRows = grupos.map(g=>{
-              return g.items.map((t,i)=>{
-                const st = clsActStatus(t.status);
-                const contextoCell = i===0
-                  ? `<td class="rec-tarea-contexto" rowspan="${g.items.length}">${esc(g.contexto||'—')}</td>`
-                  : '';
-                return `<tr>
-                  <td>${esc(t.nombre)}</td>
-                  ${contextoCell}
-                  <td>${fmtD(t.fechaInicio)||'—'}</td>
-                  <td>${fmtD(t.fechaFin)||'—'}</td>
-                  <td>${t.horasEst}h</td>
-                  <td><span class="det-badge det-badge-${st.cls}">${st.label}</span></td>
-                </tr>`;
-              }).join('');
+            const tareasRows = tareasOrdenadas.map((t,i)=>{
+              const st = clsActStatus(t.status);
+              const contextoCell = i===0
+                ? `<td class="rec-tarea-contexto" rowspan="${tareasOrdenadas.length}">${esc(p.contexto||'—')}</td>`
+                : '';
+              return `<tr>
+                <td>${esc(t.nombre)}</td>
+                ${contextoCell}
+                <td>${fmtD(t.fechaInicio)||'—'}</td>
+                <td>${fmtD(t.fechaFin)||'—'}</td>
+                <td>${t.horasEst}h</td>
+                <td><span class="det-badge det-badge-${st.cls}">${st.label}</span></td>
+              </tr>`;
             }).join('');
             return `<div class="rec-proj-block">
               <table class="rec-tarea-tbl">
