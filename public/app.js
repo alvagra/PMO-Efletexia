@@ -974,14 +974,10 @@ function renderRecursos(){
               if(!b.fechaInicio) return -1;
               return a.fechaInicio.localeCompare(b.fechaInicio);
             });
-            const tareasRows = tareasOrdenadas.map((t,i)=>{
+            const tareasRows = tareasOrdenadas.map(t=>{
               const st = clsActStatus(t.status);
-              const contextoCell = i===0
-                ? `<td class="rec-tarea-contexto" rowspan="${tareasOrdenadas.length}">${esc(p.contexto||'—')}</td>`
-                : '';
               return `<tr>
                 <td>${esc(t.nombre)}</td>
-                ${contextoCell}
                 <td>${fmtD(t.fechaInicio)||'—'}</td>
                 <td>${fmtD(t.fechaFin)||'—'}</td>
                 <td>${t.horasEst}h</td>
@@ -989,13 +985,16 @@ function renderRecursos(){
               </tr>`;
             }).join('');
             return `<div class="rec-proj-block">
+              <div class="rec-proj-block-header">
+                <a href="${JIRA_BASE}${esc(p.key)}" target="_blank" style="color:var(--blue);text-decoration:none">${esc(p.codigo)}</a> · ${esc(p.nombre)}
+              </div>
+              <div class="rec-proj-contexto"><strong>Contexto del desarrollo:</strong> ${esc(p.contexto||'—')}</div>
               <table class="rec-tarea-tbl">
                 <colgroup>
-                  <col style="width:20%"><col style="width:32%"><col style="width:12%"><col style="width:12%"><col style="width:8%"><col style="width:16%">
+                  <col style="width:40%"><col style="width:16%"><col style="width:16%"><col style="width:10%"><col style="width:18%">
                 </colgroup>
                 <thead><tr>
-                  <th class="rec-proj-block-header"><a href="${JIRA_BASE}${esc(p.key)}" target="_blank" style="color:var(--blue);text-decoration:none">${esc(p.codigo)}</a> · ${esc(p.nombre)}</th>
-                  <th>Contexto del desarrollo</th><th>Inicio</th><th>Fin</th><th>Horas</th><th>Estado</th>
+                  <th>Tarea</th><th>Inicio</th><th>Fin</th><th>Horas</th><th>Estado</th>
                 </tr></thead>
                 <tbody>${tareasRows}</tbody>
               </table>
