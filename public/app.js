@@ -748,14 +748,11 @@ document.getElementById('modal-overlay').addEventListener('click',function(ev){ 
 
 // ── RECURSOS ──────────────────────────────────────────────
 (function initRecursos(){
-  const today=new Date().toISOString().split('T')[0];
-  const fi=document.getElementById('rec-fecha-corte');
-  if(fi){ fi.value=today; fi.addEventListener('change',()=>{ if(recursos.length>0) recomputeRecursos(); }); }
   document.getElementById('rec-search').addEventListener('input', renderRecursos);
   const rDesde=document.getElementById('rec-rango-desde');
   const rHasta=document.getElementById('rec-rango-hasta');
-  if(rDesde) rDesde.addEventListener('change', renderRecursos);
-  if(rHasta) rHasta.addEventListener('change', renderRecursos);
+  if(rDesde){ rDesde.addEventListener('change', renderRecursos); rDesde.addEventListener('input', renderRecursos); }
+  if(rHasta){ rHasta.addEventListener('change', renderRecursos); rHasta.addEventListener('input', renderRecursos); }
   const rLimpiar=document.getElementById('rec-rango-limpiar');
   if(rLimpiar) rLimpiar.addEventListener('click', ()=>{
     if(rDesde) rDesde.value='';
