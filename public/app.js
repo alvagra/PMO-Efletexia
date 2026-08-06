@@ -996,6 +996,9 @@ function renderRecursos(){
                 <a href="${JIRA_BASE}${esc(p.key)}" target="_blank" style="color:var(--blue);text-decoration:none">${esc(p.codigo)}</a> · ${esc(p.nombre)}
               </div>
               <table class="rec-tarea-tbl">
+                <colgroup>
+                  <col style="width:20%"><col style="width:32%"><col style="width:12%"><col style="width:12%"><col style="width:8%"><col style="width:16%">
+                </colgroup>
                 <thead><tr><th></th><th>Contexto del desarrollo</th><th>Inicio</th><th>Fin</th><th>Horas</th><th>Estado</th></tr></thead>
                 <tbody>${tareasRows}</tbody>
               </table>
