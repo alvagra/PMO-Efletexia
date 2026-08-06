@@ -856,12 +856,13 @@ function recomputeRecursos(){
     if(area&&!p.area) p.area=area;
     if(pais&&!p.pais) p.pais=pais;
     if(epicaKey){
-      if(!p.epicasMap[epicaKey]) p.epicasMap[epicaKey]={key:epicaKey,nombre:epicaNom,codigo:epicaCodigo,contexto:epicaContexto,horasEst:0,horasPend:0,actividades:0,pendientes:0,tareas:[]};
+      if(!p.epicasMap[epicaKey]) p.epicasMap[epicaKey]={key:epicaKey,nombre:epicaNom,codigo:epicaCodigo,contexto:epicaContexto,epicaFechaInicio:epica?.fechaInicio||null,epicaFechaFin:epica?.fechaFin||null,horasEst:0,horasPend:0,actividades:0,pendientes:0,tareas:[]};
       p.epicasMap[epicaKey].horasEst+=horasEst; p.epicasMap[epicaKey].horasPend+=horasPend;
       p.epicasMap[epicaKey].actividades++;
       if(!isDone) p.epicasMap[epicaKey].pendientes++;
       const tareaParentKey = f._tareaParent?.key || null;
-      p.epicasMap[epicaKey].tareas.push({key:h.key,nombre:f.summary||h.key,status,isDone,horasEst,horasPend,fechaInicio:f.customfield_10015||null,fechaFin:f.duedate||null,fecha:f.customfield_10015||f.duedate||null,updated:f.updated||null,tareaParentKey});
+      const responsable = f.assignee ? (findNomenclaturaByNombre(f.assignee.displayName)?.nombre || f.assignee.displayName) : null;
+      p.epicasMap[epicaKey].tareas.push({key:h.key,nombre:f.summary||h.key,status,isDone,horasEst,horasPend,fechaInicio:f.customfield_10015||null,fechaFin:f.duedate||null,fecha:f.customfield_10015||f.duedate||null,updated:f.updated||null,tareaParentKey,responsable});
     }
   });
 
@@ -908,6 +909,7 @@ function recomputeRecursos(){
       });
       return {
         key:e.key, nombre:e.nombre, codigo:e.codigo||e.key, contexto:e.contexto||null,
+        epicaFechaInicio:e.epicaFechaInicio||null, epicaFechaFin:e.epicaFechaFin||null,
         horas:+horasMes.toFixed(1), diasHoras, dias:Object.keys(diasHoras),
         actividades:tareasMes.length, pendientes:pendientesMes, horasPend:+horasPendMes.toFixed(1),
         tareas:tareasMes,
@@ -957,11 +959,7 @@ function renderRecursos(){
     if(!filtered.length){
       cardsWrap.innerHTML = `<div class="rec-empty">${recursos.length===0?'Los datos de recursos se cargarán al abrir esta pestaña':'Sin resultados para los filtros aplicados'}</div>`;
     } else {
-      const hoyIso = new Date().toISOString().slice(0,10);
       cardsWrap.innerHTML = filtered.map(r=>{
-        const enVacRec = estaDeVacaciones(r.nombre, hoyIso);
-        const vacBadgeRec = enVacRec ? ' <span style="background:rgba(99,102,241,.2);color:#818cf8;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;margin-left:4px">V</span>' : '';
-
         let proyectosHtml;
         if(!r.proyectosMes.length){
           proyectosHtml = '<div class="rec-card-proj-empty">Sin proyectos este mes</div>';
@@ -978,6 +976,7 @@ function renderRecursos(){
               const st = clsActStatus(t.status);
               return `<tr>
                 <td>${esc(t.nombre)}</td>
+                <td>${esc(t.responsable||'—')}</td>
                 <td>${fmtD(t.fechaInicio)||'—'}</td>
                 <td>${fmtD(t.fechaFin)||'—'}</td>
                 <td>${t.horasEst}h</td>
@@ -989,15 +988,16 @@ function renderRecursos(){
                 <div class="rec-proj-block-header">
                   <a href="${JIRA_BASE}${esc(p.key)}" target="_blank" style="color:var(--blue);text-decoration:none">${esc(p.codigo)}</a> · ${esc(p.nombre)}
                 </div>
+                <div class="rec-proj-fechas">${fmtD(p.epicaFechaInicio)||'—'} → ${fmtD(p.epicaFechaFin)||'—'}</div>
                 <div class="rec-proj-contexto"><strong>Contexto del desarrollo:</strong><br>${esc(p.contexto||'—')}</div>
               </div>
               <div class="rec-proj-right">
                 <table class="rec-tarea-tbl">
                   <colgroup>
-                    <col style="width:40%"><col style="width:16%"><col style="width:16%"><col style="width:10%"><col style="width:18%">
+                    <col style="width:30%"><col style="width:16%"><col style="width:13%"><col style="width:13%"><col style="width:10%"><col style="width:18%">
                   </colgroup>
                   <thead><tr>
-                    <th>Tarea</th><th>Inicio</th><th>Fin</th><th>Horas</th><th>Estado</th>
+                    <th>Tarea</th><th>Responsable</th><th>Inicio</th><th>Fin</th><th>Horas</th><th>Estado</th>
                   </tr></thead>
                   <tbody>${tareasRows}</tbody>
                 </table>
@@ -1007,9 +1007,6 @@ function renderRecursos(){
         }
 
         return `<div class="rec-card">
-          <div class="rec-card-header">
-            <span class="rec-card-name">${esc(r.nombre)}</span>${vacBadgeRec}
-          </div>
           ${proyectosHtml}
           <button class="rec-ver-btn rec-card-ver-btn" onclick="verRecurso('${esc(r.nombre)}')">Ver →</button>
         </div>`;
