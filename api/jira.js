@@ -113,7 +113,7 @@ module.exports = async function handler(req, res) {
       for (let i = 0; i < tareaKeys.length; i += CHUNK) {
         const chunk = tareaKeys.slice(i, i + CHUNK);
         const jqlChunk = `key in (${chunk.join(',')})`;
-        const tareas = await fetchAllPages(auth, JIRA_CLOUD, jqlChunk, ['summary', 'parent']);
+        const tareas = await fetchAllPages(auth, JIRA_CLOUD, jqlChunk, ['summary', 'parent', 'description']);
         tareas.forEach(t => { tareaMap[t.key] = t; });
       }
 
@@ -134,7 +134,7 @@ module.exports = async function handler(req, res) {
       issues.forEach(sub => {
         const tareaKey = sub.fields.parent?.key;
         const tarea = tareaKey ? tareaMap[tareaKey] : null;
-        sub.fields._tareaParent  = tarea ? { key: tarea.key, summary: tarea.fields?.summary } : null;
+        sub.fields._tareaParent  = tarea ? { key: tarea.key, summary: tarea.fields?.summary, description: tarea.fields?.description || null } : null;
         sub.fields._epicaParent  = tarea?.fields?.parent
           ? { key: tarea.fields.parent.key, summary: tarea.fields.parent.fields?.summary, codigo: epicaCodigoMap[tarea.fields.parent.key] || '' }
           : null;
