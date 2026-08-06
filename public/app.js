@@ -928,7 +928,7 @@ function recomputeRecursos(){
         actividades:tareasMes.length, pendientes:pendientesMes, horasPend:+horasPendMes.toFixed(1),
         tareas:tareasMes,
       };
-    }).filter(pr => pr.actividades > 0).sort((a,b)=>b.horas-a.horas);
+    }).filter(pr => pr.actividades > 0 && !SPECIAL_EPIC_KEYS.includes(pr.key)).sort((a,b)=>b.horas-a.horas);
 
     const proyectosMesCount = proyectosMes.length;
     const horasPendMesTotal = +proyectosMes.reduce((s,pr)=>s+pr.horasPend,0).toFixed(1);
