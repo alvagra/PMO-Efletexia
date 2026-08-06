@@ -953,37 +953,50 @@ function renderRecursos(){
   const info=document.getElementById('rec-table-info');
   if(info) info.textContent=`Mostrando ${filtered.length} de ${recursos.length} recursos`;
 
-  // ── Bloque 1: tarjetas por recurso con tabla de tareas por proyecto ─
+  // ── Bloque 1: tarjetas agrupadas por PROYECTO (no por recurso) ─
   const cardsWrap=document.getElementById('rec-cards-wrap');
   if(cardsWrap){
     if(!filtered.length){
       cardsWrap.innerHTML = `<div class="rec-empty">${recursos.length===0?'Los datos de recursos se cargarán al abrir esta pestaña':'Sin resultados para los filtros aplicados'}</div>`;
     } else {
-      cardsWrap.innerHTML = filtered.map(r=>{
-        let proyectosHtml;
-        if(!r.proyectosMes.length){
-          proyectosHtml = '<div class="rec-card-proj-empty">Sin proyectos este mes</div>';
-        } else {
-          proyectosHtml = r.proyectosMes.map(p=>{
-            // Ordenar tareas por fecha de inicio ascendente (las sin fecha van al final)
-            const tareasOrdenadas = (p.tareas||[]).slice().sort((a,b)=>{
-              if(!a.fechaInicio && !b.fechaInicio) return 0;
-              if(!a.fechaInicio) return 1;
-              if(!b.fechaInicio) return -1;
-              return a.fechaInicio.localeCompare(b.fechaInicio);
-            });
-            const tareasRows = tareasOrdenadas.map(t=>{
-              const st = clsActStatus(t.status);
-              return `<tr>
-                <td>${esc(t.nombre)}</td>
-                <td>${esc(t.responsable||'—')}</td>
-                <td>${fmtD(t.fechaInicio)||'—'}</td>
-                <td>${fmtD(t.fechaFin)||'—'}</td>
-                <td>${t.horasEst}h</td>
-                <td><span class="det-badge det-badge-${st.cls}">${st.label}</span></td>
-              </tr>`;
-            }).join('');
-            return `<div class="rec-proj-block">
+      // Agrupar todos los proyectos de todos los recursos filtrados, por clave de proyecto (épica)
+      const proyectosPorKey = {};
+      const ordenProyectos = [];
+      filtered.forEach(r=>{
+        (r.proyectosMes||[]).forEach(p=>{
+          if(!proyectosPorKey[p.key]){
+            proyectosPorKey[p.key] = { ...p, tareas: [] };
+            ordenProyectos.push(p.key);
+          }
+          proyectosPorKey[p.key].tareas.push(...(p.tareas||[]));
+        });
+      });
+
+      if(!ordenProyectos.length){
+        cardsWrap.innerHTML = '<div class="rec-card-proj-empty">Sin proyectos este mes</div>';
+      } else {
+        cardsWrap.innerHTML = ordenProyectos.map(key=>{
+          const p = proyectosPorKey[key];
+          // Ordenar tareas por fecha de inicio ascendente (las sin fecha van al final)
+          const tareasOrdenadas = (p.tareas||[]).slice().sort((a,b)=>{
+            if(!a.fechaInicio && !b.fechaInicio) return 0;
+            if(!a.fechaInicio) return 1;
+            if(!b.fechaInicio) return -1;
+            return a.fechaInicio.localeCompare(b.fechaInicio);
+          });
+          const tareasRows = tareasOrdenadas.map(t=>{
+            const st = clsActStatus(t.status);
+            return `<tr>
+              <td>${esc(t.nombre)}</td>
+              <td>${t.responsable?`<a href="#" onclick="verRecurso('${esc(t.responsable)}');return false" style="color:var(--blue);text-decoration:none">${esc(t.responsable)}</a>`:'—'}</td>
+              <td>${fmtD(t.fechaInicio)||'—'}</td>
+              <td>${fmtD(t.fechaFin)||'—'}</td>
+              <td>${t.horasEst}h</td>
+              <td><span class="det-badge det-badge-${st.cls}">${st.label}</span></td>
+            </tr>`;
+          }).join('');
+          return `<div class="rec-card">
+            <div class="rec-proj-block">
               <div class="rec-proj-left">
                 <div class="rec-proj-block-header">
                   <a href="${JIRA_BASE}${esc(p.key)}" target="_blank" style="color:var(--blue);text-decoration:none">${esc(p.codigo)}</a> · ${esc(p.nombre)}
@@ -1002,15 +1015,10 @@ function renderRecursos(){
                   <tbody>${tareasRows}</tbody>
                 </table>
               </div>
-            </div>`;
-          }).join('');
-        }
-
-        return `<div class="rec-card">
-          ${proyectosHtml}
-          <button class="rec-ver-btn rec-card-ver-btn" onclick="verRecurso('${esc(r.nombre)}')">Ver →</button>
-        </div>`;
-      }).join('');
+            </div>
+          </div>`;
+        }).join('');
+      }
     }
   }
 
