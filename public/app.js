@@ -985,19 +985,23 @@ function renderRecursos(){
               </tr>`;
             }).join('');
             return `<div class="rec-proj-block">
-              <div class="rec-proj-block-header">
-                <a href="${JIRA_BASE}${esc(p.key)}" target="_blank" style="color:var(--blue);text-decoration:none">${esc(p.codigo)}</a> · ${esc(p.nombre)}
+              <div class="rec-proj-left">
+                <div class="rec-proj-block-header">
+                  <a href="${JIRA_BASE}${esc(p.key)}" target="_blank" style="color:var(--blue);text-decoration:none">${esc(p.codigo)}</a> · ${esc(p.nombre)}
+                </div>
+                <div class="rec-proj-contexto"><strong>Contexto del desarrollo:</strong><br>${esc(p.contexto||'—')}</div>
               </div>
-              <div class="rec-proj-contexto"><strong>Contexto del desarrollo:</strong> ${esc(p.contexto||'—')}</div>
-              <table class="rec-tarea-tbl">
-                <colgroup>
-                  <col style="width:40%"><col style="width:16%"><col style="width:16%"><col style="width:10%"><col style="width:18%">
-                </colgroup>
-                <thead><tr>
-                  <th>Tarea</th><th>Inicio</th><th>Fin</th><th>Horas</th><th>Estado</th>
-                </tr></thead>
-                <tbody>${tareasRows}</tbody>
-              </table>
+              <div class="rec-proj-right">
+                <table class="rec-tarea-tbl">
+                  <colgroup>
+                    <col style="width:40%"><col style="width:16%"><col style="width:16%"><col style="width:10%"><col style="width:18%">
+                  </colgroup>
+                  <thead><tr>
+                    <th>Tarea</th><th>Inicio</th><th>Fin</th><th>Horas</th><th>Estado</th>
+                  </tr></thead>
+                  <tbody>${tareasRows}</tbody>
+                </table>
+              </div>
             </div>`;
           }).join('');
         }
