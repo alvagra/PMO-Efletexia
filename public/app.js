@@ -1,844 +1,2542 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>PMO Dashboard — Efletexia</title>
-<style>
+// ═══════════════════════════════════════════════════════════
+//  PMO Dashboard — Efletexia  |  app.js  v2
+// ═══════════════════════════════════════════════════════════
+const JIRA_BASE = "https://efletexia.atlassian.net/browse/";
+const TODAY = new Date(); TODAY.setHours(0,0,0,0);
 
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{
-  --bg-base:#0d1117;--bg-surface:#161b22;--bg-elevated:#21262d;
-  --border:#30363d;--border-light:#1c2128;
-  --text-primary:#e6edf3;--text-muted:#8b949e;--text-dim:#484f58;
-  --blue:#58a6ff;--blue-bg:#1f6feb;
-  --green:#3fb950;--green-bg:#1a3a1f;
-  --yellow:#d29922;--yellow-bg:#2d2d1a;
-  --red:#f85149;--purple:#bc8cff;--purple-bg:#2d1f3d;
-  --teal:#39d353;--cyan-bg:#1a2d2d;
-  --orange:#f0883e;--orange-bg:#2d1f0a;
-  --font:'Segoe UI',system-ui,-apple-system,sans-serif;
-  --font-mono:'Consolas','SF Mono',monospace;
+// Épicas especiales excluidas de la bitácora principal
+const SPECIAL_EPICS = {
+  'PTS-327': { label: 'Soporte Requerimientos', icon: '🛠️' },
+  'PTS-326': { label: 'Gestión PMO-TI',         icon: '📋' }
+};
+const SPECIAL_EPIC_KEYS = Object.keys(SPECIAL_EPICS);
+
+// Data stores
+let epics    = [];
+let recursos = [];
+let activeRecIdx = -1;
+
+
+// ── SEMÁFORO PORTAFOLIO (columna Semaforización) ────────────
+const WARN_ICON = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#F5B800" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+
+const SEMAFORO_COLORS = { produccion:'#3B82F6', vencido:'#ef4444', replanificado:'#F5B800', enplazo:'#4ade80', sinfecha:'#6b7280' };
+
+function getSemaforoCategoria(e) {
+  if ((e.status||'').toLowerCase() === 'stand by') return 'standby';
+  const statusLow = (e.status||'').toLowerCase();
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  const fin = e.duedate ? new Date(e.duedate+'T12:00:00') : null;
+  if (!fin) return 'sinfecha';
+  if (statusLow === 'producción' || statusLow === 'produccion') return 'produccion';
+  if (fin < hoy) return 'vencido';
+  if (!!e.replanificacion) return 'replanificado';
+  return 'enplazo';
 }
-body{font-family:var(--font);background:var(--bg-base);color:var(--text-primary);font-size:13px;min-height:100vh}
-.header{background:var(--bg-surface);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;justify-content:space-between}
-.header-left{display:flex;align-items:center;gap:10px}
-.header-icon{width:24px;height:24px;background:var(--blue-bg);border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff}
-.header-title{font-size:15px;font-weight:600}
-.header-meta{font-size:12px;color:var(--text-muted)}
-.tabs{background:var(--bg-surface);border-bottom:1px solid var(--border);padding:0 20px;display:flex}
-.tab{padding:10px 16px;font-size:13px;cursor:pointer;border-bottom:2px solid transparent;color:var(--text-muted);user-select:none;display:flex;align-items:center;gap:6px;transition:color .15s}
-.tab:hover{color:var(--text-primary)}.tab.active{color:var(--blue);border-bottom-color:var(--blue)}
-.tab svg{width:14px;height:14px}
-.kpis{display:grid;grid-template-columns:repeat(6,1fr);background:var(--border);gap:1px;border-bottom:1px solid var(--border)}
-.kpi{background:var(--bg-surface);padding:16px 20px}
-.kpi-label{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--text-muted);margin-bottom:6px}
-.kpi-value{font-size:28px;font-weight:700;line-height:1}
-.kpi-sub{font-size:11px;color:var(--text-muted);margin-top:4px}
-.c-white{color:var(--text-primary)}.c-red{color:var(--red)}.c-yellow{color:var(--yellow)}
-.c-blue{color:var(--blue)}.c-cyan{color:var(--teal)}.c-green{color:var(--green)}
-.filters{background:var(--bg-surface);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap}
-.filter-group{display:flex;flex-direction:column;gap:4px}
-.filter-label{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px}
-.filter-input{background:var(--bg-base);border:1px solid var(--border);border-radius:5px;padding:5px 9px;font-size:12px;color:var(--text-primary);height:30px;outline:none;font-family:var(--font)}
-.filter-input:focus{border-color:var(--blue)}
-input.filter-input{min-width:140px}
-select.filter-input{min-width:120px;cursor:pointer}
-select.filter-input option{background:var(--bg-elevated)}
-.estados-wrap{display:flex;flex-direction:column;gap:4px;margin-left:4px}
-.estados-grid{display:grid;grid-template-columns:repeat(3,auto);gap:4px 16px}
-.estado-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted);cursor:pointer;user-select:none}
-.estado-item input[type=checkbox]{accent-color:var(--blue);width:12px;height:12px;cursor:pointer}
-.btn-limpiar{margin-left:auto;background:var(--bg-elevated);border:1px solid var(--border);border-radius:5px;padding:5px 14px;font-size:12px;color:var(--blue);cursor:pointer;display:flex;align-items:center;gap:5px;font-family:var(--font);height:30px}
-.btn-limpiar:hover{background:var(--border)}
-.btn-export{background:var(--bg-elevated);border:1px solid var(--border);border-radius:5px;padding:5px 14px;font-size:12px;color:var(--green);cursor:pointer;display:flex;align-items:center;gap:5px;font-family:var(--font);height:30px}
-.btn-export:hover{background:var(--border)}
-.table-info{padding:8px 20px;font-size:11px;color:var(--text-muted);background:var(--bg-base);border-bottom:1px solid var(--border-light);display:flex;align-items:center;gap:12px}
-.table-wrap{overflow-x:auto}
-table{width:100%;border-collapse:collapse;font-size:12px}
-thead tr{background:var(--bg-surface);border-bottom:2px solid var(--border);position:sticky;top:0;z-index:10}
-thead th{padding:9px 10px;text-align:left;color:var(--text-muted);font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;border-right:1px solid var(--border-light);cursor:pointer;user-select:none}
-thead th:last-child{border-right:none}
-thead th:hover{color:var(--text-primary)}
-thead th.sort-asc .sort-icon::after{content:'↑';color:var(--blue)}
-thead th.sort-desc .sort-icon::after{content:'↓';color:var(--blue)}
-thead th .sort-icon{font-size:10px;margin-left:4px;color:var(--text-dim);transition:color .15s}
-thead th.sort-asc,.thead th.sort-desc{color:var(--text-primary)}
-tbody tr{border-bottom:1px solid var(--border-light);transition:background .1s;cursor:pointer}
-tbody tr:hover{background:var(--bg-surface)}
-tbody td{padding:8px 10px;color:var(--text-primary);vertical-align:middle;border-right:1px solid var(--border-light);white-space:nowrap}
-tbody td:last-child{border-right:none}
-td.muted{color:var(--text-muted)}
-td.code{color:var(--blue);font-family:var(--font-mono);font-size:11px;font-weight:600}
-td.proj{max-width:280px;overflow:hidden;text-overflow:ellipsis}
-td.cat{color:var(--text-muted);font-size:11px}
-.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.4px}
-.badge-backlog{background:#1e2228;color:#8b949e}
-.badge-análisis,.badge-analisis{background:#0d2a3d;color:#39c5f0}
-.badge-desarrollo{background:#2d1800;color:#f0883e}
-.badge-pruebas{background:#2d2600;color:#e3b341}
-.badge-producción,.badge-produccion{background:rgba(59,130,246,.15);color:#3B82F6}
-.badge-planificado{background:#1a2d3d;color:#58c8ff}
-.badge-standby{background:#1f2d3d;color:var(--blue)}
-.badge-desestimado{background:#2a2020;color:#a05050}
-.badge-en-curso{background:var(--orange-bg);color:var(--orange)}
-.badge-bloqueado{background:#3d1a1a;color:var(--red)}
-.prog-cell{display:flex;align-items:center;gap:7px}
-.prog-bar{background:var(--bg-elevated);border-radius:3px;height:6px;width:60px;overflow:hidden;flex-shrink:0}
-.prog-fill{height:100%;border-radius:3px;background:var(--blue-bg)}
-.prog-fill.full{background:var(--green)}
-.prog-pct{font-size:11px;color:var(--text-muted);min-width:28px}
-.btn-action{background:var(--bg-elevated);border:1px solid var(--border);border-radius:5px;padding:3px 10px;cursor:pointer;color:var(--blue);font-size:13px;font-family:var(--font);line-height:1}
-.btn-action:hover{background:var(--border)}
-a.jlink{color:var(--blue);text-decoration:none;font-family:var(--font-mono);font-size:11px}
-a.jlink:hover{text-decoration:underline}
-.pill{background:var(--bg-elevated);border:1px solid var(--border);border-radius:3px;padding:1px 8px;font-size:11px;display:inline-block}
-.tab-panel{display:none}.tab-panel.active{display:block}
 
-/* MODAL */
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;align-items:flex-start;justify-content:flex-end}
-.modal-overlay.open{display:flex}
-.modal-panel{background:var(--bg-surface);border-left:1px solid var(--border);height:100vh;overflow-y:auto;display:flex;flex-direction:column}
-.modal-panel.w-gantt{width:min(94vw,880px)}
-.modal-panel.w-detail{width:440px}
-.modal-hdr{display:flex;align-items:flex-start;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);gap:12px;flex-shrink:0}
-.modal-hdr-info{flex:1;min-width:0}
-.modal-key{font-size:12px;font-family:var(--font-mono);font-weight:700;color:var(--blue);margin-bottom:4px;letter-spacing:.5px}
-.modal-title{font-size:14px;font-weight:600;color:var(--text-primary);line-height:1.4}
-.modal-close{background:none;border:none;color:var(--text-muted);font-size:20px;cursor:pointer;line-height:1;flex-shrink:0;padding:0 4px}
-.modal-close:hover{color:var(--text-primary)}
-.modal-tabs{display:flex;border-bottom:1px solid var(--border);padding:0 20px;flex-shrink:0}
-.modal-tab{padding:9px 14px;font-size:12px;cursor:pointer;border-bottom:2px solid transparent;color:var(--text-muted);user-select:none}
-.modal-tab:hover{color:var(--text-primary)}.modal-tab.active{color:var(--blue);border-bottom-color:var(--blue)}
-.modal-body{padding:20px;flex:1;overflow-y:auto}
+function getSemaforoPortafolio(e) {
+  const cat = getSemaforoCategoria(e);
+  if (cat === 'standby') return WARN_ICON;
+  return `<svg width="18" height="18" viewBox="0 0 18 18" style="vertical-align:middle"><circle cx="9" cy="9" r="8" fill="${SEMAFORO_COLORS[cat]}"/></svg>`;
+}
 
-/* DETAIL */
-.dsec{font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin:16px 0 8px;border-top:1px solid var(--border);padding-top:14px}
-.dsec:first-child{margin-top:0;border-top:none;padding-top:0}
-.drow{display:flex;align-items:flex-start;gap:8px;margin-bottom:9px}
-.dlbl{font-size:11px;color:var(--text-muted);min-width:130px;flex-shrink:0;padding-top:1px}
-.dval{font-size:12px;color:var(--text-primary);word-break:break-word}
-.dval.m{color:var(--text-muted)}
-/* LOG BOXES */
-.log-section{margin-top:20px}
-.log-title{display:flex;align-items:center;gap:8px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-muted);margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border)}
-.log-title-bar{width:3px;height:14px;border-radius:2px;background:var(--yellow);flex-shrink:0}
-.log-box{background:var(--bg-base);border:1px solid var(--border);border-left:3px solid var(--yellow);border-radius:0 6px 6px 0;padding:12px 14px;font-size:12px;color:var(--text-primary);line-height:1.75;white-space:pre-wrap;word-break:break-word}
-.log-box.empty{color:var(--text-dim);font-style:italic;border-left-color:var(--border);background:transparent}
-.log-spacer{height:14px}
+// ── UTILS ──────────────────────────────────────────────────
+function sbClass(s){
+  if(!s) return 'backlog';
+  const map={
+    "backlog":"backlog","análisis":"analisis","analisis":"analisis",
+    "desarrollo":"desarrollo","pruebas":"pruebas",
+    "producción":"produccion","produccion":"produccion",
+    "planificado":"planificado","stand by":"standby","desestimado":"desestimado",
+    "tareas por hacer":"backlog",
+    "en curso":"en-curso","review":"en-curso",
+    "blocked":"bloqueado","bloqueado":"bloqueado","bloqued":"bloqueado",
+    "finalizada":"produccion"
+  };
+  return map[s.toLowerCase()]||'backlog';
+}
+// Clasificación de 4 estados usada en las barras del Gantt (detalle de épica), para respetar la leyenda: Completado/En curso/Pendiente/Bloqueado
+function ganttLegendCls(s){
+  const v = (s||'').toLowerCase();
+  if(v==='finalizada') return 'gb-done';
+  if(v==='blocked'||v==='bloqueado'||v==='bloqued') return 'gb-bloq';
+  if(v==='en curso'||v==='review') return 'gb-open';
+  return 'gb-pend'; // incluye 'tareas por hacer' y cualquier otro estado
+}
+function fmtD(iso){
+  if(!iso) return null;
+  const d = new Date(iso+'T12:00:00');
+  if(isNaN(d.getTime())) return null;
+  return d.toLocaleDateString('es-PE',{day:'2-digit',month:'short',year:'numeric'});
+}
+function diffD(a,b){ return Math.round((b-a)/864e5); }
+function workDays(a,b){
+  if(b<=a) return 0;
+  let count=0;
+  const d=new Date(a); d.setHours(0,0,0,0);
+  const end=new Date(b); end.setHours(0,0,0,0);
+  while(d<end){ const dow=d.getDay(); if(dow!==0&&dow!==6) count++; d.setDate(d.getDate()+1); }
+  return count;
+}
+function progCell(pct){
+  if(pct===null||pct===undefined) return '<span style="color:var(--text-muted)">—</span>';
+  const w=Math.min(100,Math.round(pct*100)), cls=w>=100?" full":"";
+  return `<div class="prog-cell"><div class="prog-bar"><div class="prog-fill${cls}" style="width:${w}%"></div></div><span class="prog-pct">${w}%</span></div>`;
+}
+function pill(v){ return v?`<span class="pill">${v}</span>`:'<span style="color:var(--text-muted)">—</span>'; }
+function esc(s){ if(!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-/* GANTT */
-.gantt-meta{display:flex;gap:20px;margin-bottom:16px;flex-wrap:wrap}
-.gm-item{display:flex;flex-direction:column;gap:2px}
-.gm-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted)}
-.gm-val{font-size:13px;color:var(--text-primary);font-weight:500}
-.gno-dates{color:var(--text-muted);font-size:13px;padding:32px 0;text-align:center}
-.gc{position:relative;width:100%;min-width:600px}
-.g-hdr{display:flex;margin-bottom:4px}
-.g-lc{width:220px;flex-shrink:0}
-.g-rc{width:160px;flex-shrink:0}
-.g-months{flex:1;position:relative;height:18px}
-.g-month{position:absolute;text-align:center;font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;border-left:1px solid var(--border-light);overflow:hidden;white-space:nowrap}
-.grow{display:flex;align-items:center;margin-bottom:4px;height:26px}
-.grow-lbl{width:220px;flex-shrink:0;font-size:11px;color:var(--text-muted);padding-right:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.g-epic-row .grow-lbl{font-weight:700;color:var(--text-primary);font-size:12px}
-.g-epic-row{margin-bottom:6px}
-.g-story-row{background:rgba(255,255,255,.015);border-radius:3px}
-.g-story-row .grow-lbl,.g-lbl-story{font-weight:600;color:var(--text-primary);font-size:11px}
-.g-subtask-row .grow-lbl,.g-lbl-subtask{color:var(--text-muted);font-size:10.5px;padding-left:18px}
-.g-asig{color:var(--text-dim);font-weight:400;font-size:10px}
-.g-row-pct{width:90px;flex-shrink:0;text-align:right;font-size:10.5px;font-weight:600;padding-left:8px;white-space:nowrap}
-.g-row-meta{width:160px;font-size:10px;text-align:right;white-space:nowrap;padding-left:8px;overflow:hidden;text-overflow:ellipsis}
-.grow-track{flex:1;position:relative;height:100%;background:var(--bg-elevated);border-radius:3px;overflow:hidden}
-.g-grid{position:absolute;top:0;bottom:0;width:1px;background:var(--border-light);z-index:0}
-.g-bar{position:absolute;top:4px;bottom:4px;border-radius:3px;z-index:1;display:flex;align-items:center;padding:0 6px;font-size:10px;font-weight:600;color:#fff;overflow:hidden;white-space:nowrap;min-width:3px}
-.gb-backlog{background:#484f58}.gb-analisis{background:#1a7fa8}.gb-desarrollo{background:#c85a00}
-.gb-pruebas{background:#b8860b}.gb-produccion{background:#3B82F6}.gb-en-curso{background:#b8860b}.gb-bloqueado{background:#8b1a1a}.gb-default{background:#484f58}
-.gb-done{background:var(--green)}.gb-open{background:#b8860b}.gb-pend{background:var(--text-dim)}.gb-bloq{background:#8b1a1a}
-.g-prog-row{margin-top:14px}
-.g-prog-lbl{font-size:11px;color:var(--text-muted);margin-bottom:5px;display:flex;justify-content:space-between}
-.g-prog-track{background:var(--bg-elevated);border-radius:4px;height:10px;overflow:hidden}
-.g-prog-fill{height:100%;border-radius:4px;transition:width .4s}
-.g-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:16px}
-.g-stat{background:var(--bg-elevated);border:1px solid var(--border);border-radius:6px;padding:10px 12px}
-.g-stat-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--text-muted);margin-bottom:4px}
-.g-stat-val{font-size:18px;font-weight:700}
-.g-legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px}
-.g-legend-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted)}
-.g-legend-dot{width:10px;height:10px;border-radius:2px;flex-shrink:0}
-.g-today{position:absolute;top:0;bottom:0;width:2px;background:var(--red);z-index:2;opacity:.9}
-.g-today-lbl{position:absolute;top:-16px;font-size:9px;color:var(--red);transform:translateX(-50%);white-space:nowrap;font-weight:600}
+function extractReplanFromAdf(adf){
+  // Extrae párrafos que empiezan con "Replanificación" del campo ADF
+  if(!adf || typeof adf !== 'object') return null;
+  const parrafos = (adf.content || []).filter(n => n.type === 'paragraph');
+  for(const p of parrafos){
+    const txt = p.content ? p.content.map(c => c.text||'').join('') : '';
+    if(txt.toLowerCase().startsWith('replanificaci')) return txt.trim();
+  }
+  return null;
+}
 
-/* ── PARTICIPACIÓN DE RECURSOS (Gantt) ── */
-.gpart-section{margin-top:20px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;padding:14px 16px}
-.gpart-title{display:flex;align-items:center;gap:7px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--text-muted);margin-bottom:12px}
-.gpart-row{display:flex;align-items:center;gap:8px;margin-bottom:7px}
-.gpart-ini{width:28px;height:20px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;letter-spacing:.3px}
-.gpart-name{font-size:11px;color:var(--text-muted);min-width:130px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.gpart-bar-wrap{flex:1;background:var(--bg-base);border-radius:3px;height:10px;overflow:hidden}
-.gpart-bar{height:100%;border-radius:3px;transition:width .4s}
-.gpart-pct{font-size:11px;color:var(--text-muted);min-width:34px;text-align:right}
-.gpart-hrs{font-size:11px;color:var(--text-muted);min-width:38px;text-align:right}
-.gpart-total{font-size:11px;color:var(--text-dim);margin-top:8px;padding-top:8px;border-top:1px solid var(--border-light)}
+function adfToText(node){
+  if(!node) return '';
+  if(typeof node==='string') return node;
+  const t=node.type||'', c=node.content||[];
+  if(t==='text') return node.text||'';
+  if(t==='hardBreak') return '\n';
+  if(t==='paragraph') return c.map(adfToText).join('')+'\n';
+  if(t==='bulletList'||t==='orderedList')
+    return c.map((item,i)=>(t==='orderedList'?(i+1)+'. ':'• ')+adfToText(item).trim()).join('\n')+'\n';
+  if(t==='listItem') return c.map(adfToText).join('');
+  return c.map(adfToText).join('');
+}
 
-/* LOADING / ERROR */
-.loading-screen{position:fixed;inset:0;background:var(--bg-base);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;gap:16px}
-.loading-screen.hidden{display:none}
-.loading-spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-.loading-text{font-size:13px;color:var(--text-muted)}
-.loading-title{font-size:15px;font-weight:600;color:var(--text-primary)}
-.error-screen{position:fixed;inset:0;background:var(--bg-base);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;gap:12px;padding:24px}
-.error-screen.hidden{display:none}
-.error-msg{font-size:13px;color:var(--text-muted);text-align:center;max-width:440px;line-height:1.6}
-.btn-retry{background:var(--blue-bg);border:none;border-radius:6px;padding:8px 20px;font-size:13px;color:#fff;cursor:pointer;font-family:var(--font)}
-.refresh-btn{background:var(--bg-elevated);border:1px solid var(--border);border-radius:5px;padding:4px 10px;font-size:11px;color:var(--blue);cursor:pointer;display:flex;align-items:center;gap:5px;font-family:var(--font)}
-.refresh-btn:hover{background:var(--border)}
-.refresh-btn.spinning svg{animation:spin .8s linear infinite}
-.last-update{font-size:10px;color:var(--text-dim);margin-left:4px}
+// ── CSV EXPORT ─────────────────────────────────────────────
+function downloadCSV(rows, filename){
+  const escape = v => {
+    if(v===null||v===undefined) return '';
+    const s = String(v);
+    return s.includes(',') || s.includes('"') || s.includes('\n')
+      ? '"'+s.replace(/"/g,'""')+'"'
+      : s;
+  };
+  const csv = rows.map(r => r.map(escape).join(',')).join('\n');
+  const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href=url; a.download=filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportPortafolioCSV(){
+  const data = sortedData(getFiltered());
+  const hdr  = ['Clave','Código','Proyecto','Categoría','Área','Sponsor','Estado',
+                 'Plan%','Real%','Desvío%','Des%','Pru%','FechaInicio','FechaFin',
+                 'COND.','Conformidad','DocFuncional','Bloqueante'];
+  const rows = data.map(e => [
+    e.key, e.codigo, e.summary, e.categoria, e.area, e.sponsor, e.status,
+    e.planPct!==null?Math.round(e.planPct*100):'',
+    e.realPct!==null?Math.round(e.realPct*100):'',
+    e.desvioPct!==null?Math.round(e.desvioPct*100):'',
+    e.pctDesarrollo!==null?Math.round(e.pctDesarrollo*100):'',
+    e.pctPruebas!==null?Math.round(e.pctPruebas*100):'',
+    e.fechaInicio||'', e.duedate||'',
+    e.condicion||'', e.conformidad||'', e.docFuncional||'', e.bloqueante||''
+  ]);
+  downloadCSV([hdr,...rows], `portafolio_${new Date().toISOString().slice(0,10)}.csv`);
+}
+
+document.getElementById('btn-export-port').addEventListener('click', exportPortafolioCSV);
 
 
-/* ── RECURSOS ── */
-.rec-kpis{display:grid;grid-template-columns:repeat(6,1fr);background:var(--border);gap:1px;border-bottom:1px solid var(--border)}
-.rec-filters{background:var(--bg-surface);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.rec-search-wrap{position:relative;display:flex;align-items:center}
-.rec-search-icon{position:absolute;left:10px;color:var(--text-muted);pointer-events:none}
-.rec-search-input{background:var(--bg-base);border:1px solid var(--border);border-radius:20px;padding:5px 12px 5px 32px;font-size:12px;color:var(--text-primary);height:30px;outline:none;font-family:var(--font);min-width:180px}
-.rec-search-input:focus{border-color:var(--blue)}
-.rec-area-btns{display:flex;gap:6px;flex-wrap:wrap}
-.rec-area-btn{background:var(--bg-elevated);border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-size:11px;color:var(--text-muted);cursor:pointer;font-family:var(--font);transition:all .15s;white-space:nowrap}
-.rec-area-btn:hover{background:var(--border);color:var(--text-primary)}
-.rec-area-btn.active{background:var(--blue-bg);border-color:var(--blue);color:#fff}
-.rec-pais-sel{background:var(--bg-base);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:11px;color:var(--text-primary);height:30px;outline:none;font-family:var(--font);cursor:pointer}
-.rec-limpiar{background:var(--bg-elevated);border:1px solid var(--border);border-radius:5px;padding:4px 12px;font-size:11px;color:var(--blue);cursor:pointer;font-family:var(--font);display:flex;align-items:center;gap:4px;margin-left:auto}
-.rec-limpiar:hover{background:var(--border)}
-.rec-corte{background:var(--bg-surface);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;gap:10px}
-.rec-corte-label{font-size:10px;color:var(--blue);text-transform:uppercase;letter-spacing:.5px;font-weight:600;display:flex;align-items:center;gap:6px}
-.rec-date-input{background:var(--bg-elevated);border:1px solid var(--blue);border-radius:5px;padding:4px 10px;font-size:12px;color:var(--blue);font-family:var(--font);outline:none;cursor:pointer;height:30px}
-.rec-table-wrap{overflow-x:auto}
-.rec-cards-wrap{display:flex;flex-direction:column;gap:16px;padding:16px 20px}
-.rec-card{background:var(--bg-elevated);border:1px solid var(--border-light);border-radius:8px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
-.rec-card-header{font-size:14px;font-weight:600;color:var(--text-primary)}
-.rec-card-name{color:var(--text-primary)}
-.rec-card-stats{display:flex;gap:24px;padding:8px 0;border-top:1px solid var(--border-light);border-bottom:1px solid var(--border-light)}
-.rec-card-stat{display:flex;flex-direction:column;gap:2px;font-size:12px}
-.rec-card-stat-lbl{color:var(--text-muted)}
-.rec-card-stat-val{font-weight:700;font-size:14px}
-.rec-card-ver-btn{align-self:flex-end}
-.rec-proj-block{margin-bottom:14px;display:flex;gap:0;border:1px solid var(--border-light);border-radius:6px;overflow:hidden}
-.rec-proj-left{width:32%;flex-shrink:0;background:var(--bg-elevated);border-right:1px solid var(--border-light);padding:10px 12px;box-sizing:border-box}
-.rec-proj-block-header{font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:6px}
-.rec-proj-fechas{font-size:11px;color:var(--text-muted);margin-bottom:8px}
-.rec-proj-contexto{font-size:12px;color:#fff;line-height:1.5}
-.rec-proj-contexto strong{color:#fff;font-weight:600;display:block;margin-bottom:4px}
-.rec-proj-right{flex:1;overflow-x:auto}
-.rec-tarea-tbl{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}
-.rec-tarea-tbl th{text-align:left;color:var(--text-muted);font-weight:500;padding:6px 8px;border-bottom:1px solid var(--border-light);background:var(--bg-elevated)}
-.rec-tarea-tbl td{padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.04);color:var(--text-secondary);word-break:break-word}
-.rec-card-proj-empty{font-size:12px;color:var(--text-dim);padding:8px 0}
-.rec-chart-wrap{padding:16px 20px}
-.rec-chart-title{font-size:12px;color:var(--text-muted);margin-bottom:10px}
-.rec-chart-row{display:flex;align-items:center;gap:10px;padding:5px 0}
-.rec-chart-label{width:150px;font-size:12px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0}
-.rec-chart-track{flex:1;height:14px;background:var(--bg-hover);border-radius:4px;overflow:hidden}
-.rec-chart-fill{height:100%;background:var(--blue);border-radius:4px}
-.rec-chart-val{width:60px;font-size:12px;color:var(--text-muted);text-align:right;flex-shrink:0}
-.rec-table{width:100%;border-collapse:collapse;font-size:12px}
-.rec-table thead tr{background:var(--bg-surface);border-bottom:2px solid var(--border);position:sticky;top:0;z-index:10}
-.rec-table thead th{padding:9px 12px;text-align:left;color:var(--text-muted);font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;border-right:1px solid var(--border-light);cursor:pointer;user-select:none}
-.rec-table thead th:last-child{border-right:none}
-.rec-table thead th:hover{color:var(--text-primary)}
-.rec-table tbody tr{border-bottom:1px solid var(--border-light);transition:background .1s}
-.rec-table tbody tr:hover{background:var(--bg-surface)}
-.rec-table tbody td{padding:10px 12px;color:var(--text-primary);vertical-align:middle;border-right:1px solid var(--border-light);white-space:nowrap}
-.rec-table tbody td:last-child{border-right:none}
-.rec-name{font-weight:600;font-size:13px}
-.rec-area-badge{display:inline-block;padding:2px 10px;border-radius:4px;font-size:10px;font-weight:600;text-transform:uppercase}
-.rec-area-desarrollo{background:#2d1800;color:#f0883e}
-.rec-area-data{background:#0d2a3d;color:#39c5f0}
-.rec-area-pmo{background:var(--purple-bg);color:var(--purple)}
-.rec-area-pm{background:#1a2d3d;color:#58c8ff}
-.rec-area-torre{background:var(--green-bg);color:var(--green)}
-.rec-area-soporte{background:#2a2020;color:#a05050}
-.rec-area-default{background:var(--bg-elevated);color:var(--text-muted)}
-.rec-hours-high{color:var(--red);font-weight:700}
-.rec-hours-med{color:var(--yellow);font-weight:600}
-.rec-hours-low{color:var(--green);font-weight:600}
-.rec-hours-zero{color:var(--text-muted)}
-.rec-entregas-high{color:var(--red);font-weight:700}
-.rec-entregas-low{color:var(--green)}
-.rec-dist-cell{min-width:220px}
-.rec-dist-bar-wrap{position:relative;height:14px;background:var(--bg-elevated);border-radius:3px;overflow:hidden;display:flex}
-.rec-dist-cerr{height:100%;background:var(--green);border-radius:3px 0 0 3px}
-.rec-dist-pend{height:100%;background:var(--yellow)}
-.rec-dist-labels{display:flex;gap:8px;margin-top:3px;font-size:10px;color:var(--text-muted)}
-.rec-dist-lbl{display:flex;align-items:center;gap:3px}
-.rec-dist-dot{width:6px;height:6px;border-radius:1px;flex-shrink:0}
-.rec-bloq{display:flex;align-items:center;gap:4px;font-size:12px}
-.rec-bloq-ok{color:var(--green)}
-.rec-bloq-warn{color:var(--yellow);font-weight:600}
-.rec-ver-btn{background:var(--blue-bg);border:none;border-radius:4px;padding:4px 10px;font-size:11px;color:#fff;cursor:pointer;font-family:var(--font);white-space:nowrap}
-.rec-ver-btn:hover{opacity:.85}
-.rec-table-info{padding:8px 20px;font-size:11px;color:var(--text-muted);background:var(--bg-base);border-bottom:1px solid var(--border-light)}
-.rec-empty{text-align:center;padding:60px;color:var(--text-dim);font-size:13px}
+// ── TABS ───────────────────────────────────────────────────
+let recursosLoaded = false;
 
-/* ── RECURSO DETAIL MODAL ── */
-.rec-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:300;align-items:flex-start;justify-content:flex-end}
-.rec-modal-overlay.open{display:flex}
-.rec-modal-panel{background:var(--bg-surface);border-left:1px solid var(--border);width:min(94vw,620px);height:100vh;overflow-y:auto;display:flex;flex-direction:column;flex-shrink:0}
-.rec-modal-hdr{padding:20px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;flex-shrink:0}
-.rec-modal-hdr-info{flex:1}
-.rec-modal-name{font-size:18px;font-weight:700;color:var(--text-primary);margin-bottom:2px}
-.rec-modal-area{font-size:13px;color:var(--text-muted)}
-.rec-modal-close{background:none;border:none;color:var(--text-muted);font-size:20px;cursor:pointer;line-height:1;padding:0 4px}
-.rec-modal-close:hover{color:var(--text-primary)}
-.rec-modal-body{padding:20px;flex:1}
-.rec-modal-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:24px}
-.rec-modal-stat{background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;padding:14px;text-align:center}
-.rec-modal-stat-val{font-size:28px;font-weight:700;line-height:1;margin-bottom:4px}
-.rec-modal-stat-lbl{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px}
-.rec-section-title{display:flex;align-items:center;gap:8px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-muted);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)}
-.rec-section-title svg{width:14px;height:14px}
-.rec-part-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
-.rec-part-name{font-size:12px;color:var(--text-primary);min-width:200px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.rec-part-bar-wrap{flex:1;background:var(--bg-elevated);border-radius:3px;height:8px;overflow:hidden}
-.rec-part-bar-fill{height:100%;border-radius:3px;background:var(--blue-bg);transition:width .4s}
-.rec-part-pct{font-size:11px;color:var(--text-muted);min-width:36px;text-align:right}
-.rec-part-hrs{font-size:11px;color:var(--text-muted);min-width:46px;text-align:right}
-.rec-part-total{font-size:11px;color:var(--text-muted);margin-top:6px;padding-top:6px;border-top:1px solid var(--border-light)}
-.rec-proj-card{background:var(--bg-elevated);border:1px solid var(--border);border-radius:6px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:12px}
-.rec-proj-card-left{flex:1;min-width:0}
-.rec-proj-card-name{font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:3px}
-.rec-proj-card-meta{font-size:11px;color:var(--text-muted)}
-.rec-proj-pend-badge{padding:3px 10px;border-radius:4px;font-size:11px;font-weight:600;white-space:nowrap}
-.rec-proj-pend-badge.has-pend{background:#2d2600;color:var(--yellow)}
-.rec-proj-pend-badge.no-pend{background:var(--green-bg);color:var(--green)}
-.rec-proj-link{background:var(--blue-bg);border:none;border-radius:4px;padding:5px 8px;cursor:pointer;color:#fff;display:flex;align-items:center;flex-shrink:0}
-.rec-proj-link:hover{opacity:.85}
-
-/* ── DETALLE DE PROYECTO (segundo modal anidado) ── */
-.det-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:400;align-items:flex-start;justify-content:flex-end}
-.det-overlay.open{display:flex}
-.det-panel{display:none;background:var(--bg-surface);border-left:1px solid var(--border);border-right:1px solid var(--border);width:min(50vw,560px);height:100vh;overflow-y:auto;flex-direction:column;flex-shrink:0}
-.det-panel.open{display:flex}
-.det-hdr{padding:16px 20px;border-bottom:1px solid var(--border);flex-shrink:0}
-.det-hdr-sup{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-muted);margin-bottom:4px}
-.det-hdr-title{font-size:17px;font-weight:700;color:var(--text-primary);line-height:1.25}
-.det-hdr-row{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
-.det-close{background:none;border:none;color:var(--text-muted);font-size:20px;cursor:pointer;line-height:1;padding:0 4px;flex-shrink:0;margin-top:2px}
-.det-close:hover{color:var(--text-primary)}
-.det-body{padding:20px;flex:1}
-.det-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:24px}
-.det-stat{background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;padding:14px;text-align:center}
-.det-stat-val{font-size:26px;font-weight:700;line-height:1;margin-bottom:4px}
-.det-stat-lbl{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px}
-.det-sec{margin-bottom:24px}
-.det-sec-title{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-muted);margin-bottom:10px;padding-bottom:7px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:7px}
-.det-sec-title svg{width:13px;height:13px;flex-shrink:0}
-.det-field{display:flex;align-items:center;padding:6px 0;border-bottom:1px solid var(--border-light,rgba(255,255,255,.04))}
-.det-field:last-child{border-bottom:none}
-.det-lbl{font-size:12px;color:var(--text-muted);min-width:90px}
-.det-val{font-size:13px;color:var(--text-primary);flex:1}
-.det-task-row{display:grid;grid-template-columns:80px 1fr 36px 90px;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border-light,rgba(255,255,255,.04));font-size:12px}
-.det-task-row:last-child{border-bottom:none}
-.det-task-date{color:var(--text-muted);font-size:11px;white-space:nowrap}
-.det-task-name{color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.det-task-hrs{color:var(--blue);font-weight:600;text-align:right;white-space:nowrap}
-.det-task-status{text-align:right}
-.det-badge{display:inline-block;padding:2px 7px;border-radius:3px;font-size:10px;font-weight:600;white-space:nowrap}
-.det-badge.open{background:rgba(59,130,246,.15);color:#60a5fa}
-.det-badge.done{background:var(--green-bg,rgba(34,197,94,.1));color:var(--green,#4ade80)}
-.det-badge-pend{display:inline-block;padding:2px 7px;border-radius:3px;font-size:10px;font-weight:600;white-space:nowrap;background:rgba(100,116,139,.15);color:#94a3b8}
-.det-badge-open{display:inline-block;padding:2px 7px;border-radius:3px;font-size:10px;font-weight:600;white-space:nowrap;background:rgba(59,130,246,.15);color:#60a5fa}
-.det-badge-bloq{display:inline-block;padding:2px 7px;border-radius:3px;font-size:10px;font-weight:600;white-space:nowrap;background:rgba(239,68,68,.15);color:#f87171}
-.det-badge-done{display:inline-block;padding:2px 7px;border-radius:3px;font-size:10px;font-weight:600;white-space:nowrap;background:rgba(34,197,94,.1);color:#4ade80}
-
-@media(max-width:900px){.kpis,.rec-kpis{grid-template-columns:repeat(3,1fr)}}
-@media(max-width:600px){.kpis,.rec-kpis{grid-template-columns:repeat(2,1fr)}.modal-panel.w-gantt,.modal-panel.w-detail,.rec-modal-panel{width:100vw}}
+document.querySelectorAll('.tabs .tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tabs .tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    const panel = document.getElementById('panel-'+tab.dataset.tab);
+    if(panel) panel.classList.add('active');
+    if(tab.dataset.tab==='recursos' && !recursosLoaded) loadRecursos();
+    if(tab.dataset.tab==='capacity' && !capacityLoaded) loadCapacity();
+    if(tab.dataset.tab==='entregables') renderEntregables();
+  });
+});
 
 
-/* ── CAPACITY TAB ─────────────────────────────────────── */
-.cap-filters{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px;padding:12px 20px;background:var(--bg-surface);border-bottom:1px solid var(--border)}
-.cap-table-info{padding:8px 20px;font-size:11px;color:var(--text-muted);background:var(--bg-base);border-bottom:1px solid var(--border-light);display:flex;align-items:center;gap:12px}
-.cap-table-wrap{overflow-x:auto}
-.cap-table{width:100%;border-collapse:collapse;font-size:12px}
-.cap-table thead tr{background:var(--bg-surface);border-bottom:2px solid var(--border);position:sticky;top:0;z-index:10}
-.cap-table thead th{padding:9px 12px;text-align:left;color:var(--text-muted);font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;cursor:pointer;user-select:none}
-.cap-table thead th:hover{color:var(--text-primary)}
-.cap-table tbody tr{border-bottom:1px solid var(--border-light);transition:background .1s}
-.cap-table tbody tr:hover{background:var(--bg-surface)}
-.cap-table tbody td{padding:9px 12px;color:var(--text-primary);vertical-align:middle;white-space:nowrap}
-.cap-empty{text-align:center;padding:40px;color:var(--text-dim)}
-.cap-horas-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-weight:700;font-size:11px}
-.cap-horas-high{background:rgba(239,68,68,.15);color:var(--red)}
-.cap-horas-med{background:rgba(245,158,11,.15);color:var(--yellow)}
-.cap-horas-low{background:rgba(16,185,129,.15);color:var(--green)}
-.cap-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;padding:16px 20px;background:var(--bg-base);border-bottom:1px solid var(--border)}
+// ── PORTAFOLIO: parse & render ─────────────────────────────
+const JIRA_FIELDS = [
+  "summary","status","assignee","reporter","labels","duedate","description",
+  "customfield_10015","customfield_10592","customfield_10659",
+  "customfield_10725","customfield_10726","customfield_10759",
+  "customfield_10895","customfield_10928","customfield_10929",
+  "customfield_10930","customfield_10931","customfield_10934",
+  "customfield_10829","customfield_10862","customfield_10969",
+  "customfield_10970","customfield_11003","customfield_11004",
+  "customfield_11037","customfield_11070","customfield_11170","customfield_11269",
+  "customfield_11203"
+];
 
-/* ── Secciones especiales acordeón ── */
-#special-sections-container{margin-top:12px;display:flex;flex-direction:column;gap:8px;padding:0 0 24px}
-.sp-section{background:var(--bg-card);border:1px solid var(--border-light);border-radius:8px;overflow:hidden}
-.sp-header{display:flex;align-items:center;gap:10px;padding:14px 20px;cursor:pointer;user-select:none;transition:background .15s}
-.sp-header:hover{background:var(--bg-hover)}
-.sp-icon{font-size:11px;color:var(--text-muted);width:14px}
-.sp-title{font-size:14px;font-weight:600;color:var(--text-primary);flex:1}
-.sp-hint{font-size:11px;color:var(--text-muted)}
-.sp-body{border-top:1px solid var(--border-light)}
-.sp-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--border-light);border-bottom:1px solid var(--border-light)}
-.sp-kpi{background:var(--bg-base);padding:14px 16px;text-align:center}
-.sp-kpi-label{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
-.sp-kpi-val{font-size:22px;font-weight:700}
-.sp-table-controls{display:flex;align-items:center;gap:12px;padding:10px 16px;background:var(--bg-base);border-bottom:1px solid var(--border-light)}
-.sp-info{font-size:11px;color:var(--text-muted)}
-@media(max-width:900px){.sp-kpis{grid-template-columns:repeat(3,1fr)}}
-@media(max-width:600px){.sp-kpis{grid-template-columns:repeat(2,1fr)}}
-/* Gantt subtareas */
-.sp-gantt-wrap{padding:8px 16px 12px;display:flex;flex-direction:column;gap:4px;border-top:1px solid var(--border-light)}
-.sp-gantt-row{display:flex;align-items:center;gap:10px;padding:6px 8px;background:var(--bg-hover);border-radius:4px;font-size:12px;flex-wrap:wrap}
-.sp-gantt-code{min-width:90px;font-weight:600;color:var(--text-primary)}
-.sp-gantt-name{flex:1;min-width:140px;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sp-gantt-cell{min-width:80px;color:var(--text-muted)}
-/* Vacaciones en calendario de capacidad */
-.c-vacation{background:rgba(99,102,241,.25)!important;color:#818cf8!important;font-weight:700;cursor:default}
-/* Tarjetas drawer Stand By / Backlog */
-.det-proj-card{background:var(--bg-hover);border:1px solid var(--border-light);border-radius:6px;padding:10px 12px;margin-bottom:8px;transition:background .15s}
-.det-proj-card:hover{background:var(--bg-card)}
-.ent-kpi-btn{cursor:pointer;border-radius:4px;transition:background .12s}
-.ent-kpi-btn:hover{background:var(--bg-hover)!important}
-/* ── Pestaña Entregables ── */
-.ent-toolbar{display:flex;align-items:center;gap:16px;padding:12px 20px;border-bottom:1px solid var(--border-light);flex-wrap:wrap;background:var(--bg-base)}
-.ent-filter-group{display:flex;align-items:center;gap:6px}
-.ent-label{font-size:11px;color:var(--text-muted);white-space:nowrap}
-.ent-input{background:var(--bg-hover);border:1px solid var(--border-light);border-radius:6px;color:var(--text-primary);font-size:12px;padding:5px 8px;outline:none}
-.ent-legend{display:flex;align-items:center;gap:12px;margin-left:auto;font-size:11px;color:var(--text-muted)}
-.ent-leg-item{display:flex;align-items:center;gap:5px}
-.ent-dot{display:inline-block;width:10px;height:10px;border-radius:50%}
-#ent-gantt-wrap{padding:12px 20px}
-/* Layout superior: resumen + kpi lado a lado */
-.ent-top-row{display:flex;gap:12px;padding:14px 20px 4px;align-items:flex-start}
-.ent-resumen-col{flex:7;min-width:0}
-.ent-kpi-col{flex:3;min-width:220px}
-/* Resumen mensual */
-#ent-resumen-wrap{padding:0}
-.ent-resumen-title{font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px}
-.ent-resumen-grid{display:flex;flex-direction:column;gap:2px;border:1px solid var(--border-light);border-radius:6px;overflow:hidden;background:var(--bg-card)}
-.ent-mes-row{display:flex;align-items:center;gap:10px;padding:5px 10px;border-bottom:1px solid rgba(255,255,255,.04)}
-.ent-mes-row:last-child{border-bottom:none}
-.ent-mes-label{font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;min-width:72px;letter-spacing:.03em;flex-shrink:0}
-.ent-mes-bloques{display:flex;flex-wrap:wrap;gap:2px;align-items:center;flex:1}
-.ent-bloque{width:11px;height:11px;border-radius:2px;cursor:pointer;flex-shrink:0;transition:transform .1s}
-.ent-bloque:hover{transform:scale(1.5);z-index:10}
-.ent-grupo{display:flex;align-items:center;gap:2px;margin-right:5px}
-.ent-grupo-count{font-size:9px;color:var(--text-muted);font-weight:700;min-width:8px;margin-left:2px}
-.ent-mes-vacio{font-size:10px;color:var(--text-dim);font-style:italic}
-/* Tarjeta indicadores ejecutivos */
-.ent-kpi-card{background:var(--bg-card);border:1px solid var(--border-light);border-radius:8px;padding:14px;height:100%;box-sizing:border-box}
-.ent-kpi-card-title{font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px}
-.ent-kpi-row{display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.05)}
-.ent-kpi-row:last-of-type{border-bottom:none}
-.ent-kpi-lbl{font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:5px}
-.ent-kpi-vals{display:flex;align-items:baseline;gap:5px}
-.ent-kpi-num{font-size:15px;font-weight:700;color:var(--text-primary)}
-.ent-kpi-pct{font-size:10px;color:var(--text-muted)}
-.ent-kpi-divider{border:none;border-top:1px solid var(--border-light);margin:10px 0}
-.ent-kpi-cumplimiento{text-align:center;padding:8px 0 2px}
-.ent-kpi-cum-lbl{font-size:10px;color:var(--text-muted);margin-bottom:4px}
-.ent-kpi-cum-val{font-size:28px;font-weight:800;line-height:1}
-.ent-empty{padding:60px;text-align:center;color:var(--text-muted);font-size:13px}
-</style></head>
-<body>
+function parseIssue(i){
+  const f=i.fields, rep=f.reporter;
+  let bit=f.customfield_10829, prox=f.customfield_10862;
+  const replanRaw = f.customfield_11269;
+  const replanificacion = replanRaw ? (typeof replanRaw==='object' ? adfToText(replanRaw).trim() : replanRaw) : null;
+  if(bit&&typeof bit==='object') bit=adfToText(bit).trim();
+  if(prox&&typeof prox==='object') prox=adfToText(prox).trim();
+  let desc=f.description;
+  if(desc&&typeof desc==='object') desc=adfToText(desc).trim();
+  else if(typeof desc!=='string') desc=null;
+  return{
+    key:i.key,
+    codigo:f.customfield_10934||null,
+    summary:f.summary,
+    status:f.status.name,
+    assignee:f.assignee?f.assignee.displayName:null,
+    asignado:f.customfield_10970||null,
+    responsableDF:f.customfield_10969||null,
+    reporter:rep?rep.displayName:null,
+    labels:f.labels||[],
+    duedate:f.duedate||null,
+    fechaInicio:f.customfield_10015||null,
+    pais:f.customfield_10592?f.customfield_10592.value:null,
+    area:f.customfield_10930?f.customfield_10930.value:null,
+    categoria:f.customfield_10659?f.customfield_10659.value:null,
+    aplicacion:f.customfield_11203?f.customfield_11203.value:null,
+    planPct:f.customfield_10725!==undefined?f.customfield_10725:null,
+    realPct:f.customfield_10726!==undefined?f.customfield_10726:null,
+    desvioPct:f.customfield_10759!==undefined?f.customfield_10759:null,
+    pctAnalisis:f.customfield_10895!==undefined?f.customfield_10895:null,
+    pctDesarrollo:f.customfield_10928!==undefined?f.customfield_10928:null,
+    pctPruebas:f.customfield_10929!==undefined?f.customfield_10929:null,
+    docFuncional:f.customfield_10931?f.customfield_10931.value:null,
+    bloqueante:f.customfield_11003?f.customfield_11003.value:null,
+    conformidad:f.customfield_11004?f.customfield_11004.value:null,
+    prioridad:f.customfield_11037?f.customfield_11037.value:null,
+    sponsor:f.customfield_11070?f.customfield_11070.value:null,
+    condicion:f.customfield_11170||null,
+    bitacora:bit||null,
+    proximosPasos:prox||null,
+    replanificacion:replanificacion||null,
+    descripcion:desc||null,
+  };
+}
 
-<div class="loading-screen" id="loading-screen">
-  <div class="loading-spinner"></div>
-  <div class="loading-title">PMO Dashboard — Efletexia</div>
-  <div class="loading-text" id="loading-text">Conectando con Jira...</div>
-</div>
-<div class="error-screen hidden" id="error-screen">
-  <div style="font-size:32px">⚠️</div>
-  <div class="loading-title">Error al cargar datos</div>
-  <div class="error-msg" id="error-msg"></div>
-  <button class="btn-retry" onclick="loadData()">Reintentar</button>
-</div>
+function updateKpis(data){
+  const t=data.length;
+  const crit=data.filter(e=>e.desvioPct!==null&&Math.abs(e.desvioPct)>0.17).length;
+  const tol =data.filter(e=>e.desvioPct!==null&&Math.abs(e.desvioPct)>=0.05&&Math.abs(e.desvioPct)<=0.17).length;
+  const onT =data.filter(e=>e.desvioPct!==null&&Math.abs(e.desvioPct)<0.05).length;
+  const avgs=data.map(e=>e.realPct!==null?e.realPct:null).filter(v=>v!==null);
+  const avg =avgs.length?Math.round(avgs.reduce((a,b)=>a+b,0)/avgs.length*100):0;
+  const cj  =data.filter(e=>e.duedate&&e.duedate.startsWith('2026-06')).length;
+  const mainEpicsTotal=epics.filter(e=>!SPECIAL_EPIC_KEYS.includes(e.key)).length;
+  const isFiltered=data.length<mainEpicsTotal;
+  function setKpi(id,val){
+    const el=document.getElementById(id); if(!el) return;
+    const prev=el.dataset.val;
+    if(prev!==String(val)){
+      el.style.transition='opacity .15s'; el.style.opacity='0.3';
+      setTimeout(()=>{ el.textContent=val; el.dataset.val=String(val); el.style.opacity='1'; },150);
+    }
+  }
+  setKpi('kpi-total',isFiltered?`${t}`:t);
+  setKpi('kpi-crit', crit);
+  setKpi('kpi-tol',  tol);
+  setKpi('kpi-ont',  onT);
+  setKpi('kpi-avg',  avg+'%');
+  setKpi('kpi-cj',   cj);
+  document.getElementById('hdr-meta').textContent=isFiltered
+    ?`PMO TI · ${t} de ${mainEpicsTotal} épicas`
+    :`PMO TI · ${mainEpicsTotal} épicas`;
+}
 
-<header class="header">
+function renderTable(data){
+  const mainData = data.filter(e=>!SPECIAL_EPIC_KEYS.includes(e.key));
+  updateKpis(mainData);
+  const info=document.getElementById('table-info-text');
+  if(info) info.innerHTML=`Mostrando <strong>${mainData.length}</strong> de ${epics.filter(e=>!SPECIAL_EPIC_KEYS.includes(e.key)).length} épicas`;
+  const data_=mainData;
+  const tb=document.getElementById('table-body');
+  if(!data_.length){ tb.innerHTML='<tr><td colspan="15" style="text-align:center;padding:40px;color:var(--text-muted)">Sin resultados</td></tr>'; return; }
+  tb.innerHTML=data_.map(e=>{
+    const semaforo = getSemaforoPortafolio(e);
+    return `
+    <tr data-key="${e.key}">
+      <td style="text-align:center;font-size:16px">${semaforo}</td>
+      <td style="text-align:center;font-weight:600;color:var(--text-primary)">${e.prioridad||'—'}</td>
+      <td class="code"><a class="jlink" href="${JIRA_BASE}${e.key}" target="_blank" onclick="event.stopPropagation()">${esc(e.codigo||e.key)}</a></td>
+      <td class="proj" title="${esc(e.summary)}">${esc(e.summary)}</td>
+      <td class="cat">${esc(e.categoria)||'<span style="color:var(--text-muted)">—</span>'}</td>
+      <td class="muted">${e.area?`<span class="pill">${esc(e.area)}</span>`:'—'}</td>
+      <td class="muted">${esc(e.sponsor)||'—'}</td>
+      <td><span class="badge badge-${sbClass(e.status)}">${e.status}</span></td>
+      <td class="muted">${e.planPct!==null?Math.round(e.planPct*100)+'% / '+(e.realPct!==null?Math.round(e.realPct*100)+'%':'—'):'—'}</td>
+      <td class="muted" style="color:${e.desvioPct!==null?(Math.abs(e.desvioPct)>0.17?'var(--red)':Math.abs(e.desvioPct)>=0.05?'var(--yellow)':'var(--green)'):'var(--text-muted)'}">
+        ${e.desvioPct!==null?Math.round(e.desvioPct*100)+'%':'—'}</td>
+      <td class="muted">${e.pctDesarrollo!==null?Math.round(e.pctDesarrollo*100)+'% / '+(e.pctPruebas!==null?Math.round(e.pctPruebas*100)+'%':'—'):'—'}</td>
+      <td class="muted">${fmtD(e.fechaInicio)||'—'}</td>
+      <td class="muted">${fmtD(e.duedate)||'—'}</td>
+      <td style="max-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-muted)" title="${esc(e.condicion||'')}">${esc(e.condicion||'—')}</td>
+      <td class="muted">${e.conformidad==='Si'?'<span style="color:var(--green);font-size:15px">✓</span>':'—'}</td>
+      <td class="muted">${e.docFuncional==='Si'?'<span style="color:var(--green);font-size:15px">✓</span>':e.docFuncional==='No'?'<span style="color:var(--red);font-size:15px">✕</span>':'—'}</td>
+      <td><button class="btn-action" type="button" title="Cronograma y detalles" onclick="openModal('${e.key}');event.stopPropagation()">···</button></td>
+    </tr>`;
+  }).join('');
+}
 
-  <div class="header-left">
-    <div class="header-icon">P</div>
-    <span class="header-title">PMO Dashboard — Efletexia</span>
-  </div>
-  <div style="display:flex;align-items:center;gap:10px">
-    <div class="header-meta" id="hdr-meta">PMO TI · cargando...</div>
-    <span class="last-update" id="last-update"></span>
-    <button class="refresh-btn" id="btn-refresh" onclick="loadData(true)" title="Actualizar desde Jira">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
-      Actualizar
-    </button>
-  </div>
-</header>
+
+// ── PORTAFOLIO FILTERS ────────────────────────────────────
+let sortCol=null, sortDir=1;
+
+function getFiltered(){
+  const s  = document.getElementById('s-search').value.toLowerCase();
+  const sp = document.getElementById('s-sponsor').value;
+  const p  = document.getElementById('s-pais').value;
+  const c  = document.getElementById('s-cat').value;
+  const ap = document.getElementById('s-app').value;
+  const sem = document.getElementById('s-sem').value;
+  const df = document.getElementById('s-df').value;
+  const a  = document.getElementById('s-area').value;
+  const ck = [...document.querySelectorAll('.estados-grid input:checked')].map(x=>x.value);
+  return epics.filter(e=>{
+    if(SPECIAL_EPIC_KEYS.includes(e.key)) return false;
+    if(s && !(e.codigo||'').toLowerCase().includes(s) && !e.summary.toLowerCase().includes(s) && !e.key.toLowerCase().includes(s)) return false;
+    if(sp && e.sponsor!==sp) return false;
+    if(p  && e.pais!==p)    return false;
+    if(c  && e.categoria!==c) return false;
+    if(ap && e.aplicacion!==ap) return false;
+    if(sem && getSemaforoCategoria(e)!==sem) return false;
+    if(df && e.docFuncional!==df) return false;
+    if(a  && e.area!==a)    return false;
+    if(ck.length && !ck.includes(e.status)) return false;
+    return true;
+  });
+}
+
+function sortedData(data){
+  if(!sortCol) return data;
+  return [...data].sort((a,b)=>{
+    let av=a[sortCol], bv=b[sortCol];
+    if(av===null||av===undefined) return 1;
+    if(bv===null||bv===undefined) return -1;
+    if(typeof av==='number'&&typeof bv==='number') return (av-bv)*sortDir;
+    return String(av).localeCompare(String(bv),'es',{sensitivity:'base'})*sortDir;
+  });
+}
+
+['s-search','s-sponsor','s-pais','s-cat','s-app','s-sem','s-df','s-area'].forEach(id=>{
+  const el=document.getElementById(id);
+  if(el) el.addEventListener('input',()=>renderTable(sortedData(getFiltered())));
+});
+document.querySelectorAll('.estados-grid input').forEach(cb=>{
+  cb.addEventListener('change',()=>renderTable(sortedData(getFiltered())));
+});
+document.getElementById('btn-limpiar').addEventListener('click',()=>{
+  document.getElementById('s-search').value='';
+  ['s-sponsor','s-pais','s-cat','s-app','s-sem','s-df','s-area'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  document.querySelectorAll('.estados-grid input').forEach(cb=>cb.checked=false);
+  sortCol=null; sortDir=1;
+  document.querySelectorAll('#panel-portafolio thead th').forEach(t=>{
+    t.classList.remove('sort-asc','sort-desc');
+    const si=t.querySelector('.sort-icon'); if(si) si.textContent='';
+  });
+  renderTable(epics);
+});
+
+document.querySelectorAll('#panel-portafolio thead th[data-col]').forEach(th=>{
+  th.addEventListener('click',()=>{
+    const col=th.dataset.col;
+    if(sortCol===col){ sortDir*=-1; } else { sortCol=col; sortDir=1; }
+    document.querySelectorAll('#panel-portafolio thead th').forEach(t=>{
+      t.classList.remove('sort-asc','sort-desc');
+      const si=t.querySelector('.sort-icon'); if(si) si.textContent='';
+    });
+    th.classList.add(sortDir===1?'sort-asc':'sort-desc');
+    renderTable(sortedData(getFiltered()));
+  });
+});
 
 
-<nav class="tabs" role="tablist">
-  <div class="tab active" data-tab="portafolio">
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="12" height="9" rx="1.5"/><path d="M5 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/></svg>Portafolio
-  </div>
-  <div class="tab" data-tab="recursos">
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.314 2.686-6 6-6s6 2.686 6 6"/></svg>Recursos
-  </div>
-  <div class="tab" data-tab="capacity">
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M5 8h6M8 5v6"/></svg>Capacity
-  </div>
-  <div class="tab" data-tab="entregables">
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M10 5l3 3-3 3"/><path d="M3 4v8"/></svg>Entregables
-  </div>
-  </div>
-</nav>
+// ── LOAD PORTAFOLIO ────────────────────────────────────────
+async function fetchAllEpics(){
+  const resp = await fetch('/api/jira',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ jql:'project = PTS AND issuetype = Epic ORDER BY created ASC', fields:JIRA_FIELDS })
+  });
+  if(!resp.ok){ const err=await resp.text(); throw new Error(`Jira ${resp.status}: ${err}`); }
+  return resp.json();
+}
 
-<div class="tab-panel active" id="panel-portafolio">
-  <div class="kpis" id="kpis-section"></div>
-  <div class="filters">
-    <div class="filter-group">
-      <label class="filter-label" for="s-search">Buscar</label>
-      <input id="s-search" class="filter-input" placeholder="Código/proyecto..." autocomplete="off"/>
+async function loadData(manual=false){
+  const loading    = document.getElementById('loading-screen');
+  const errorScr   = document.getElementById('error-screen');
+  const refreshBtn = document.getElementById('btn-refresh');
+  if(manual){ refreshBtn.classList.add('spinning'); }
+  else { loading.classList.remove('hidden'); errorScr.classList.add('hidden'); }
+  document.getElementById('loading-text').textContent='Cargando épicas desde Jira...';
+  try{
+    const data   = await fetchAllEpics();
+    const issues = data.issues||[];
+    document.getElementById('loading-text').textContent=`Procesando ${issues.length} épicas...`;
+    epics = issues.map(parseIssue);
+
+    function populateSelect(id,values,allLabel){
+      const sel=document.getElementById(id); if(!sel) return;
+      const cur=sel.value;
+      sel.innerHTML=`<option value="">${allLabel}</option>`+
+        [...new Set(values)].sort().map(v=>`<option${v===cur?' selected':''}>${v}</option>`).join('');
+    }
+    populateSelect('s-sponsor', epics.map(e=>e.sponsor).filter(Boolean),'Todos');
+    populateSelect('s-pais',    epics.map(e=>e.pais).filter(Boolean),'Todos');
+    populateSelect('s-cat',     epics.map(e=>e.categoria).filter(Boolean),'Todas');
+    populateSelect('s-app',     APLICACIONES_JIRA,'Todas');
+    populateSelect('s-area',    epics.map(e=>e.area).filter(Boolean),'Todas');
+
+    document.getElementById('last-update').textContent='Actualizado '+new Date().toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'});
+    loading.classList.add('hidden');
+    errorScr.classList.add('hidden');
+    refreshBtn.classList.remove('spinning');
+
+    document.getElementById('kpis-section').innerHTML=`
+      <div class="kpi"><div class="kpi-label">Total</div><div class="kpi-value c-white" id="kpi-total"></div></div>
+      <div class="kpi"><div class="kpi-label">Críticos</div><div class="kpi-value c-red" id="kpi-crit"></div><div class="kpi-sub">Desv &gt;17%</div></div>
+      <div class="kpi"><div class="kpi-label">Tolerancia</div><div class="kpi-value c-yellow" id="kpi-tol"></div><div class="kpi-sub">Desv 5–17%</div></div>
+      <div class="kpi"><div class="kpi-label">On Track</div><div class="kpi-value c-blue" id="kpi-ont"></div><div class="kpi-sub">Desv &lt;5%</div></div>
+      <div class="kpi"><div class="kpi-label">Avance prom.</div><div class="kpi-value c-cyan" id="kpi-avg"></div></div>
+      <div class="kpi"><div class="kpi-label">Cierre junio</div><div class="kpi-value c-green" id="kpi-cj"></div></div>
+    `;
+    sortCol=null; sortDir=1;
+    const mainEpics=epics.filter(e=>!SPECIAL_EPIC_KEYS.includes(e.key));
+    renderTable(mainEpics);
+    updateKpis(mainEpics);
+    renderSpecialSections();
+  }catch(err){
+    console.error(err);
+    loading.classList.add('hidden');
+    refreshBtn.classList.remove('spinning');
+    if(!manual){
+      errorScr.classList.remove('hidden');
+      document.getElementById('error-msg').textContent=err.message;
+    } else {
+      document.getElementById('last-update').textContent='⚠ Error al actualizar';
+    }
+  }
+}
+
+loadData();
+
+
+loadData();
+
+document.getElementById('btn-export-rec')?.addEventListener('click', () => {
+  const _s=(document.getElementById('rec-search')?.value||'').toLowerCase();
+  const _ab=document.querySelector('.rec-area-btn.active');
+  const _ar=_ab?_ab.dataset.area:'';
+  const _pa=document.getElementById('rec-pais-sel')?.value||'';
+  const filtered=recursos.filter(r=>{
+    if(_s&&!r.nombre.toLowerCase().includes(_s)&&!r.proyectosDetalle.some(p=>p.nombre.toLowerCase().includes(_s))) return false;
+    if(_ar&&r.area!==_ar) return false;
+    if(_pa&&r.pais!==_pa) return false;
+    return true;
+  });
+  const hdr=['Recurso','Área','País','Proyectos','Horas Pend.','Horas Total','Horas Cerradas','Horas Libres','Entregas Pend.','Bloqueantes'];
+  const rows=filtered.map(r=>[r.nombre,r.area||'',r.pais||'',r.proyectos,r.horasPend,r.horasTotal,r.horasCerr,r.horasLibre,r.entregasPend,r.bloqueantes]);
+  downloadCSV([hdr,...rows],`recursos_${new Date().toISOString().slice(0,10)}.csv`);
+});
+
+// ── VENTAS: parse & render ─────────────────────────────────
+
+// ── GANTT & DETAIL (Portafolio) ────────────────────────────
+function buildGantt(e, stories){
+  if(!e.fechaInicio&&!e.duedate){
+    return `<div class="gno-dates"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="margin-bottom:10px;opacity:.4;display:block;margin-left:auto;margin-right:auto"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Sin fechas definidas en Jira.</div>`;
+  }
+  const sRaw=e.fechaInicio||e.duedate, eRaw=e.duedate||e.fechaInicio;
+  const pS=new Date(sRaw+'T12:00:00'), pE=new Date(eRaw+'T12:00:00');
+  let aS=new Date(pS.getFullYear(),pS.getMonth(),1);
+  let aE=new Date(pE.getFullYear(),pE.getMonth()+1,0);
+  if(TODAY>aE) aE=new Date(TODAY.getFullYear(),TODAY.getMonth()+1,0);
+  if(TODAY<aS) aS=new Date(aS.getFullYear(),aS.getMonth()-1,1);
+  const total=diffD(aS,aE)+1;
+  const months=[];
+  let cur=new Date(aS);
+  while(cur<=aE){
+    const mS=new Date(cur.getFullYear(),cur.getMonth(),1);
+    const mE=new Date(cur.getFullYear(),cur.getMonth()+1,0);
+    const vS=mS<aS?aS:mS, vE=mE>aE?aE:mE;
+    months.push({ label:cur.toLocaleDateString('es-PE',{month:'short',year:'2-digit'}).toUpperCase(), lp:(diffD(aS,vS)/total)*100, wp:((diffD(vS,vE)+1)/total)*100 });
+    cur=new Date(cur.getFullYear(),cur.getMonth()+1,1);
+  }
+  const grid=months.map(m=>`<div class="g-grid" style="left:${m.lp}%"></div>`).join('');
+  const tp=(diffD(aS,TODAY)/total)*100;
+  const tl=tp>=0&&tp<=100?`<div class="g-today" style="left:${tp.toFixed(2)}%"><div class="g-today-lbl">hoy</div></div>`:'';
+  function barPos(s,en){
+    if(!s||!en) return null;
+    const ds=new Date(s+'T12:00:00'), de=new Date(en+'T12:00:00');
+    if(isNaN(ds.getTime())||isNaN(de.getTime())) return null;
+    const l=Math.max(0,(diffD(aS,ds)/total)*100);
+    const r=Math.min(100,(diffD(aS,de)/total)*100);
+    return {l, w:Math.max(0.5,r-l)};
+  }
+  function pctHtml(plan,real){
+    if(plan===null&&real===null) return `<span style="color:var(--text-dim)">—</span>`;
+    const p=plan!==null?Math.round(plan*100):null;
+    const r=real!==null?Math.round(real*100):null;
+    const rColor=r===null?'var(--text-dim)':r>=100?'var(--green)':r>=50?'var(--yellow)':'var(--red)';
+    const pStr=p!==null?`<span style="color:var(--text-muted)">${p}%</span>`:'—';
+    const rStr=r!==null?`<span style="color:${rColor};font-weight:700">${r}%</span>`:'<span style="color:var(--text-dim)">0%</span>';
+    return `${pStr} / ${rStr}`;
+  }
+  const bL=Math.max(0,(diffD(aS,pS)/total)*100);
+  const bR=Math.min(100,(diffD(aS,pE)/total)*100);
+  const bW=Math.max(.5,bR-bL);
+  const bc=ganttLegendCls(e.status);
+  const dur=diffD(pS,pE);
+  const durWork=workDays(pS,pE);
+  const elapsed=workDays(pS,TODAY);
+  const remaining=workDays(TODAY,pE);
+  const pctT=durWork>0?Math.min(100,Math.round((elapsed/durWork)*100)):0;
+  const pctDev=e.pctDesarrollo!==null?Math.round(e.pctDesarrollo*100):null;
+  const advColor=pctDev===null?'var(--text-muted)':pctDev>=pctT?'var(--green)':pctDev>=pctT-15?'var(--yellow)':'var(--red)';
+  const epicRow=`<div class="grow g-epic-row">
+    <div class="grow-lbl" title="${esc(e.summary)}">${esc(e.summary)}</div>
+    <div class="grow-track">${grid}${tl}<div class="g-bar ${bc}" style="left:${bL.toFixed(2)}%;width:${bW.toFixed(2)}%"></div></div>
+    <div class="g-row-pct">${pctHtml(e.planPct,e.realPct)}</div>
+  </div>`;
+  let storyRows='';
+  if(stories===undefined||stories===null){
+    storyRows=`<div class="grow"><div class="grow-lbl" style="color:var(--text-dim);font-size:11px;font-style:italic">Cargando historias…</div><div class="grow-track">${grid}${tl}</div><div class="g-row-pct"></div></div>`;
+  } else if(!stories.length){
+    storyRows=`<div class="grow"><div class="grow-lbl" style="color:var(--text-dim);font-size:11px;font-style:italic">Sin historias con fechas</div><div class="grow-track">${grid}${tl}</div><div class="g-row-pct"></div></div>`;
+  } else {
+    // Helper: "Roxana Peralta" → "RP"
+    function initials(name){
+      if(!name) return '';
+      return name.trim().split(/\s+/).map(w=>w[0]||'').join('').toUpperCase();
+    }
+    // Helper: "2026-06-04" → "04/06"
+    function fmtShort(iso){
+      if(!iso) return null;
+      const d=new Date(iso+'T12:00:00');
+      if(isNaN(d.getTime())) return null;
+      return String(d.getDate()).padStart(2,'0')+'/'+(d.getMonth()+1).toString().padStart(2,'0');
+    }
+    // Build right-column: "IN · dd/mm → dd/mm" — single line
+    function metaCol(assigneeName, startIso, endIso){
+      const ini   = initials(assigneeName);
+      const start = fmtShort(startIso);
+      const end   = fmtShort(endIso);
+      const dateRange = [start, end].filter(Boolean).join(' → ');
+      const parts = [];
+      if(ini)       parts.push(`<span style="color:var(--blue);font-weight:700;letter-spacing:.3px">${esc(ini)}</span>`);
+      if(dateRange) parts.push(`<span style="color:var(--text-muted)">${dateRange}</span>`);
+      return parts.join(' ');
+    }
+
+    stories.forEach(story=>{
+      const sf=story.fields;
+      const sNom=sf.summary||story.key;
+      const sStatus=sf.status?sf.status.name:'', sCls=ganttLegendCls(sStatus);
+      const sStart=sf.customfield_10015||null, sEnd=sf.duedate||null;
+      const sPos=barPos(sStart, sEnd);
+      const sBarHtml=sPos?`<div class="g-bar ${sCls}" style="left:${sPos.l.toFixed(2)}%;width:${sPos.w.toFixed(2)}%"></div>`:'';
+
+      // Historia: iniciales = union de asignados de subtareas (únicos, en orden de aparición)
+      // Fechas = min(inicio subtareas) → max(fin subtareas)
+      const subItems = sf._subtasks||[];
+      let sRightCol;
+      if(subItems.length){
+        // Iniciales únicas preservando orden
+        const seenIni = new Set();
+        const subInits = [];
+        subItems.forEach(sub=>{
+          const name = sub.fields?.assignee?.displayName||'';
+          const ini  = initials(name);
+          if(ini && !seenIni.has(ini)){ seenIni.add(ini); subInits.push(ini); }
+        });
+        // Rango de fechas de subtareas
+        const subStarts = subItems.map(s=>s.fields?.customfield_10015).filter(Boolean);
+        const subEnds   = subItems.map(s=>s.fields?.duedate).filter(Boolean);
+        const minStart  = subStarts.length ? subStarts.reduce((a,b)=>a<b?a:b) : sStart;
+        const maxEnd    = subEnds.length   ? subEnds.reduce((a,b)=>a>b?a:b)   : sEnd;
+        const inisHtml  = subInits.length
+          ? `<span style="color:var(--blue);font-weight:700;letter-spacing:.3px">${subInits.join(', ')}</span>`
+          : '';
+        const dateRange = [fmtShort(minStart), fmtShort(maxEnd)].filter(Boolean).join(' → ');
+        const dateHtml  = dateRange ? `<span style="color:var(--text-muted)">${dateRange}</span>` : '';
+        sRightCol = [inisHtml, dateHtml].filter(Boolean).join(' ');
+      } else {
+        // Sin subtareas: usar asignado e fechas de la historia
+        sRightCol = metaCol(sf.assignee?sf.assignee.displayName:'', sStart, sEnd);
+      }
+      storyRows+=`<div class="grow g-story-row">
+        <div class="grow-lbl g-lbl-story" title="${esc(sNom)}">${esc(sNom)}</div>
+        <div class="grow-track">${grid}${tl}${sBarHtml}</div>
+        <div class="g-row-pct g-row-meta">${sRightCol}</div>
+      </div>`;
+      (sf._subtasks||[]).forEach(sub=>{
+        const tf=sub.fields, tNom=tf.summary||sub.key, tAsig=tf.assignee?tf.assignee.displayName:'';
+        const tStatus=tf.status?tf.status.name:'', tCls=ganttLegendCls(tStatus);
+        const tStart=tf.customfield_10015||null, tEnd=tf.duedate||null;
+        const tPos=barPos(tStart, tEnd);
+        const tBarHtml=tPos?`<div class="g-bar ${tCls}" style="left:${tPos.l.toFixed(2)}%;width:${tPos.w.toFixed(2)}%"></div>`:'';
+        const tRightCol=metaCol(tAsig, tStart, tEnd);
+        storyRows+=`<div class="grow g-subtask-row">
+          <div class="grow-lbl g-lbl-subtask" title="${esc(tNom)}">${esc(tNom)}</div>
+          <div class="grow-track">${grid}${tl}${tBarHtml}</div>
+          <div class="g-row-pct g-row-meta">${tRightCol}</div>
+        </div>`;
+      });
+    });
+  }
+  return `
+    <div class="gantt-meta">
+      <div class="gm-item"><span class="gm-lbl">Fecha inicio</span><span class="gm-val">${fmtD(e.fechaInicio)||'—'}</span></div>
+      <div class="gm-item"><span class="gm-lbl">Fecha vencimiento</span><span class="gm-val">${fmtD(e.duedate)||'—'}</span></div>
+      <div class="gm-item"><span class="gm-lbl">Duración</span><span class="gm-val">${dur>=0?dur+' días':'—'}</span></div>
+      <div class="gm-item"><span class="gm-lbl">Estado</span><span class="gm-val"><span class="badge badge-${sbClass(e.status)}">${e.status}</span></span></div>
     </div>
-    <div class="filter-group">
-      <label class="filter-label" for="s-pais">País</label>
-      <select id="s-pais" class="filter-input"><option value="">Todos</option></select>
-    </div>
-    <div class="filter-group">
-      <label class="filter-label" for="s-area">Área</label>
-      <select id="s-area" class="filter-input"><option value="">Todas</option></select>
-    </div>
-    <div class="filter-group">
-      <label class="filter-label" for="s-sponsor">Sponsor</label>
-      <select id="s-sponsor" class="filter-input"><option value="">Todos</option></select>
-    </div>
-    <div class="filter-group">
-      <label class="filter-label" for="s-cat">Categoría</label>
-      <select id="s-cat" class="filter-input"><option value="">Todas</option></select>
-    </div>
-    <div class="filter-group">
-      <label class="filter-label" for="s-app">Aplicación</label>
-      <select id="s-app" class="filter-input"><option value="">Todas</option></select>
-    </div>
-    <div class="filter-group">
-      <label class="filter-label" for="s-sem">Semáforo</label>
-      <select id="s-sem" class="filter-input">
-        <option value="">Todos</option>
-        <option value="produccion">Producción</option>
-        <option value="vencido">Vencido</option>
-        <option value="replanificado">Replanificado</option>
-        <option value="enplazo">En plazo</option>
-        <option value="sinfecha">Sin fecha</option>
-        <option value="standby">Stand By</option>
-      </select>
-    </div>
-    <div class="filter-group">
-      <label class="filter-label" for="s-df">DF</label>
-      <select id="s-df" class="filter-input">
-        <option value="">Todos</option>
-        <option value="Si">Sí</option>
-        <option value="No">No</option>
-      </select>
-    </div>
-    <div class="estados-wrap">
-      <div class="filter-label">Estado</div>
-      <div class="estados-grid">
-        <label class="estado-item"><input type="checkbox" value="Backlog"/> Backlog</label>
-        <label class="estado-item"><input type="checkbox" value="Análisis"/> Análisis</label>
-        <label class="estado-item"><input type="checkbox" value="Desarrollo"/> Desarrollo</label>
-        <label class="estado-item"><input type="checkbox" value="Pruebas"/> Pruebas</label>
-        <label class="estado-item"><input type="checkbox" value="Producción"/> Producción</label>
-        <label class="estado-item"><input type="checkbox" value="Planificado"/> Planificado</label>
-        <label class="estado-item"><input type="checkbox" value="Stand by"/> Stand by</label>
-        <label class="estado-item"><input type="checkbox" value="Desestimado"/> Desestimado</label>
+    <div style="overflow-x:auto"><div class="gc">
+      <div class="g-hdr">
+        <div class="g-lc"></div>
+        <div class="g-months">${months.map(m=>`<div class="g-month" style="left:${m.lp.toFixed(2)}%;width:${m.wp.toFixed(2)}%">${m.label}</div>`).join('')}</div>
+        <div class="g-rc" style="text-align:right;font-size:10px;color:var(--text-dim);padding-left:8px">Recursos · Fechas</div>
       </div>
+      ${epicRow}
+      ${storyRows}
+    </div></div>
+    ${dur>0?`<div class="g-prog-row"><div class="g-prog-lbl"><span>Tiempo transcurrido</span><span>${pctT}%</span></div><div class="g-prog-track"><div class="g-prog-fill" style="width:${pctT}%;background:var(--text-dim)"></div></div></div>`:''}
+    <div class="g-stats">
+      <div class="g-stat"><div class="g-stat-lbl">Días transcurridos</div><div class="g-stat-val" style="color:var(--text-muted)">${elapsed}</div></div>
+      <div class="g-stat"><div class="g-stat-lbl">Días restantes</div><div class="g-stat-val" style="color:${remaining===0?'var(--red)':'var(--blue)'}">${remaining}</div></div>
+      <div class="g-stat"><div class="g-stat-lbl">% Desarrollo</div><div class="g-stat-val" style="color:${advColor}">${pctDev!==null?pctDev+'%':'—'}</div></div>
     </div>
-    <button class="btn-limpiar" id="btn-limpiar" type="button">
-      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l10 10M13 3L3 13"/></svg>Limpiar
-    </button>
-    <button class="btn-export" id="btn-export-port" type="button" title="Exportar a CSV">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>CSV
-    </button>
-  </div>
-  <div class="table-info" id="table-info" style="justify-content:space-between">
-    <span id="table-info-text"></span>
-    <div class="semaforo-legend" style="display:flex;gap:14px;align-items:center;font-size:11px;color:var(--text-muted)">
-      <span style="display:flex;align-items:center;gap:5px"><svg width="10" height="10"><circle cx="5" cy="5" r="5" fill="#3B82F6"/></svg>Producción</span>
-      <span style="display:flex;align-items:center;gap:5px"><svg width="10" height="10"><circle cx="5" cy="5" r="5" fill="#ef4444"/></svg>Vencido</span>
-      <span style="display:flex;align-items:center;gap:5px"><svg width="10" height="10"><circle cx="5" cy="5" r="5" fill="#F5B800"/></svg>Replanificado</span>
-      <span style="display:flex;align-items:center;gap:5px"><svg width="10" height="10"><circle cx="5" cy="5" r="5" fill="#4ade80"/></svg>En plazo</span>
-      <span style="display:flex;align-items:center;gap:5px"><svg width="10" height="10"><circle cx="5" cy="5" r="5" fill="#6b7280"/></svg>Sin fecha</span>
-      <span style="display:flex;align-items:center;gap:5px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#F5B800" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Stand By</span>
+    <div class="g-legend">
+      <div class="g-legend-item"><div class="g-legend-dot" style="background:var(--green)"></div>Completado</div>
+      <div class="g-legend-item"><div class="g-legend-dot" style="background:#b8860b"></div>En curso</div>
+      <div class="g-legend-item"><div class="g-legend-dot" style="background:var(--text-dim)"></div>Pendiente</div>
+      <div class="g-legend-item"><div class="g-legend-dot" style="background:#8b1a1a"></div>Bloqueado</div>
+      <div class="g-legend-item"><div class="g-legend-dot" style="background:var(--red);width:2px;border-radius:0"></div>Hoy</div>
     </div>
-  </div>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th style="text-align:center;width:36px">🚦</th>
-          <th data-col="prioridad">Prior.<span class="sort-icon"></span></th>
-          <th data-col="codigo">Cód.<span class="sort-icon"></span></th>
-          <th data-col="summary">Proyecto<span class="sort-icon"></span></th>
-          <th data-col="categoria">Categoría<span class="sort-icon"></span></th>
-          <th data-col="area">Área<span class="sort-icon"></span></th>
-          <th data-col="sponsor">Sponsor<span class="sort-icon"></span></th>
-          <th data-col="status">Estado<span class="sort-icon"></span></th>
-          <th>Plan/Real</th>
-          <th data-col="desvioPct">Desv%<span class="sort-icon"></span></th>
-          <th>Des/Pru</th>
-          <th data-col="fechaInicio">Inicio<span class="sort-icon"></span></th>
-          <th data-col="duedate">Fin<span class="sort-icon"></span></th>
-          <th data-col="condicion">COND.<span class="sort-icon"></span></th>
-          <th data-col="conformidad">Conform.<span class="sort-icon"></span></th>
-          <th data-col="docFuncional">DF<span class="sort-icon"></span></th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody id="table-body"></tbody>
-    </table>
-  </div>
-  <div id="special-sections-container"></div>
-</div>
+    ${(()=>{
+      // Collect hours per assignee from all subtasks across all stories
+      if(!stories||!stories.length) return '';
+      const PART_COLORS=['#3fb950','#f0883e','#39c5f0','#f85149','#bc8cff','#58a6ff','#d29922','#ff7b72','#56d364','#ffa657'];
+      const byPerson={};
+      stories.forEach(story=>{
+        const subs=story.fields._subtasks||[];
+        subs.forEach(sub=>{
+          const name=sub.fields?.assignee?.displayName||'';
+          if(!name) return;
+          const hrs=sub.fields?.customfield_11136||0;
+          if(!byPerson[name]) byPerson[name]={name,hrs:0};
+          byPerson[name].hrs+=hrs;
+        });
+        // Also count story-level hours if no subtasks
+        if(!subs.length){
+          const name=story.fields?.assignee?.displayName||'';
+          if(!name) return;
+          const hrs=story.fields?.customfield_11136||0;
+          if(!byPerson[name]) byPerson[name]={name,hrs:0};
+          byPerson[name].hrs+=hrs;
+        }
+      });
+      const entries=Object.values(byPerson).filter(p=>p.hrs>0).sort((a,b)=>b.hrs-a.hrs);
+      if(!entries.length) return '';
+      const totalHrs=entries.reduce((s,p)=>s+p.hrs,0);
+      const maxHrs=entries[0].hrs;
+      const rows=entries.map((p,i)=>{
+        const ini=p.name.trim().split(/\s+/).map(w=>w[0]||'').join('').toUpperCase();
+        const pct=Math.round((p.hrs/totalHrs)*100);
+        const barW=Math.round((p.hrs/maxHrs)*100);
+        const col=PART_COLORS[i%PART_COLORS.length];
+        return `<div class="gpart-row">
+          <div class="gpart-ini" style="background:${col}22;color:${col}">${esc(ini)}</div>
+          <div class="gpart-name">${esc(p.name)}</div>
+          <div class="gpart-bar-wrap"><div class="gpart-bar" style="width:${barW}%;background:${col}"></div></div>
+          <div class="gpart-pct">${pct}%</div>
+          <div class="gpart-hrs">${p.hrs}h</div>
+        </div>`;
+      }).join('');
+      return `<div class="gpart-section">
+        <div class="gpart-title">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><path d="M21 21v-2a4 4 0 0 0-3-3.87"/></svg>
+          PARTICIPACIÓN DE RECURSOS
+        </div>
+        ${rows}
+        <div class="gpart-total">Total: ${totalHrs}h</div>
+      </div>`;
+    })()}
+  `;
+}
+
+function buildDetail(e){
+  const bitHtml=e.bitacora?`<div class="log-box">${esc(e.bitacora)}</div>`:`<div class="log-box empty">Sin registros en bitácora</div>`;
+  const proxHtml=e.proximosPasos?`<div class="log-box">${esc(e.proximosPasos)}</div>`:`<div class="log-box empty">Sin próximos pasos definidos</div>`;
+  const descHtml=e.descripcion?`<div class="log-box" style="border-left-color:var(--blue)">${esc(e.descripcion)}</div>`:`<div class="log-box empty">Sin descripción definida</div>`;
+  return `
+    <div class="log-section">
+      <div class="log-title"><div class="log-title-bar" style="background:var(--blue)"></div>Detalles clave</div>
+      ${descHtml}
+      <div class="log-spacer"></div>
+      <div class="log-title"><div class="log-title-bar"></div>Bitácora</div>
+      ${bitHtml}
+      <div class="log-spacer"></div>
+      <div class="log-title"><div class="log-title-bar"></div>Próximos pasos</div>
+      ${proxHtml}
+    </div>`;
+}
 
 
-<!-- ══ RECURSOS ══ -->
-<div class="tab-panel" id="panel-recursos">
-  <div class="rec-kpis" id="rec-kpis">
-    <div class="kpi"><div class="kpi-label">Recursos</div><div class="kpi-value c-white" id="rec-kpi-total">—</div></div>
-  </div>
+// ── MODAL (Portafolio) ─────────────────────────────────────
+let activeEpic=null, activeTab='gantt';
+const epicStoriesCache={};
 
-  <!-- Filtros Recursos: búsqueda + área + país -->
-  <div class="rec-filters" id="rec-filters-bar">
-    <div class="rec-search-wrap">
-      <svg class="rec-search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-      <input id="rec-search" class="rec-search-input" placeholder="Buscar recurso o proyecto..." autocomplete="off"/>
-    </div>
-    <div id="rec-area-btns" class="rec-area-btns"></div>
-    <select id="rec-pais-sel" class="rec-pais-sel filter-input">
-      <option value="">Todos los países</option>
-    </select>
-    <button class="rec-limpiar" id="rec-limpiar-btn">
-      <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l10 10M13 3L3 13"/></svg>Limpiar
-    </button>
-    <button class="btn-export" id="btn-export-rec" type="button"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>CSV</button>
-  </div>
+async function loadEpicStories(epicKey){
+  if(epicStoriesCache[epicKey]!==undefined) return epicStoriesCache[epicKey];
+  try{
+    const resp=await fetch('/api/jira',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'stories',epicKey})});
+    if(!resp.ok) return null;
+    const data=await resp.json();
+    epicStoriesCache[epicKey]=data.stories||[];
+    return epicStoriesCache[epicKey];
+  }catch(err){ console.error('Error historias:',err); return null; }
+}
 
-  <!-- Rango de fechas -->
-  <div class="rec-corte">
-    <div class="rec-corte-label">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-      RANGO DE FECHAS
-    </div>
-    <div id="rec-corte-info" style="font-size:12px;color:var(--text-muted)"></div>
-    <div style="display:flex;align-items:center;gap:8px;margin-left:24px">
-      <span style="font-size:11px;color:var(--text-muted)">Desde</span>
-      <input type="date" id="rec-rango-desde" class="rec-date-input"/>
-      <span style="font-size:11px;color:var(--text-muted)">Hasta</span>
-      <input type="date" id="rec-rango-hasta" class="rec-date-input"/>
-      <button id="rec-rango-limpiar" class="rec-ver-btn" style="font-size:11px;padding:4px 10px">Limpiar rango</button>
-    </div>
-  </div>
-  <!-- Fecha de corte (oculto): sigue existiendo en el DOM para no romper el cálculo mensual interno, pero ya no se muestra ni es editable -->
-  <input type="hidden" id="rec-fecha-corte"/>
+function renderModalBody(){
+  document.getElementById('modal-body').innerHTML =
+    activeTab==='gantt' ? buildGantt(activeEpic) : buildDetail(activeEpic);
+}
 
-  <div class="rec-table-info" id="rec-table-info">Sin datos cargados</div>
+function openModal(key){
+  activeEpic=epics.find(e=>e.key===key);
+  if(!activeEpic) return;
+  activeTab='gantt';
+  document.getElementById('modal-key').textContent  = activeEpic.codigo||activeEpic.key;
+  document.getElementById('modal-title').textContent = activeEpic.summary;
+  document.getElementById('modal-panel').className  = 'modal-panel w-gantt';
+  document.querySelectorAll('.modal-tab').forEach(t=>t.classList.toggle('active',t.dataset.mtab==='gantt'));
+  renderModalBody();
+  document.getElementById('modal-overlay').classList.add('open');
+  loadEpicStories(key).then(stories=>{
+    if(activeEpic&&activeEpic.key===key&&activeTab==='gantt')
+      document.getElementById('modal-body').innerHTML=buildGantt(activeEpic,stories);
+  });
+}
 
-  <!-- BLOQUE 1: Recursos por Proyecto -->
-  <div class="rec-cards-wrap" id="rec-cards-wrap">
-    <div class="rec-empty">Los datos de recursos se cargarán al abrir esta pestaña</div>
-  </div>
+document.querySelectorAll('.modal-tab').forEach(t=>{
+  t.addEventListener('click',()=>{
+    activeTab=t.dataset.mtab;
+    document.querySelectorAll('.modal-tab').forEach(x=>x.classList.toggle('active',x===t));
+    document.getElementById('modal-panel').className='modal-panel '+(activeTab==='gantt'?'w-gantt':'w-detail');
+    if(activeTab==='gantt'&&activeEpic){
+      renderModalBody();
+      const key=activeEpic.key;
+      loadEpicStories(key).then(stories=>{
+        if(activeEpic&&activeEpic.key===key&&activeTab==='gantt')
+          document.getElementById('modal-body').innerHTML=buildGantt(activeEpic,stories);
+      });
+    } else { renderModalBody(); }
+  });
+});
+document.getElementById('modal-close').addEventListener('click',()=>document.getElementById('modal-overlay').classList.remove('open'));
+document.getElementById('modal-overlay').addEventListener('click',function(ev){ if(ev.target===this) this.classList.remove('open'); });
 
-  <!-- BLOQUE 2: Dashboard Horas por Mes -->
-  <div class="rec-chart-wrap" id="rec-chart-wrap"></div>
-</div>
 
+// ── RECURSOS ──────────────────────────────────────────────
+(function initRecursos(){
+  document.getElementById('rec-search').addEventListener('input', renderRecursos);
+  const rDesde=document.getElementById('rec-rango-desde');
+  const rHasta=document.getElementById('rec-rango-hasta');
+  if(rDesde){ rDesde.addEventListener('change', renderRecursos); rDesde.addEventListener('input', renderRecursos); }
+  if(rHasta){ rHasta.addEventListener('change', renderRecursos); rHasta.addEventListener('input', renderRecursos); }
+  const rLimpiar=document.getElementById('rec-rango-limpiar');
+  if(rLimpiar) rLimpiar.addEventListener('click', ()=>{
+    if(rDesde) rDesde.value='';
+    if(rHasta) rHasta.value='';
+    renderRecursos();
+  });
+})();
 
-<!-- ══ CAPACITY ══ -->
-<div class="tab-panel" id="panel-capacity">
-  <!-- KPIs -->
-  <div class="cap-kpis">
-    <div class="kpi"><div class="kpi-label">Personas</div><div class="kpi-value c-white" id="cap-kpi-personas">—</div></div>
-    <div class="kpi"><div class="kpi-label">Horas Registradas</div><div class="kpi-value c-cyan" id="cap-kpi-horas">—</div></div>
-    <div class="kpi"><div class="kpi-label">Utilización Prom.</div><div class="kpi-value c-green" id="cap-kpi-util">—</div></div>
-    <div class="kpi" style="display:none"><div id="cap-kpi-planeadas"></div></div>
-  </div>
-  <!-- Filters bar -->
-  <div class="filters" id="cap-filters-bar">
-    <div class="filter-group">
-      <label class="filter-label" for="cap-area">Área</label>
-      <select id="cap-area" class="filter-input"><option value="">Todas</option></select>
-    </div>
-    <div class="filter-group">
-      <label class="filter-label" for="cap-pais">País</label>
-      <select id="cap-pais" class="filter-input"><option value="">Todos</option></select>
-    </div>
-    <div class="filter-group">
-      <label class="filter-label" for="cap-persona">Persona</label>
-      <select id="cap-persona" class="filter-input" style="min-width:140px"><option value="">Todas</option></select>
-    </div>
-    <div class="filter-group">
-      <label class="filter-label" for="cap-orden">Ordenar por</label>
-      <select id="cap-orden" class="filter-input">
-        <option value="nombre">Nombre (A-Z)</option>
-        <option value="horas_desc">Horas ↓</option>
-        <option value="horas_asc">Horas ↑</option>
-        <option value="area">Área</option>
-        <option value="pais">País</option>
-      </select>
-    </div>
-    <button class="btn-limpiar" id="cap-limpiar" type="button">
-      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l10 10M13 3L3 13"/></svg>Limpiar
-    </button>
-    <button class="btn-export" id="btn-export-cap" type="button">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>CSV
-    </button>
-  </div>
-  <!-- Calendar nav -->
-  <div class="cap-cal-nav" id="cap-cal-nav">
-    <button id="cap-cal-prev">&#8249;</button>
-    <span class="cap-cal-nav-title" id="cap-cal-title">—</span>
-    <button id="cap-cal-next">&#8250;</button>
-    <div class="cap-cal-nav-jump">
-      <select id="cap-cal-month"></select>
-      <select id="cap-cal-year"></select>
-    </div>
-  </div>
-  <!-- Calendar grid -->
-  <div class="cap-cal-wrap" id="cap-cal-wrap">
-    <div class="cap-empty" style="padding:40px;text-align:center;color:var(--text-dim)">Cargando calendario…</div>
-  </div>
-</div>
+let recHistoriasCache = [];
 
-</div>
+async function loadRecursos(){
+  recursosLoaded=true;
+  const info=document.getElementById('rec-table-info');
+  if(info) info.textContent='Cargando recursos desde Jira...';
+  try{
+    const respRec=await fetch('/api/jira',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'recursos'})});
+    if(!respRec.ok) throw new Error('Error recursos '+respRec.status);
+    const dataRec=await respRec.json();
+    recHistoriasCache=dataRec.issues||[];
 
-<div class="tab-panel" id="panel-entregables">
-  <div class="ent-top-row">
-    <div class="ent-resumen-col" id="ent-resumen-wrap"></div>
-    <div class="ent-kpi-col" id="ent-kpi-wrap"></div>
-  </div>
-  <div class="ent-toolbar">
-    <div class="ent-filter-group">
-      <label class="ent-label">Buscar</label>
-      <input type="text" id="ent-search" class="ent-input" placeholder="Código o proyecto..." autocomplete="off" oninput="renderEntregables()" style="width:200px">
-    </div>
-    <div class="ent-filter-group">
-      <label class="ent-label">Desde</label>
-      <input type="date" id="ent-desde" class="ent-input">
-    </div>
-    <div class="ent-filter-group">
-      <label class="ent-label">Hasta</label>
-      <input type="date" id="ent-hasta" class="ent-input">
-    </div>
-    <button class="btn-action" onclick="renderEntregables()">Aplicar</button>
-    <button class="btn-action" onclick="limpiarEntFiltros()">Limpiar</button>
-    <div class="ent-legend">
-      <span class="ent-leg-item"><span class="ent-dot" style="background:#ef4444"></span>Vencido</span>
-      <span class="ent-leg-item"><svg width="12" height="12" viewBox="0 0 12 12"><circle cx="6" cy="6" r="5" fill="#F5B800"/></svg> Replanificado</span>
-      <span class="ent-leg-item"><span class="ent-dot" style="background:#4ade80"></span>En plazo</span>
-      <span class="ent-leg-item"><span class="ent-dot" style="background:#3B82F6"></span>Producción</span>
-    </div>
-  </div>
-  <div id="ent-gantt-wrap"></div>
-  <!-- Tooltip detalle bitácora -->
-  <div id="ent-tooltip" style="display:none;position:fixed;z-index:999;background:#ffffff;border:1px solid #dee2e6;border-radius:10px;padding:20px;max-width:380px;box-shadow:0 12px 32px rgba(0,0,0,.18);font-family:inherit">
-    <div style="font-weight:700;font-size:15px;color:#212529;margin-bottom:6px;line-height:1.3" id="ent-tooltip-title"></div>
-    <div style="font-size:12px;color:#6c757d;margin-bottom:12px;font-weight:500;padding:4px 10px;background:#f1f3f5;border-radius:4px;display:inline-block" id="ent-tooltip-fecha"></div>
-    <div style="font-size:13px;color:#343a40;white-space:pre-wrap;line-height:1.7;max-height:220px;overflow-y:auto;border-top:1px solid #e9ecef;padding-top:10px;margin-top:4px" id="ent-tooltip-bit"></div>
-    <div style="margin-top:14px;text-align:right"><button onclick="document.getElementById('ent-tooltip').style.display='none'" style="background:#343a40;color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer;font-weight:600">Cerrar</button></div>
-  </div>
-</div>
+    // Asegurar que capRows (horas registradas, misma fuente que Capacity) esté cargado — sin duplicar el fetch si ya se cargó
+    if(!capacityLoaded) await loadCapacity();
 
-<!-- CAPACITY DETAIL DRAWER -->
-<div id="cap-detail-overlay" style="display:none" class="cap-detail-overlay" onclick="closeCapDetail(event)">
-  <div class="cap-detail-panel" onclick="event.stopPropagation()">
-    <div class="cap-detail-hdr">
-      <div>
-        <div class="cap-detail-title" id="cap-detail-title">—</div>
-        <div class="cap-detail-sub" id="cap-detail-sub">—</div>
-      </div>
-      <button class="cap-detail-close" onclick="closeCapDetail()">✕</button>
-    </div>
+    recomputeRecursos();
 
-    <div class="cap-detail-body">
-      <table class="cap-detail-table">
-        <thead><tr>
-          <th>Fecha</th><th>Horas</th><th>Código</th><th>Proyecto</th><th>Actividad</th><th>Comentario</th>
-        </tr></thead>
-        <tbody id="cap-detail-body"></tbody>
+    // Populate área pills
+    const areas=[...new Set(recursos.map(r=>r.area).filter(Boolean))].sort();
+    const areaWrap=document.getElementById('rec-area-btns');
+    if(areaWrap){
+      areaWrap.innerHTML=areas.map(a=>`<button class="rec-area-btn" data-area="${esc(a)}">${esc(a)}</button>`).join('');
+      areaWrap.querySelectorAll('.rec-area-btn').forEach(btn=>{
+        btn.addEventListener('click',()=>{
+          const active=btn.classList.contains('active');
+          areaWrap.querySelectorAll('.rec-area-btn').forEach(b=>b.classList.remove('active'));
+          if(!active) btn.classList.add('active');
+          renderRecursos();
+        });
+      });
+    }
+    // Populate país select
+    const paises=[...new Set(recursos.map(r=>r.pais).filter(Boolean))].sort();
+    const paisSel=document.getElementById('rec-pais-sel');
+    if(paisSel) paisSel.innerHTML=`<option value="">Todos los países</option>`+paises.map(p=>`<option>${p}</option>`).join('');
+
+    document.getElementById('rec-limpiar-btn').addEventListener('click',()=>{
+      document.getElementById('rec-search').value='';
+      document.querySelectorAll('.rec-area-btn').forEach(b=>b.classList.remove('active'));
+      if(paisSel) paisSel.value='';
+      renderRecursos();
+    });
+    document.getElementById('rec-pais-sel').addEventListener('change', renderRecursos);
+  }catch(err){
+    console.error('Error recursos:', err);
+    if(info) info.textContent='Error al cargar recursos: '+err.message;
+  }
+}
+
+// Días del mes seleccionado (para las columnas de la matriz Bloque 1 y para recalcular al cambiar la fecha de corte)
+let recAnioActual = TODAY.getFullYear();
+let recMesActual  = TODAY.getMonth();
+
+function recomputeRecursos(){
+  const historias = recHistoriasCache;
+  const CAPACITY=168;
+  const today=new Date(); today.setHours(0,0,0,0);
+  const fechaCorteEl=document.getElementById('rec-fecha-corte');
+  const fechaCorte=fechaCorteEl&&fechaCorteEl.value?new Date(fechaCorteEl.value+'T12:00:00'):today;
+  const mesActual=fechaCorte.getMonth();
+  const anioActual=fechaCorte.getFullYear();
+  recMesActual=mesActual; recAnioActual=anioActual;
+  const diasMes=new Date(anioActual,mesActual+1,0).getDate();
+  const diaCorte=fechaCorte.getDate();
+  const horasTranscurridas=Math.round((diaCorte/diasMes)*CAPACITY);
+  const horasFuturas=CAPACITY-horasTranscurridas;
+  const mesNombre=fechaCorte.toLocaleDateString('es-PE',{month:'long',year:'numeric'});
+  const avanceMes=Math.round((diaCorte/diasMes)*100);
+  const infoBar=document.getElementById('rec-corte-info');
+  if(infoBar) infoBar.innerHTML=`<span style="color:var(--text-muted);font-size:12px">
+    ${mesNombre} &nbsp;|&nbsp; Capacidad: <span style="color:var(--blue)">${CAPACITY}h</span>
+    &nbsp;|&nbsp; Transcurridas: <span style="color:var(--text-muted)">${horasTranscurridas}h</span>
+    &nbsp;|&nbsp; Futuras: <span style="color:var(--yellow)">${horasFuturas}h</span>
+    &nbsp;|&nbsp; Avance mes: <span style="color:var(--green)">${avanceMes}%</span></span>`;
+
+  const byPerson={};
+  historias.forEach(h=>{
+    const f=h.fields;
+    const nombre=f.assignee?f.assignee.displayName:'Sin asignar';
+    const horasEst=f.customfield_11136||0;
+    const horasPend=f.customfield_11137||0;
+    const horasCerr=Math.max(0,horasEst-horasPend);
+    const epica=f._epicaParent||null;
+    const epicaKey=epica?epica.key:null;
+    const epicaNom=epica?(epica.summary||epica.key):'Sin épica';
+    const epicaCodigo=epica?.codigo||epicaKey;
+    let epicaContexto=epica?.contexto||null;
+    if(epicaContexto && typeof epicaContexto==='object') epicaContexto = adfToText(epicaContexto).trim();
+    const area=f.customfield_10930?f.customfield_10930.value:null;
+    const pais=f.customfield_10592?f.customfield_10592.value:null;
+    const bloq=f.customfield_11003?f.customfield_11003.value:null;
+    const status=f.status?f.status.name:'';
+    const isDone=['Finalizada','Producción','En producción','Cerrado','Done','Closed'].includes(status);
+    if(!byPerson[nombre]) byPerson[nombre]={nombre,area,pais,horasEst:0,horasPend:0,horasCerr:0,totalHistorias:0,entregasPend:0,bloqueantes:0,epicasMap:{}};
+    const p=byPerson[nombre];
+    p.horasEst+=horasEst; p.horasPend+=horasPend; p.horasCerr+=horasCerr;
+    p.totalHistorias++;
+    if(!isDone) p.entregasPend++;
+    if(bloq==='Si') p.bloqueantes++;
+    if(area&&!p.area) p.area=area;
+    if(pais&&!p.pais) p.pais=pais;
+    if(epicaKey){
+      if(!p.epicasMap[epicaKey]) p.epicasMap[epicaKey]={key:epicaKey,nombre:epicaNom,codigo:epicaCodigo,contexto:epicaContexto,epicaFechaInicio:epica?.fechaInicio||null,epicaFechaFin:epica?.fechaFin||null,horasEst:0,horasPend:0,actividades:0,pendientes:0,tareas:[]};
+      p.epicasMap[epicaKey].horasEst+=horasEst; p.epicasMap[epicaKey].horasPend+=horasPend;
+      p.epicasMap[epicaKey].actividades++;
+      if(!isDone) p.epicasMap[epicaKey].pendientes++;
+      const tareaParentKey = f._tareaParent?.key || null;
+      const responsable = f.assignee ? (findNomenclaturaByNombre(f.assignee.displayName)?.nombre || f.assignee.displayName) : null;
+      p.epicasMap[epicaKey].tareas.push({key:h.key,nombre:f.summary||h.key,status,isDone,horasEst,horasPend,fechaInicio:f.customfield_10015||null,fechaFin:f.duedate||null,fecha:f.customfield_10015||f.duedate||null,updated:f.updated||null,tareaParentKey,responsable});
+    }
+  });
+
+  recursos = Object.values(byPerson).map(p => {
+    const nom = findNomenclaturaByNombre(p.nombre);
+    const nombreCompleto = nom?.nombre || p.nombre;
+    const pais = nom?.pais || p.pais;
+    const area = nom?.area || p.area;
+
+    // Horas Planificadas del mes = días laborables (sin fines de semana, feriados del país ni vacaciones) × 8h
+    const diasLab = diasLaborablesDelMes(anioActual, mesActual, pais, nombreCompleto);
+    const horasPlanificadas = diasLab.length * 8;
+
+    // Horas Registradas del mes = misma fuente que Capacity (capRows), sin recalcular
+    const ymPrefix = `${anioActual}-${String(mesActual+1).padStart(2,'0')}`;
+    const horasRegistradas = capRows
+      .filter(r => (findNomenclaturaByNombre(r.persona)?.nombre || r.persona) === nombreCompleto && r.fecha && r.fecha.startsWith(ymPrefix))
+      .reduce((s,r) => s + r.horas, 0);
+    const horasDisponibles = Math.max(0, horasPlanificadas - horasRegistradas);
+
+    // Proyectos del mes: distribuir horas estimadas de cada subtarea entre su fecha inicio y fin, contando solo el mes filtrado.
+    // También se guarda el set de días asignados a cada proyecto, para la matriz día a día del Bloque 1.
+    // Y el detalle de tareas del mes (con su porción de horas), para que el popup "Ver" coincida con la matriz.
+    const proyectosMes = Object.values(p.epicasMap).map(e => {
+      // Se incluyen TODAS las subtareas del proyecto, sin filtrar por mes ni por si tienen fechas cargadas —
+      // así ninguna subtarea se pierde por falta de fecha o por inconsistencias de datos en Jira.
+      const tareasMes = (e.tareas||[]).map(t => ({...t, horasMes:t.horasEst}));
+      const horasMes = tareasMes.reduce((s,t)=>s+t.horasEst,0);
+      const horasPendMes = tareasMes.reduce((s,t)=>s+t.horasPend,0);
+      const pendientesMes = tareasMes.filter(t=>!t.isDone).length;
+      return {
+        key:e.key, nombre:e.nombre, codigo:e.codigo||e.key, contexto:e.contexto||null,
+        epicaFechaInicio:e.epicaFechaInicio||null, epicaFechaFin:e.epicaFechaFin||null,
+        horas:+horasMes.toFixed(1),
+        actividades:tareasMes.length, pendientes:pendientesMes, horasPend:+horasPendMes.toFixed(1),
+        tareas:tareasMes,
+      };
+    }).filter(pr => pr.actividades > 0).sort((a,b)=>b.horas-a.horas);
+
+    const proyectosMesCount = proyectosMes.length;
+    const horasPendMesTotal = +proyectosMes.reduce((s,pr)=>s+pr.horasPend,0).toFixed(1);
+    const entregasPendMesTotal = proyectosMes.reduce((s,pr)=>s+pr.pendientes,0);
+
+    return {
+      nombre:nombreCompleto, area, pais,
+      proyectos:proyectosMesCount,
+      horasPend:horasPendMesTotal, horasTotal:p.horasEst, horasCerr:p.horasCerr,
+      horasLibre:Math.max(0,CAPACITY-p.horasEst),
+      entregasPend:entregasPendMesTotal, bloqueantes:p.bloqueantes,
+      proyectosDetalle:Object.values(p.epicasMap).map(e=>({key:e.key,nombre:e.nombre,horasTotal:e.horasEst,horasPend:e.horasPend,actividades:e.actividades,pendientes:e.pendientes,tareas:e.tareas||[]})).sort((a,b)=>b.horasTotal-a.horasTotal),
+      horasPlanificadas, horasRegistradas:+horasRegistradas.toFixed(1), horasDisponibles:+horasDisponibles.toFixed(1), proyectosMes,
+    };
+  }).filter(r=>r.nombre!=='Sin asignar').sort((a,b)=>b.horasPend-a.horasPend);
+
+  renderRecursos();
+}
+
+function renderRecursos(){
+  const search=(document.getElementById('rec-search')?.value||'').toLowerCase();
+  const activeAreaBtn=document.querySelector('.rec-area-btn.active');
+  const area=activeAreaBtn?activeAreaBtn.dataset.area:'';
+  const pais=document.getElementById('rec-pais-sel')?.value||'';
+
+  let filtered=recursos.filter(r=>{
+    if(search&&!r.nombre.toLowerCase().includes(search)&&!r.proyectosDetalle.some(p=>p.nombre.toLowerCase().includes(search))) return false;
+    if(area&&r.area!==area) return false;
+    if(pais&&r.pais!==pais) return false;
+    return true;
+  });
+
+  const sk=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+  sk('rec-kpi-total',filtered.length||'—');
+
+  const info=document.getElementById('rec-table-info');
+  if(info) info.textContent=`Mostrando ${filtered.length} de ${recursos.length} recursos`;
+
+  // ── Bloque 1: tarjetas agrupadas por PROYECTO (no por recurso) ─
+  const cardsWrap=document.getElementById('rec-cards-wrap');
+  if(cardsWrap){
+    if(!filtered.length){
+      cardsWrap.innerHTML = `<div class="rec-empty">${recursos.length===0?'Los datos de recursos se cargarán al abrir esta pestaña':'Sin resultados para los filtros aplicados'}</div>`;
+    } else {
+      // Agrupar todos los proyectos de todos los recursos filtrados, por clave de proyecto (épica)
+      const proyectosPorKey = {};
+      const ordenProyectos = [];
+      filtered.forEach(r=>{
+        (r.proyectosMes||[]).forEach(p=>{
+          if(!proyectosPorKey[p.key]){
+            proyectosPorKey[p.key] = { ...p, tareas: [] };
+            ordenProyectos.push(p.key);
+          }
+          proyectosPorKey[p.key].tareas.push(...(p.tareas||[]));
+        });
+      });
+
+      if(!ordenProyectos.length){
+        cardsWrap.innerHTML = '<div class="rec-card-proj-empty">Sin proyectos este mes</div>';
+      } else {
+        const rangoDesde = document.getElementById('rec-rango-desde')?.value || '';
+        const rangoHasta = document.getElementById('rec-rango-hasta')?.value || '';
+        const hayRango = !!(rangoDesde || rangoHasta);
+
+        const bloques = ordenProyectos.map(key=>{
+          const p = proyectosPorKey[key];
+          let tareasFiltradas = p.tareas||[];
+          if(hayRango){
+            // Desde -> Fecha de Inicio de la subtarea; Hasta -> Fecha Fin de la subtarea
+            tareasFiltradas = tareasFiltradas.filter(t=>{
+              if(rangoDesde && (!t.fechaInicio || t.fechaInicio < rangoDesde)) return false;
+              if(rangoHasta && (!t.fechaFin || t.fechaFin > rangoHasta)) return false;
+              return true;
+            });
+          }
+          // Ordenar tareas por fecha de inicio ascendente (las sin fecha van al final)
+          const tareasOrdenadas = tareasFiltradas.slice().sort((a,b)=>{
+            if(!a.fechaInicio && !b.fechaInicio) return 0;
+            if(!a.fechaInicio) return 1;
+            if(!b.fechaInicio) return -1;
+            return a.fechaInicio.localeCompare(b.fechaInicio);
+          });
+          const tareasRows = tareasOrdenadas.map(t=>{
+            const st = clsActStatus(t.status);
+            return `<tr>
+              <td>${esc(t.nombre)}</td>
+              <td>${t.responsable?`<a href="#" onclick="verRecurso('${esc(t.responsable)}');return false" style="color:var(--blue);text-decoration:none">${esc(t.responsable)}</a>`:'—'}</td>
+              <td>${fmtD(t.fechaInicio)||'—'}</td>
+              <td>${fmtD(t.fechaFin)||'—'}</td>
+              <td>${t.horasEst}h</td>
+              <td><span class="det-badge det-badge-${st.cls}">${st.label}</span></td>
+            </tr>`;
+          }).join('');
+          if(hayRango && !tareasOrdenadas.length) return null; // sin coincidencias en el rango: no mostrar este proyecto
+
+          return `<div class="rec-card">
+            <div class="rec-proj-block">
+              <div class="rec-proj-left">
+                <div class="rec-proj-block-header">
+                  <a href="${JIRA_BASE}${esc(p.key)}" target="_blank" style="color:var(--blue);text-decoration:none">${esc(p.codigo)}</a> · ${esc(p.nombre)}
+                </div>
+                <div class="rec-proj-fechas">${fmtD(p.epicaFechaInicio)||'—'} → ${fmtD(p.epicaFechaFin)||'—'}</div>
+                <div class="rec-proj-contexto"><strong>Contexto del desarrollo:</strong><br>${esc(p.contexto||'—')}</div>
+              </div>
+              <div class="rec-proj-right">
+                <table class="rec-tarea-tbl">
+                  <colgroup>
+                    <col style="width:30%"><col style="width:16%"><col style="width:13%"><col style="width:13%"><col style="width:10%"><col style="width:18%">
+                  </colgroup>
+                  <thead><tr>
+                    <th>Tarea</th><th>Responsable</th><th>Inicio</th><th>Fin</th><th>Horas</th><th>Estado</th>
+                  </tr></thead>
+                  <tbody>${tareasRows}</tbody>
+                </table>
+              </div>
+            </div>
+          </div>`;
+        }).filter(Boolean);
+
+        cardsWrap.innerHTML = bloques.length ? bloques.join('') : '<div class="rec-card-proj-empty">Sin resultados para el rango de fechas seleccionado</div>';
+      }
+    }
+  }
+
+  // ── Bloque 2: gráfico de barras — horas planificadas por recurso ──
+  const chartWrap=document.getElementById('rec-chart-wrap');
+  if(chartWrap){
+    if(!filtered.length){
+      chartWrap.innerHTML = '';
+    } else {
+      const maxH = Math.max(...filtered.map(r=>r.horasPlanificadas), 1);
+      chartWrap.innerHTML = `<div class="rec-chart-title">Horas planificadas por recurso — este mes</div>` +
+        filtered.map(r=>{
+          const pct = Math.round(r.horasPlanificadas / maxH * 100);
+          return `<div class="rec-chart-row">
+            <span class="rec-chart-label" title="${esc(r.nombre)}">${esc(r.nombre)}</span>
+            <div class="rec-chart-track"><div class="rec-chart-fill" style="width:${pct}%"></div></div>
+            <span class="rec-chart-val">${r.horasPlanificadas}h</span>
+          </div>`;
+        }).join('');
+    }
+  }
+}
+
+// ── RECURSO DETAIL MODAL ───────────────────────────────────
+function verRecurso(nombre){
+  const r=recursos.find(x=>x.nombre===nombre);
+  if(!r) return;
+  activeRecIdx=recursos.indexOf(r);
+  document.getElementById('rec-modal-name').textContent=r.nombre;
+  document.getElementById('rec-modal-area').textContent=r.area||'—';
+  const proyectos=r.proyectosMes||[];
+  const totalHrs=proyectos.reduce((a,p)=>a+(p.horas||0),0);
+  const statsHtml=`<div class="rec-modal-stats">
+    <div class="rec-modal-stat"><div class="rec-modal-stat-val c-blue">${r.proyectos}</div><div class="rec-modal-stat-lbl">Proyectos</div></div>
+    <div class="rec-modal-stat"><div class="rec-modal-stat-val" style="color:${r.horasPend>=40?'var(--red)':r.horasPend>=20?'var(--yellow)':'var(--green)'}">${r.horasPend}h</div><div class="rec-modal-stat-lbl">Horas Pend.</div></div>
+    <div class="rec-modal-stat"><div class="rec-modal-stat-val" style="color:${r.entregasPend>10?'var(--red)':'var(--green)'}">${r.entregasPend}</div><div class="rec-modal-stat-lbl">Entregas Pend.</div></div>
+  </div>`;
+  let partRows=proyectos.length&&totalHrs>0
+    ? proyectos.map(p=>{const pct=Math.round((p.horas/totalHrs)*100);return`<div class="rec-part-row"><span class="rec-part-name" title="${esc(p.nombre)}">${esc(p.nombre)}</span><div class="rec-part-bar-wrap"><div class="rec-part-bar-fill" style="width:${pct}%"></div></div><span class="rec-part-pct">${pct}%</span><span class="rec-part-hrs">${p.horas}h</span></div>`;}).join('')+`<div class="rec-part-total">Total: ${totalHrs}h</div>`
+    : '<div style="color:var(--text-dim);font-size:12px">Sin datos este mes</div>';
+  let projCards=proyectos.length
+    ? proyectos.map((p,i)=>`<div class="rec-proj-card">
+        <div class="rec-proj-card-left">
+          <div class="rec-proj-card-name">${esc(p.nombre)}</div>
+          <div class="rec-proj-card-meta">${p.actividades} act · ${p.horas}h · ${p.horasPend}h pend.</div>
+        </div>
+        <span class="rec-proj-pend-badge ${p.pendientes>0?'has-pend':'no-pend'}">${p.pendientes} pend.</span>
+        <button class="rec-proj-link" title="Ver detalle" onclick="verProyecto(${i});event.stopPropagation()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+        </button>
+      </div>`).join('')
+    : '<div style="color:var(--text-dim);font-size:12px">Sin proyectos registrados</div>';
+  document.getElementById('rec-modal-body').innerHTML=`${statsHtml}
+    <div style="margin-bottom:20px">
+      <div class="rec-section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>Participación por proyecto</div>
+      ${partRows}
+    </div>
+    <div>
+      <div class="rec-section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>Proyectos · Actividades</div>
+      ${projCards}
+    </div>`;
+  document.getElementById('rec-modal-overlay').classList.add('open');
+}
+
+// Clasificación de estado de actividades en detalle de proyecto
+function clsActStatus(status) {
+  const s = (status||'').toLowerCase();
+  if(['finalizada','producción','en producción','cerrado','done','closed'].includes(s)) return { label:'Cerrado',    cls:'done' };
+  if(['blocked','bloqueado'].includes(s))                                               return { label:'Bloqueado',  cls:'bloq' };
+  if(['en curso','review','en proceso'].includes(s))                                    return { label:'En proceso', cls:'open' };
+  return { label:'Pendiente', cls:'pend' };
+}
+
+function verProyecto(epicIdx){
+  const r=recursos[activeRecIdx]; if(!r) return;
+  const p=(r.proyectosMes||[])[epicIdx]; if(!p) return;
+  const epicaGlobal=epics.find(e=>e.key===p.key);
+  const estado=epicaGlobal?epicaGlobal.status:'—';
+  const area=epicaGlobal?epicaGlobal.area:(r.area||'—');
+  const sponsor=epicaGlobal?epicaGlobal.sponsor:'—';
+  const avance=epicaGlobal?(epicaGlobal.planPct!=null&&epicaGlobal.realPct!=null
+    ?Math.round(epicaGlobal.realPct*100)+'% / Plan '+Math.round(epicaGlobal.planPct*100)+'%'
+    :epicaGlobal.pctDesarrollo!=null?Math.round(epicaGlobal.pctDesarrollo*100)+'%':'—'):'—';
+  const fin=epicaGlobal?fmtD(epicaGlobal.duedate):'—';
+  const desvioPct=epicaGlobal&&epicaGlobal.desvioPct!=null?Math.round(epicaGlobal.desvioPct*100):null;
+  const desvColor=desvioPct===null?'var(--text-muted)':Math.abs(desvioPct)>17?'var(--red)':Math.abs(desvioPct)>=5?'var(--yellow)':'var(--green)';
+  const sbCls={'Backlog':'backlog','Análisis':'analisis','Desarrollo':'desarrollo','Pruebas':'pruebas','Producción':'produccion','Planificado':'planificado','Stand by':'standby','Desestimado':'desestimado'}[estado]||'backlog';
+  const tareas=(p.tareas||[]).slice().sort((a,b)=>(b.updated||b.fecha||'').localeCompare(a.updated||a.fecha||''));
+  const tareasHtml=tareas.length
+    ?tareas.map(t=>{ const st=clsActStatus(t.status); return `<div class="det-task-row"><span class="det-task-date">${fmtD(t.fecha)||'—'}</span><span class="det-task-name" title="${esc(t.nombre)}">${esc(t.nombre)}</span><span class="det-task-hrs">${t.horasEst}h</span><span class="det-task-status"><span class="det-badge det-badge-${st.cls}">${st.label}</span></span></div>`; }).join('')
+    :'<div style="color:var(--text-muted);font-size:12px;padding:8px 0">Sin actividades registradas</div>';
+  document.getElementById('det-title').textContent=p.nombre;
+  document.getElementById('det-body').innerHTML=`
+    <div class="det-stats">
+      <div class="det-stat"><div class="det-stat-val" style="color:var(--blue)">${p.actividades}</div><div class="det-stat-lbl">Actividades</div></div>
+      <div class="det-stat"><div class="det-stat-val" style="color:${p.horasPend>=40?'var(--red)':p.horasPend>=20?'var(--yellow)':'var(--green)'}">${p.horasPend}h</div><div class="det-stat-lbl">Horas Pend.</div></div>
+      <div class="det-stat"><div class="det-stat-val" style="color:var(--blue)">${p.horas}h</div><div class="det-stat-lbl">Horas del mes</div></div>
+    </div>
+    <div class="det-sec">
+      <div class="det-sec-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Proyecto</div>
+      <div class="det-field"><span class="det-lbl">Estado</span><span class="det-val"><span class="badge badge-${sbCls}">${esc(estado)}</span></span></div>
+      <div class="det-field"><span class="det-lbl">Área</span><span class="det-val">${esc(area)||'—'}</span></div>
+      <div class="det-field"><span class="det-lbl">Sponsor</span><span class="det-val">${esc(sponsor)||'—'}</span></div>
+      <div class="det-field"><span class="det-lbl">Avance</span><span class="det-val">${avance}</span></div>
+      <div class="det-field"><span class="det-lbl">Fin</span><span class="det-val">${fin||'—'}</span></div>
+      <div class="det-field"><span class="det-lbl">Desvío</span><span class="det-val" style="color:${desvColor};font-weight:600">${desvioPct!==null?desvioPct+'%':'—'}</span></div>
+    </div>
+    <div class="det-sec">
+      <div class="det-sec-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Actividades de ${esc(r.nombre)}</div>
+      ${tareasHtml}
+    </div>`;
+  document.getElementById('det-panel').classList.add('open');
+}
+
+function closeDetModal(){ document.getElementById('det-panel')?.classList.remove('open'); }
+function closeRecModal(){ document.getElementById('rec-modal-overlay')?.classList.remove('open'); }
+
+document.getElementById('det-close').addEventListener('click', ev=>{ ev.stopPropagation(); closeDetModal(); });
+document.getElementById('rec-modal-close').addEventListener('click', ev=>{ ev.stopPropagation(); closeRecModal(); });
+document.getElementById('rec-modal-overlay').addEventListener('click', function(ev){ if(ev.target===this) closeRecModal(); });
+
+document.addEventListener('keydown', ev=>{
+  if(ev.key!=='Escape') return;
+  const det=document.getElementById('det-panel');
+  if(det&&det.classList.contains('open')){ closeDetModal(); return; }
+  const rec=document.getElementById('rec-modal-overlay');
+  if(rec&&rec.classList.contains('open')){ closeRecModal(); return; }
+  const mo=document.getElementById('modal-overlay');
+  if(mo&&mo.classList.contains('open')) mo.classList.remove('open');
+});
+
+// ── ROW CLICK portafolio ────────────────────────────────────
+document.getElementById('table-body').addEventListener('click', ev=>{
+  const tr=ev.target.closest('tr[data-key]');
+  if(tr&&!ev.target.closest('a,button')) openModal(tr.dataset.key);
+});
+
+// ═══════════════════════════════════════════════════════════
+//  CAPACITY TAB  — Calendario de capacidad por recurso
+// ═══════════════════════════════════════════════════════════
+
+const NOMENCLATURA = {
+  'AM':  { nombre: 'Andrés Medina',      pais: 'Mexico',    area: 'Desarrollo' },
+  'JC':  { nombre: 'Javier Carrillo',    pais: 'Mexico',    area: 'Desarrollo' },
+  'EC':  { nombre: 'Eric Cacho',         pais: 'Mexico',    area: 'Desarrollo' },
+  'HS':  { nombre: 'Henry Salazar',      pais: 'Colombia',  area: 'Desarrollo' },
+  'DV':  { nombre: 'Daniel Valencia',    pais: 'Colombia',  area: 'Desarrollo' },
+  'SD':  { nombre: 'Steven Díaz',        pais: 'Colombia',  area: 'Desarrollo', alias: ['stiven d','stiven diaz','steven d'] },
+  'AR':  { nombre: 'Alexander Romero',   pais: 'Peru',      area: 'Desarrollo' },
+  'HR':  { nombre: 'Hamhner Remuzgo',    pais: 'Peru',      area: 'Soporte TI' },
+  'AA':  { nombre: 'Abel Alva',          pais: 'Peru',      area: 'PMO' },
+  'RP':  { nombre: 'Roxana Peralta',     pais: 'Peru',      area: 'PM' },
+  'ALL': { nombre: 'Alberto Llosa',      pais: 'Peru',      area: 'PM' },
+  'FF':  { nombre: 'Farah Fidel',        pais: 'Mexico',    area: 'Comercial' },
+  'JM':  { nombre: 'Juan Menco',         pais: 'Colombia',  area: 'Comercial' },
+  'CC':  { nombre: 'Cesar Castañeda',    pais: 'Peru',      area: 'TC' },
+  'EN':  { nombre: 'Edgar Noriega',      pais: 'Colombia',  area: 'TC' },
+  'JC2': { nombre: 'Jose Carlos Cautle', pais: 'Mexico',    area: 'TC' },
+  'MA':  { nombre: 'Maria Aguilar',      pais: 'Guatemala', area: 'TC' },
+  'NB':  { nombre: 'Nalia Blanco',       pais: 'Peru',      area: 'Comercial' },
+  'DV2': { nombre: 'Daniela Velarde',    pais: 'Peru',      area: 'Data' },
+  'LE':  { nombre: 'Lucia Escobar',      pais: 'Colombia',  area: 'Operación' },
+};
+
+// Vacaciones por persona: { 'Nombre': [['YYYY-MM-DD','YYYY-MM-DD'], ...] }
+const VACACIONES = {
+  'Eric Cacho': [
+    ['2026-07-11', '2026-07-25'],
+    ['2026-12-21', '2026-12-31']
+  ],
+  'Javier Carrillo': [
+    ['2026-07-07', '2026-07-10']
+  ]
+};
+
+function estaDeVacaciones(nombre, fecha) {
+  const rangos = VACACIONES[nombre];
+  if (!rangos) return false;
+  return rangos.some(([ini, fin]) => fecha >= ini && fecha <= fin);
+}
+
+const APLICACIONES_JIRA = ['Qubo','Robots','Simulador','T1','T2','TC','Viax'];
+
+const FERIADOS = {
+  'Peru': new Set([
+    '2025-01-01','2025-04-17','2025-04-18','2025-05-01','2025-06-07',
+    '2025-06-29','2025-07-23','2025-07-28','2025-07-29','2025-08-06',
+    '2025-08-30','2025-10-08','2025-11-01','2025-12-08','2025-12-09','2025-12-25',
+    '2026-01-01','2026-04-02','2026-04-03','2026-05-01','2026-06-07',
+    '2026-06-29','2026-07-23','2026-07-28','2026-07-29','2026-08-06',
+    '2026-08-30','2026-10-08','2026-11-01','2026-12-08','2026-12-09','2026-12-25',
+  ]),
+  'Colombia': new Set([
+    '2025-01-01','2025-01-06','2025-03-24','2025-04-17','2025-04-18',
+    '2025-05-01','2025-06-02','2025-06-23','2025-06-30','2025-07-07',
+    '2025-07-20','2025-08-07','2025-08-18','2025-10-13','2025-11-03',
+    '2025-11-17','2025-12-08','2025-12-25',
+    '2026-01-01','2026-01-12','2026-03-23','2026-04-02','2026-04-03',
+    '2026-05-01','2026-05-18','2026-06-08','2026-06-15','2026-06-29',
+    '2026-07-13','2026-07-20','2026-08-07','2026-08-17','2026-10-12','2026-11-02',
+    '2026-11-16','2026-12-08','2026-12-25',
+  ]),
+  'Mexico': new Set([
+    '2025-01-01','2025-02-03','2025-03-17','2025-05-01','2025-09-16',
+    '2025-11-17','2025-12-25',
+    '2026-01-01','2026-02-02','2026-03-16','2026-05-01','2026-09-16',
+    '2026-11-16','2026-12-25',
+  ]),
+  'Guatemala': new Set([
+    '2025-01-01','2025-04-17','2025-04-18','2025-04-19','2025-05-01',
+    '2025-06-30','2025-09-15','2025-10-20','2025-11-01','2025-12-24','2025-12-25','2025-12-31',
+    '2026-01-01','2026-04-02','2026-04-03','2026-04-04','2026-05-01',
+    '2026-06-30','2026-09-15','2026-10-20','2026-11-01','2026-12-24','2026-12-25','2026-12-31',
+  ]),
+};
+
+function resolveNombreDesdeJira(displayName) {
+  if(!displayName) return null;
+  const norm = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
+  const dn = norm(displayName);
+  // 1. Exacto normalizado
+  for(const [ini, rec] of Object.entries(NOMENCLATURA)){
+    if(norm(rec.nombre) === dn) return { ini, ...rec };
+  }
+  // 2. displayName contenido en nombre canónico o viceversa
+  for(const [ini, rec] of Object.entries(NOMENCLATURA)){
+    const cn = norm(rec.nombre);
+    if(dn.includes(cn) || cn.includes(dn)) return { ini, ...rec };
+  }
+  // 3. Primera palabra + inicial de apellido (ej. "Henry S." → "Henry Salazar", "Stiven D" → "Steven Díaz")
+  const parts = dn.split(/\s+/);
+  if(parts.length >= 2){
+    for(const [ini, rec] of Object.entries(NOMENCLATURA)){
+      const cp = norm(rec.nombre).split(/\s+/);
+      if(cp[0] === parts[0] && cp[1] && cp[1].startsWith(parts[1].replace('.',''))) return { ini, ...rec };
+    }
+  }
+  return null;
+}
+function resolveNombreDesdeIni(ini) {
+  if(!ini) return null;
+  const key = ini.trim().toUpperCase();
+  return NOMENCLATURA[key] ? { ini: key, ...NOMENCLATURA[key] } : null;
+}
+function distribuirHoras(horasTotal, fechaInicio, fechaFin, pais) {
+  if(!horasTotal || !fechaInicio || !fechaFin) return [];
+  const feriados = FERIADOS[pais] || new Set();
+  const dias = [];
+  let cur = new Date(fechaInicio + 'T12:00:00');
+  let end = new Date(fechaFin   + 'T12:00:00');
+  if(cur > end){ const tmp=cur; cur=end; end=tmp; } // fechas invertidas en Jira: se corrige el orden para no perder la tarea
+  while(cur <= end){
+    const dow = cur.getDay();
+    const iso = cur.toISOString().slice(0,10);
+    if(dow !== 0 && dow !== 6 && !feriados.has(iso)) dias.push(iso);
+    cur.setDate(cur.getDate()+1);
+  }
+  if(!dias.length) return [];
+  const hPorDia = +(horasTotal / dias.length).toFixed(2);
+  return dias.map(fecha => ({ fecha, horas: hPorDia }));
+}
+
+// Días calendario de un mes (usado por el calendario de Capacity y por Recursos)
+function getDiasDelMes(year, month){
+  const firstDay = new Date(year, month, 1);
+  const lastDay  = new Date(year, month+1, 0);
+  const dias = [];
+  const cur = new Date(firstDay);
+  while(cur <= lastDay){
+    dias.push(cur.toISOString().slice(0,10));
+    cur.setDate(cur.getDate()+1);
+  }
+  return dias;
+}
+// Días laborables de un mes para una persona: excluye fines de semana, feriados de su país y vacaciones (misma lógica que Capacity)
+function diasLaborablesDelMes(year, month, pais, nombrePersona){
+  const feriados = FERIADOS[pais] || new Set();
+  return getDiasDelMes(year, month).filter(iso => {
+    const dow = new Date(iso+'T12:00:00').getDay();
+    if(dow===0||dow===6) return false;
+    if(feriados.has(iso)) return false;
+    if(estaDeVacaciones(nombrePersona, iso)) return false;
+    return true;
+  });
+}
+
+// ── State ──────────────────────────────────────────────────
+let capacityLoaded = false;
+let capRows = [];  // {fecha, persona, horas, proyecto, subtarea, comentario, esPlaneado}
+let capCalYear  = TODAY.getFullYear();
+let capCalMonth = TODAY.getMonth(); // 0-based
+
+// ── Tab lazy load ──────────────────────────────────────────
+document.querySelectorAll('.tabs .tab').forEach(tab => {
+  if(tab.dataset.tab === 'capacity') {
+    tab.addEventListener('click', () => {
+      if(!capacityLoaded) loadCapacity();
+    });
+  }
+});
+
+// ── Load from API ──────────────────────────────────────────
+async function loadCapacity(){
+  capacityLoaded = true;
+  const wrap = document.getElementById('cap-cal-wrap');
+  if(wrap) wrap.innerHTML = '<div class="cap-empty" style="padding:40px;text-align:center;color:var(--text-dim)">Cargando desde Jira…</div>';
+  try {
+    const resp = await fetch('/api/jira', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'capacity' })
+    });
+    if(!resp.ok) throw new Error('HTTP ' + resp.status);
+    const j = await resp.json();
+
+    capRows = [];
+    (j.issues || []).forEach(sub => {
+      const f = sub.fields || {};
+      const subtareaNom = f.summary || sub.key;
+      const proyectoNom  = f._epicName   || '';
+      const codigoProy   = f._epicCodigo || '';
+      const logs = f._worklogs || [];
+
+      // Solo mostrar subtareas con horas registradas en "Registro de actividad" de Jira
+      // Si logs está vacío = el recurso no registró actividad → no aparece en el calendario
+      if(logs.length > 0){
+        logs.forEach(wl => {
+          const horas    = wl.timeSpentSeconds ? +(wl.timeSpentSeconds / 3600).toFixed(2) : 0;
+          const fechaIso = wl.started ? wl.started.slice(0,10) : null;
+          const persona  = wl.author?.displayName || wl.updateAuthor?.displayName || '—';
+          let comentario = '';
+          if(wl.comment){
+            if(typeof wl.comment === 'string') comentario = wl.comment;
+            else if(wl.comment.content) comentario = adfToText(wl.comment).trim();
+          }
+          const recReal = resolveNombreDesdeJira(persona);
+          const personaNom = recReal?.nombre || persona; // usar nombre canónico de NOMENCLATURA
+          capRows.push({
+            fecha: fechaIso, persona: personaNom, horas,
+            proyecto: proyectoNom, codigoProy, subKey: sub.key, subtarea: subtareaNom,
+            comentario, esPlaneado: false,
+            area: recReal?.area || '', pais: recReal?.pais || ''
+          });
+        });
+      }
+    });
+
+    // Populate selectors from actual data
+    const selA = document.getElementById('cap-area');
+
+    // Áreas desde NOMENCLATURA + las que haya en capRows
+    const areasNom = [...new Set(Object.values(NOMENCLATURA).map(n=>n.area).filter(Boolean))].sort();
+    const areasRows = [...new Set(capRows.map(r => r.area).filter(Boolean))];
+    const areas = [...new Set([...areasNom, ...areasRows])].sort();
+    if(selA) selA.innerHTML = '<option value="">Todas</option>' + areas.map(a => `<option>${esc(a)}</option>`).join('');
+
+    // Países desde NOMENCLATURA (fuente de verdad) + los que haya en capRows
+    const paisesNom = [...new Set(Object.values(NOMENCLATURA).map(n=>n.pais).filter(Boolean))].sort();
+    const paisesRows = [...new Set(capRows.map(r => r.pais).filter(Boolean))];
+    const paises = [...new Set([...paisesNom, ...paisesRows])].sort();
+    const selP = document.getElementById('cap-pais');
+    if(selP) selP.innerHTML = '<option value="">Todos</option>' + paises.map(p => `<option>${esc(p)}</option>`).join('');
+
+    // Personas desde NOMENCLATURA + las que haya en capRows
+    const personasNom = Object.values(NOMENCLATURA).map(n=>n.nombre).filter(Boolean);
+    const personasRows = [...new Set(capRows.map(r => r.persona).filter(Boolean))];
+    const personas = [...new Set([...personasNom, ...personasRows])].sort();
+    const sel = document.getElementById('cap-persona');
+    if(sel) sel.innerHTML = '<option value="">Todas</option>' + personas.map(p => `<option>${esc(p)}</option>`).join('');
+
+    // Set calendar to month with most data
+    if(capRows.length){
+      const fechas = capRows.map(r => r.fecha).filter(Boolean).sort();
+      const mid = fechas[Math.floor(fechas.length/2)];
+      const d = new Date(mid + 'T12:00:00');
+      capCalYear  = d.getFullYear();
+      capCalMonth = d.getMonth();
+    }
+
+    initCalNav();
+    renderCapacity();
+  } catch(err) {
+    console.error('Error capacity:', err);
+    const wrap = document.getElementById('cap-cal-wrap');
+    if(wrap) wrap.innerHTML = `<div class="cap-empty" style="padding:40px;text-align:center;color:var(--red)">Error: ${esc(err.message)}</div>`;
+  }
+}
+
+// ── Calendar navigation ────────────────────────────────────
+function initCalNav(){
+  // Populate month/year selectors
+  const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const mSel = document.getElementById('cap-cal-month');
+  const ySel = document.getElementById('cap-cal-year');
+  if(mSel) mSel.innerHTML = MONTHS.map((m,i) => `<option value="${i}">${m}</option>`).join('');
+  if(ySel){
+    const years = [...new Set(capRows.map(r => r.fecha?.slice(0,4)).filter(Boolean))].sort();
+    if(!years.length) years.push(String(TODAY.getFullYear()));
+    ySel.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
+  }
+  syncCalNav();
+
+  document.getElementById('cap-cal-prev')?.addEventListener('click', () => {
+    capCalMonth--; if(capCalMonth < 0){ capCalMonth=11; capCalYear--; }
+    syncCalNav(); renderCapacity();
+  });
+  document.getElementById('cap-cal-next')?.addEventListener('click', () => {
+    capCalMonth++; if(capCalMonth > 11){ capCalMonth=0; capCalYear++; }
+    syncCalNav(); renderCapacity();
+  });
+  document.getElementById('cap-cal-month')?.addEventListener('change', e => {
+    capCalMonth = +e.target.value; renderCapacity();
+  });
+  document.getElementById('cap-cal-year')?.addEventListener('change', e => {
+    capCalYear = +e.target.value; renderCapacity();
+  });
+}
+
+function syncCalNav(){
+  const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const title = document.getElementById('cap-cal-title');
+  if(title) title.textContent = `${MONTHS[capCalMonth]} ${capCalYear}`;
+  const mSel = document.getElementById('cap-cal-month');
+  const ySel = document.getElementById('cap-cal-year');
+  if(mSel) mSel.value = capCalMonth;
+  if(ySel) ySel.value = capCalYear;
+}
+
+// ── Filters ────────────────────────────────────────────────
+function getCapFiltered(){
+  const persona = document.getElementById('cap-persona')?.value || '';
+  const area    = document.getElementById('cap-area')?.value    || '';
+  const pais    = document.getElementById('cap-pais')?.value    || '';
+  const norm = s => (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
+  return capRows.filter(r => {
+    if(persona && r.persona !== persona) return false;
+    if(pais    && r.pais    !== pais)    return false;
+    if(area) {
+      // Resolver área desde NOMENCLATURA por nombre del recurso (fuente de verdad)
+      const recNom = findNomenclaturaByNombre(r.persona);
+      const areaRec = recNom?.area || r.area || '';
+      if(areaRec !== area) return false;
+    }
+    return true;
+  });
+}
+
+['cap-area','cap-pais','cap-persona','cap-orden'].forEach(id => {
+  const el = document.getElementById(id);
+  if(el) el.addEventListener('change', renderCapacity);
+});
+document.getElementById('cap-limpiar')?.addEventListener('click', () => {
+  const a  = document.getElementById('cap-area');    if(a)  a.value='';
+  const pa = document.getElementById('cap-pais');    if(pa) pa.value='';
+  const p  = document.getElementById('cap-persona'); if(p)  p.value='';
+  const o  = document.getElementById('cap-orden');   if(o)  o.value='nombre';
+  renderCapacity();
+});
+
+// ── Main render: calendar ──────────────────────────────────
+function renderCapacity(){
+  const filtered = getCapFiltered();
+  const orden    = document.getElementById('cap-orden')?.value || 'nombre';
+
+  // Global KPIs — solo horas reales de Jira
+  const totalHoras = filtered.reduce((s,r) => s+r.horas, 0);
+  // Normalizar nombres: resolver alias/abreviados al nombre canónico de NOMENCLATURA
+  let personasSet  = [...new Set(filtered.map(r => findNomenclaturaByNombre(r.persona)?.nombre || r.persona))];
+
+  // Weekly utilization per persona (all time)
+  function isoWeek(iso){
+    if(!iso) return null;
+    const d = new Date(iso+'T12:00:00');
+    const jan1 = new Date(d.getFullYear(),0,1);
+    const wk = Math.ceil(((d - jan1)/864e5 + jan1.getDay()+1)/7);
+    return `${d.getFullYear()}-W${String(wk).padStart(2,'0')}`;
+  }
+
+  const weeksByPersona = {};
+  filtered.forEach(r => {
+    if(!r.fecha) return;
+    const wk = isoWeek(r.fecha);
+    if(!weeksByPersona[r.persona]) weeksByPersona[r.persona] = {};
+    if(!weeksByPersona[r.persona][wk]) weeksByPersona[r.persona][wk] = 0;
+    weeksByPersona[r.persona][wk] += r.horas;
+  });
+
+  // Total horas por persona para ordenamiento
+  const horasPorPersona = {};
+  personasSet.forEach(p => {
+    horasPorPersona[p] = filtered.filter(r=>r.persona===p).reduce((s,r)=>s+r.horas,0);
+  });
+
+  // Avg weekly util
+  const avgUtils = {};
+  personasSet.forEach(p => {
+    const wks = Object.values(weeksByPersona[p] || {});
+    avgUtils[p] = wks.length ? +(wks.reduce((a,b)=>a+b,0)/wks.length/40*100).toFixed(1) : 0;
+  });
+  const avgUtilTotal = personasSet.length
+    ? +(personasSet.reduce((s,p) => s + avgUtils[p], 0) / personasSet.length).toFixed(1)
+    : 0;
+
+  // Incluir recursos de NOMENCLATURA que coincidan con filtros aunque no tengan worklogs
+  const paisFiltro    = document.getElementById('cap-pais')?.value    || '';
+  const personaFiltro = document.getElementById('cap-persona')?.value || '';
+  const areaFiltro    = document.getElementById('cap-area')?.value    || '';
+  if(paisFiltro || personaFiltro || areaFiltro) {
+    Object.values(NOMENCLATURA).forEach(n => {
+      if(paisFiltro    && n.pais   !== paisFiltro)    return;
+      if(personaFiltro && n.nombre !== personaFiltro) return;
+      if(areaFiltro    && n.area   !== areaFiltro)    return;
+      if(!personasSet.includes(n.nombre)) personasSet.push(n.nombre);
+    });
+  }
+
+  // Sort personas
+  personasSet.sort((a,b) => {
+    const recA = Object.values(NOMENCLATURA).find(n=>n.nombre===a) || {};
+    const recB = Object.values(NOMENCLATURA).find(n=>n.nombre===b) || {};
+    if(orden==='horas_desc') return horasPorPersona[b] - horasPorPersona[a];
+    if(orden==='horas_asc')  return horasPorPersona[a] - horasPorPersona[b];
+    if(orden==='area')       return (recA.area||'').localeCompare(recB.area||'');
+    if(orden==='pais')       return (recA.pais||'').localeCompare(recB.pais||'');
+    return a.localeCompare(b); // nombre
+  });
+
+  const sk = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
+  sk('cap-kpi-personas', personasSet.length || '—');
+  sk('cap-kpi-horas',    totalHoras ? totalHoras.toFixed(1)+'h' : '—');
+  sk('cap-kpi-planeadas','—');
+  sk('cap-kpi-util',     avgUtilTotal ? avgUtilTotal+'%' : '—');
+
+  // Build calendar for capCalYear / capCalMonth
+  renderCalendar(filtered, personasSet, weeksByPersona);
+}
+
+function findNomenclaturaByNombre(nombre) {
+  if(!nombre) return null;
+  const norm = s => (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+  const dn = norm(nombre);
+  // 1. Exacto
+  for(const [ini, rec] of Object.entries(NOMENCLATURA)){
+    if(norm(rec.nombre) === dn) return { ini, ...rec };
+  }
+  // 2. Contenido
+  for(const [ini, rec] of Object.entries(NOMENCLATURA)){
+    const cn = norm(rec.nombre);
+    if(dn.includes(cn) || cn.includes(dn)) return { ini, ...rec };
+  }
+  // 3. Primer nombre + inicial apellido (ej. "Henry S." → "Henry Salazar")
+  const parts = dn.split(/\s+/);
+  if(parts.length >= 2){
+    for(const [ini, rec] of Object.entries(NOMENCLATURA)){
+      const cp = norm(rec.nombre).split(/\s+/);
+      if(cp[0] === parts[0] && cp[1] && cp[1].startsWith(parts[1].replace('.',''))) return { ini, ...rec };
+    }
+  }
+  // 4. Alias explícitos (para nombres con ortografía distinta en Jira)
+  for(const [ini, rec] of Object.entries(NOMENCLATURA)){
+    if((rec.alias||[]).some(a => norm(a) === dn)) return { ini, ...rec };
+  }
+  return null;
+}
+
+// ── Calendar grid render ───────────────────────────────────
+function renderCalendar(filtered, personas, weeksByPersona){
+  const wrap = document.getElementById('cap-cal-wrap');
+  if(!wrap) return;
+
+  const year = capCalYear, month = capCalMonth;
+  const firstDay = new Date(year, month, 1);
+  const lastDay  = new Date(year, month+1, 0);
+  const DOW_LABELS = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+
+  // Build array of all days in month
+  const days = getDiasDelMes(year, month);
+
+  // Index filtered rows by persona+date
+  const idx = {}; // idx[persona][fecha] = [rows]
+  filtered.forEach(r => {
+    if(!r.fecha || !r.fecha.startsWith(`${year}-${String(month+1).padStart(2,'0')}`)) return;
+    const pNom = findNomenclaturaByNombre(r.persona)?.nombre || r.persona;
+    if(!idx[pNom]) idx[pNom] = {};
+    if(!idx[pNom][r.fecha]) idx[pNom][r.fecha] = [];
+    idx[pNom][r.fecha].push(r);
+  });
+
+  // Personas in this month (those with data OR all if no filter)
+  const personasInMonth = personas.length
+    ? personas
+    : [...new Set(filtered.map(r=>r.persona))].sort();
+
+  if(!personasInMonth.length){
+    wrap.innerHTML = '<div class="cap-empty" style="padding:40px;text-align:center;color:var(--text-dim)">Sin datos para este período</div>';
+    return;
+  }
+
+  // Weekly util for month: persona → week → horas
+  function isoWeek(iso){
+    const d = new Date(iso+'T12:00:00');
+    // Simple week key: Monday-based
+    const dayOfWeek = (d.getDay() + 6) % 7; // Mon=0
+    const mon = new Date(d); mon.setDate(d.getDate() - dayOfWeek);
+    return mon.toISOString().slice(0,10);
+  }
+
+  // Compute weekly totals per persona for THIS month
+  const weekTotals = {}; // persona → weekStartIso → horas
+  const weekSet = new Set();
+  filtered.forEach(r => {
+    if(!r.fecha) return;
+    const d = new Date(r.fecha+'T12:00:00');
+    if(d.getFullYear() !== year || d.getMonth() !== month) return;
+    const wk = isoWeek(r.fecha);
+    weekSet.add(wk);
+    const pNomWt = findNomenclaturaByNombre(r.persona)?.nombre || r.persona;
+    if(!weekTotals[pNomWt]) weekTotals[pNomWt] = {};
+    if(!weekTotals[pNomWt][wk]) weekTotals[pNomWt][wk] = 0;
+    weekTotals[pNomWt][wk] += r.horas;
+  });
+  // Also collect weeks that span into this month from days array
+  days.forEach(d => weekSet.add(isoWeek(d)));
+  const sortedWeeks = [...weekSet].sort();
+
+  // Group days by week
+  const daysByWeek = {};
+  days.forEach(d => {
+    const wk = isoWeek(d);
+    if(!daysByWeek[wk]) daysByWeek[wk] = [];
+    daysByWeek[wk].push(d);
+  });
+
+  // ── Build table HTML ──────────────────────────────────────
+  // Header row 1: week labels spanning their days
+  let hdr1 = '<tr class="row-month"><th class="col-persona">Recurso</th>';
+  sortedWeeks.forEach((wk, wi) => {
+    const wdays = daysByWeek[wk] || [];
+    const wkDate = new Date(wk+'T12:00:00');
+    const wkLabel = `Sem ${wkDate.toLocaleDateString('es-PE',{day:'2-digit',month:'short'})}`;
+    hdr1 += `<th colspan="${wdays.length}" class="col-week-sep">${wkLabel}</th>`;
+    hdr1 += `<th class="col-total">Total</th><th class="col-util">Util%</th>`;
+  });
+  hdr1 += '</tr>';
+
+  // Header row 2: day numbers + DOW
+  let hdr2 = '<tr class="row-dow"><th class="col-persona"></th>';
+  sortedWeeks.forEach(wk => {
+    const wdays = daysByWeek[wk] || [];
+    wdays.forEach(d => {
+      const dt = new Date(d+'T12:00:00');
+      const dow = dt.getDay(); // 0=Sun,6=Sat
+      const dayNum = dt.getDate();
+      const isWE = dow===0||dow===6;
+      hdr2 += `<th style="${isWE?'color:var(--text-dim)':''}">${dayNum}<br><span style="font-size:8px">${DOW_LABELS[dow]}</span></th>`;
+    });
+    hdr2 += '<th class="col-total"></th><th class="col-util"></th>';
+  });
+  hdr2 += '</tr>';
+
+  // Body rows: one per persona
+  let body = '';
+  personasInMonth.forEach(persona => {
+    // Buscar en NOMENCLATURA: primero exacto, luego normalizado (sin tildes, minúsculas)
+    const pRec = findNomenclaturaByNombre(persona);
+    const pais = pRec?.pais || 'Peru';
+    const ferPais = FERIADOS[pais] || new Set();
+
+    body += `<tr><td class="col-persona">${esc(persona)}</td>`;
+    sortedWeeks.forEach(wk => {
+      const wdays = daysByWeek[wk] || [];
+      let weekTotal = 0;
+      wdays.forEach(d => {
+        const dt = new Date(d+'T12:00:00');
+        const dow = dt.getDay();
+        const isWE = dow===0||dow===6;
+        const isFer = ferPais.has(d);
+        const rows = (idx[persona] && idx[persona][d]) || [];
+        const hTotal = rows.reduce((s,r)=>s+r.horas,0);
+        weekTotal += hTotal;
+
+        const isVac = !isWE && estaDeVacaciones(persona, d);
+        let cellClass, cellLabel;
+        if(isWE){
+          cellClass = 'c-weekend'; cellLabel = '—';
+        } else if(isVac){
+          cellClass = 'c-vacation'; cellLabel = 'V';
+        } else if(isFer){
+          cellClass = 'c-holiday'; cellLabel = 'F';
+        } else if(!rows.length){
+          cellClass = 'c-empty'; cellLabel = '-';
+        } else if(hTotal === 0){
+          cellClass = 'c-zero'; cellLabel = '0';
+        } else if(hTotal <= 4){
+          cellClass = 'c-low'; cellLabel = hTotal % 1 === 0 ? hTotal : hTotal.toFixed(1);
+        } else if(hTotal <= 8){
+          cellClass = 'c-med'; cellLabel = hTotal % 1 === 0 ? hTotal : hTotal.toFixed(1);
+        } else {
+          cellClass = 'c-over'; cellLabel = hTotal % 1 === 0 ? hTotal : hTotal.toFixed(1);
+        }
+
+        const clickable = !isWE && !isFer && !isVac && rows.length > 0;
+        const cellAttr = clickable
+          ? `onclick="openCapDetail('${esc(persona)}','${d}')"  title="${hTotal}h — clic para ver detalle"`
+          : '';
+        const weekSepClass = wdays[0] === d ? 'week-sep' : '';
+        body += `<td class="${weekSepClass}"><div class="cap-cal-cell ${cellClass}" ${cellAttr}>${cellLabel}</div></td>`;
+      });
+
+      // Week total + util %
+      const wt = weekTotals[persona] ? (weekTotals[persona][wk]||0) : 0;
+      const util = wt > 0 ? +(wt/40*100).toFixed(1) : 0;
+      const utilCls = util === 0 ? '' : util > 100 ? 'cap-util-over' : util >= 70 ? 'cap-util-ok' : 'cap-util-warn';
+      body += `<td class="col-total">${wt > 0 ? wt.toFixed(1) : '—'}</td>`;
+      body += `<td class="col-util"><span class="${utilCls}">${util > 0 ? util+'%' : '—'}</span></td>`;
+    });
+    body += '</tr>';
+  });
+
+  wrap.innerHTML = `
+    <table class="cap-cal-table">
+      <thead>${hdr1}${hdr2}</thead>
+      <tbody>${body}</tbody>
+    </table>`;
+}
+
+// ── Detail drawer ──────────────────────────────────────────
+function openCapDetail(persona, fecha){
+  const rows = capRows.filter(r => r.persona === persona && r.fecha === fecha);
+  if(!rows.length) return;
+
+  const dt = new Date(fecha+'T12:00:00');
+  const fechaFmt = dt.toLocaleDateString('es-PE',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+  const totalH = rows.reduce((s,r)=>s+r.horas,0);
+
+  document.getElementById('cap-detail-title').textContent = persona;
+  document.getElementById('cap-detail-sub').textContent   = `${fechaFmt} · ${totalH.toFixed(2)}h total`;
+
+  const tb = document.getElementById('cap-detail-body');
+  if(!tb) return;
+  tb.innerHTML = rows.map(r => {
+    const horasCls = r.horas >= 8 ? 'cap-horas-high' : r.horas >= 4 ? 'cap-horas-med' : 'cap-horas-low';
+    const comentario = r.comentario || '—';
+    const codigoCell = r.codigoProy
+      ? `<span style="font-weight:600;color:var(--blue)">${esc(r.codigoProy)}</span>`
+      : '—';
+    return `<tr>
+      <td style="color:var(--text-muted);white-space:nowrap">${fmtD(r.fecha)||'—'}</td>
+      <td><span class="cap-horas-badge ${horasCls}">${r.horas}h</span></td>
+      <td style="white-space:nowrap">${codigoCell}</td>
+      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-muted)" title="${esc(r.proyecto||'')}">${esc(r.proyecto||'—')}</td>
+      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.subtarea)}">${esc(r.subtarea)}</td>
+      <td style="color:var(--text-muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(comentario)}">${esc(comentario)}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('cap-detail-overlay').style.display = 'flex';
+}
+
+function closeCapDetail(event){
+  if(event && event.target !== document.getElementById('cap-detail-overlay')) return;
+  document.getElementById('cap-detail-overlay').style.display = 'none';
+}
+
+// ── CSV export ─────────────────────────────────────────────
+document.getElementById('btn-export-cap')?.addEventListener('click', () => {
+  const filtered = getCapFiltered();
+  const hdr  = ['Fecha','Persona','Horas','Proyecto','Actividad (Subtarea)','Comentario','Tipo'];
+  const rows = filtered.map(r => [r.fecha||'', r.persona, r.horas, r.proyecto||'', r.subtarea, r.comentario, r.esPlaneado?'Planificado':'Real']);
+  downloadCSV([hdr,...rows], `capacity_${new Date().toISOString().slice(0,10)}.csv`);
+});
+
+// ── SECCIONES ESPECIALES (Soporte Requerimientos / Gestión PMO-TI) ──────────
+
+const specialStoriesCache = {};
+
+async function fetchSpecialStories(epicKey) {
+  if (specialStoriesCache[epicKey] !== undefined) return specialStoriesCache[epicKey];
+  try {
+    const resp = await fetch('/api/jira', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'stories', epicKey })
+    });
+    const data = await resp.json();
+    specialStoriesCache[epicKey] = data.stories || [];
+  } catch(e) {
+    specialStoriesCache[epicKey] = [];
+  }
+  return specialStoriesCache[epicKey];
+}
+
+function parseSpecialStory(s) {
+  const f = s.fields || {};
+  const isDone = ['done','cerrado','closed','producción','produccion'].includes((f.status?.name||'').toLowerCase());
+  const subtasks = f._subtasks || [];
+  // HP = suma de customfield_11136 ("Horas estimadas") de subtareas (valor numérico directo)
+  const horasPlan = subtasks.reduce((acc, sub) => {
+    const sf = sub.fields || {};
+    return acc + (sf.customfield_11136 || 0);
+  }, 0);
+  // HR = suma de timespent de subtareas (en segundos → horas)
+  const horasReal = subtasks.reduce((acc, sub) => {
+    const sf = sub.fields || {};
+    return acc + ((sf.timespent || 0) / 3600);
+  }, 0);
+  // Plan/Real % de la HU (misma lógica que épicas en bitácora principal)
+  const planPct = f.customfield_10725 !== undefined && f.customfield_10725 !== null ? f.customfield_10725 : null;
+  const realPct = f.customfield_10726 !== undefined && f.customfield_10726 !== null ? f.customfield_10726 : null;
+  // Subtareas parseadas para el Gantt
+  const subtasksParsed = subtasks.map(sub => {
+    const sf = sub.fields || {};
+    return {
+      key: sub.key,
+      codigo: sf.customfield_10934 || sub.key,
+      summary: sf.summary || '—',
+      asignado: sf.assignee?.displayName || null,
+      fechaInicio: sf.customfield_10015 || null,
+      duedate: sf.duedate || null,
+      horasPlan: sf.customfield_11136 || 0,
+      horasReal: (sf.timespent || 0) / 3600,
+      status: sf.status?.name || '—'
+    };
+  });
+  return {
+    key: s.key,
+    codigo: f.customfield_10934 || s.key,
+    summary: f.summary || '—',
+    area: f.customfield_10930?.value || null,
+    sponsor: f.customfield_11070?.value || null,
+    asignado: f.assignee?.displayName || null,
+    horasPlan: horasPlan,
+    horasReal: horasReal,
+    fechaInicio: f.customfield_10015 || null,
+    duedate: f.duedate || null,
+    status: f.status?.name || '—',
+    conformidad: f.customfield_11004?.value || null,
+    planPct: planPct,
+    realPct: realPct,
+    subtasksParsed: subtasksParsed,
+    isDone
+  };
+}
+
+function buildSpecialKpis(stories) {
+  const total = stories.length;
+  const cerradas = stories.filter(s => s.isDone).length;
+  const pendientes = total - cerradas;
+  const horasPlanTot = stories.reduce((a, s) => a + (s.horasPlan || 0), 0);
+  const horasRealTot = stories.reduce((a, s) => a + (s.horasReal || 0), 0);
+  return `
+    <div class="sp-kpis">
+      <div class="sp-kpi"><div class="sp-kpi-label">Total historias</div><div class="sp-kpi-val c-white">${total}</div></div>
+      <div class="sp-kpi"><div class="sp-kpi-label">HP Totales</div><div class="sp-kpi-val c-cyan">${horasPlanTot > 0 ? horasPlanTot.toFixed(1) : '—'}</div></div>
+      <div class="sp-kpi"><div class="sp-kpi-label">HR Totales</div><div class="sp-kpi-val c-blue">${horasRealTot > 0 ? horasRealTot.toFixed(1) : '—'}</div></div>
+      <div class="sp-kpi"><div class="sp-kpi-label">Cerradas</div><div class="sp-kpi-val c-green">${cerradas}</div></div>
+      <div class="sp-kpi"><div class="sp-kpi-label">Pendientes</div><div class="sp-kpi-val c-yellow">${pendientes}</div></div>
+    </div>`;
+}
+
+function buildSpecialTable(stories, sectionId) {
+  if (!stories.length) return '<div style="padding:16px 20px;color:var(--text-muted);font-size:13px">Sin historias encontradas.</div>';
+
+  const searchId = `sp-search-${sectionId}`;
+  const tbodyId  = `sp-tbody-${sectionId}`;
+  const infoId   = `sp-info-${sectionId}`;
+
+  // AJUSTE 3: Soporte Requerimientos (PTS_327) → columna Plan/Real
+  // AJUSTE 4: Gestión PMO-TI (PTS_326) → sin columna % Avance
+  const isSoporte = sectionId === 'PTS_327';
+  const extraHeader = isSoporte ? '<th>Plan / Real</th>' : '';
+
+  return `
+    <div class="sp-table-controls">
+      <input id="${searchId}" class="filter-input" placeholder="Buscar historia..." autocomplete="off" style="max-width:260px"
+        oninput="filterSpecialTable('${sectionId}')"/>
+      <span id="${infoId}" class="sp-info">${stories.length} historias</span>
+    </div>
+    <div class="table-wrap" style="margin:0">
+      <table>
+        <thead>
+          <tr>
+            <th>Código</th>
+            <th>Historia</th>
+            <th>Área</th>
+            <th>Sponsor</th>
+            <th>Asignado</th>
+            <th>HP</th>
+            <th>HR</th>
+            <th>Inicio</th>
+            <th>Fin</th>
+            <th>Estado</th>
+            <th>Conform.</th>
+            ${extraHeader}
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="${tbodyId}">
+          ${renderSpecialRows(stories, isSoporte)}
+        </tbody>
       </table>
-    </div>
-  </div>
-</div>
-<!-- MODAL PORTAFOLIO -->
-<div class="modal-overlay" id="modal-overlay">
-  <div class="modal-panel w-gantt" id="modal-panel">
-    <div class="modal-hdr">
-      <div class="modal-hdr-info">
-        <div class="modal-key" id="modal-key"></div>
-        <div class="modal-title" id="modal-title"></div>
-      </div>
-      <button class="modal-close" id="modal-close" type="button">✕</button>
-    </div>
-    <div class="modal-tabs">
-      <div class="modal-tab active" data-mtab="gantt">📅 Cronograma</div>
-      <div class="modal-tab" data-mtab="detail">📋 Detalles</div>
-    </div>
-    <div class="modal-body" id="modal-body"></div>
-  </div>
-</div>
+    </div>`;
+}
 
-<!-- RECURSO DETAIL MODAL + DETALLE DE PROYECTO -->
-<div class="rec-modal-overlay" id="rec-modal-overlay">
-  <div class="det-panel" id="det-panel">
-    <div class="det-hdr">
-      <div class="det-hdr-sup">Detalle de proyecto</div>
-      <div class="det-hdr-row">
-        <div class="det-hdr-title" id="det-title">—</div>
-        <button class="det-close" id="det-close" type="button" aria-label="Cerrar detalle">&#x2715;</button>
-      </div>
-    </div>
-    <div class="det-body" id="det-body"></div>
-  </div>
-  <div class="rec-modal-panel">
-    <div class="rec-modal-hdr">
-      <div class="rec-modal-hdr-info">
-        <div class="rec-modal-name" id="rec-modal-name">&#x2014;</div>
-        <div class="rec-modal-area" id="rec-modal-area">&#x2014;</div>
-      </div>
-      <button class="rec-modal-close" id="rec-modal-close">&#x2715;</button>
-    </div>
-    <div class="rec-modal-body" id="rec-modal-body"></div>
-  </div>
-</div>
+function renderSpecialRows(stories, isSoporte) {
+  const colCount = isSoporte ? 12 : 11;
+  return stories.map((s, idx) => {
+    const planRealCell = isSoporte
+      ? `<td class="muted">${s.planPct !== null ? Math.round(s.planPct * 100) + '% / ' + (s.realPct !== null ? Math.round(s.realPct * 100) + '%' : '—') : '—'}</td>`
+      : '';
+    const ganttId = `sp-gantt-${s.key.replace('-','_')}`;
+    const hasSubtasks = s.subtasksParsed && s.subtasksParsed.length > 0;
+    const ganttToggle = hasSubtasks
+      ? `<button class="btn-action" type="button" title="Ver subtareas" onclick="toggleSpGantt('${ganttId}')">···</button>`
+      : '';
+    const ganttRows = hasSubtasks ? s.subtasksParsed.map(sub => `
+      <div class="sp-gantt-row">
+        <span class="sp-gantt-code"><a class="jlink" href="${JIRA_BASE}${sub.key}" target="_blank">${esc(sub.codigo)}</a></span>
+        <span class="sp-gantt-name" title="${esc(sub.summary)}">${esc(sub.summary)}</span>
+        <span class="sp-gantt-cell muted">${esc(sub.asignado) || '—'}</span>
+        <span class="sp-gantt-cell muted">${fmtD(sub.fechaInicio) || '—'}</span>
+        <span class="sp-gantt-cell muted">${fmtD(sub.duedate) || '—'}</span>
+        <span class="sp-gantt-cell muted">HP: ${sub.horasPlan > 0 ? sub.horasPlan.toFixed(1)+'h' : '—'}</span>
+        <span class="sp-gantt-cell muted">HR: ${sub.horasReal > 0 ? sub.horasReal.toFixed(1)+'h' : '—'}</span>
+        <span class="sp-gantt-cell"><span class="badge badge-${sbClass(sub.status)}">${esc(sub.status)}</span></span>
+      </div>`).join('') : '';
+    const ganttBlock = hasSubtasks ? `
+      <tr id="${ganttId}" style="display:none">
+        <td colspan="${colCount}" style="padding:0;background:var(--bg-base)">
+          <div class="sp-gantt-wrap">${ganttRows}</div>
+        </td>
+      </tr>` : '';
+    return `
+    <tr>
+      <td class="code"><a class="jlink" href="${JIRA_BASE}${s.key}" target="_blank">${esc(s.codigo)}</a></td>
+      <td class="proj" title="${esc(s.summary)}">${esc(s.summary)}</td>
+      <td class="muted">${s.area ? `<span class="pill">${esc(s.area)}</span>` : '—'}</td>
+      <td class="muted">${esc(s.sponsor) || '—'}</td>
+      <td class="muted">${esc(s.asignado) || '—'}</td>
+      <td class="muted">${s.horasPlan > 0 ? s.horasPlan.toFixed(1) : '—'}</td>
+      <td class="muted">${s.horasReal > 0 ? s.horasReal.toFixed(1) : '—'}</td>
+      <td class="muted">${fmtD(s.fechaInicio) || '—'}</td>
+      <td class="muted">${fmtD(s.duedate) || '—'}</td>
+      <td><span class="badge badge-${sbClass(s.status)}">${esc(s.status)}</span></td>
+      <td class="muted">${s.conformidad === 'Si' ? '<span style="color:var(--green);font-size:15px">✓</span>' : '—'}</td>
+      ${planRealCell}
+      <td style="text-align:center">${ganttToggle}</td>
+    </tr>${ganttBlock}`;
+  }).join('');
+}
 
-<script src="app.js"></script>
+function toggleSpGantt(ganttId) {
+  const row = document.getElementById(ganttId);
+  if (!row) return;
+  row.style.display = row.style.display === 'none' ? 'table-row' : 'none';
+}
 
-<!-- DRAWER STAND BY / BACKLOG -->
-<div id="ent-drawer-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:500;justify-content:flex-end" onclick="closeEntDrawer(event)">
-  <div style="display:flex;height:100vh" onclick="event.stopPropagation()">
-    <!-- Panel detalle (lateral izquierdo, oculto hasta seleccionar) -->
-    <div id="ent-det-overlay" style="display:none;background:var(--bg-card);border-left:1px solid var(--border);width:min(46vw,520px);height:100vh;overflow-y:auto;flex-direction:column">
-      <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
-        <div>
-          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Detalle de proyecto</div>
-          <div style="font-size:15px;font-weight:700;color:var(--text-primary)" id="ent-det-nombre">—</div>
+// Cache de stories parseadas por sección para el filtro
+const specialParsedCache = {};
+
+function filterSpecialTable(sectionId) {
+  const input = document.getElementById(`sp-search-${sectionId}`);
+  const tbody = document.getElementById(`sp-tbody-${sectionId}`);
+  const info  = document.getElementById(`sp-info-${sectionId}`);
+  if (!input || !tbody) return;
+  const q = input.value.toLowerCase();
+  const all = specialParsedCache[sectionId] || [];
+  const filtered = q ? all.filter(s =>
+    s.summary.toLowerCase().includes(q) ||
+    s.codigo.toLowerCase().includes(q) ||
+    (s.asignado||'').toLowerCase().includes(q) ||
+    (s.area||'').toLowerCase().includes(q)
+  ) : all;
+  tbody.innerHTML = renderSpecialRows(filtered, sectionId === 'PTS_327');
+  if (info) info.textContent = `${filtered.length} de ${all.length} historias`;
+}
+
+function toggleSpecialSection(sectionId) {
+  const body = document.getElementById(`sp-body-${sectionId}`);
+  const icon = document.getElementById(`sp-icon-${sectionId}`);
+  if (!body) return;
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : 'block';
+  if (icon) icon.textContent = isOpen ? '▶' : '▼';
+
+  // Lazy load: cargar datos al expandir por primera vez
+  if (!isOpen && !specialParsedCache[sectionId]) {
+    const epicKey = body.dataset.epickey;
+    const loadingEl = document.getElementById(`sp-loading-${sectionId}`);
+    fetchSpecialStories(epicKey).then(rawStories => {
+      const stories = rawStories.map(parseSpecialStory);
+      specialParsedCache[sectionId] = stories;
+      const container = document.getElementById(`sp-content-${sectionId}`);
+      if (container) {
+        container.innerHTML = buildSpecialKpis(stories) + buildSpecialTable(stories, sectionId);
+      }
+    });
+  }
+}
+
+async function renderSpecialSections() {
+  const container = document.getElementById('special-sections-container');
+  if (!container) return;
+
+  const entries = Object.entries(SPECIAL_EPICS); // [[key, {label,icon}], ...]
+  container.innerHTML = entries.map(([epicKey, meta]) => {
+    const sId = epicKey.replace('-', '_');
+    return `
+      <div class="sp-section">
+        <div class="sp-header" onclick="toggleSpecialSection('${sId}')">
+          <span class="sp-icon" id="sp-icon-${sId}">▶</span>
+          <span class="sp-title">${meta.icon} ${meta.label}</span>
+          <span class="sp-hint">Clic para expandir</span>
         </div>
-        <button onclick="document.getElementById('ent-det-overlay').style.display='none'" style="background:none;border:none;color:var(--text-muted);font-size:18px;cursor:pointer;padding:4px">&#x2715;</button>
-      </div>
-      <div style="padding:20px;flex:1" id="ent-det-body"></div>
-    </div>
-    <!-- Panel listado (derecha) -->
-    <div id="ent-drawer-panel" style="background:var(--bg-surface);border-left:1px solid var(--border);width:min(46vw,520px);height:100vh;overflow-y:auto;display:flex;flex-direction:column">
-      <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
-        <div>
-          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Portafolio</div>
-          <div style="font-size:16px;font-weight:700;color:var(--text-primary)" id="ent-drawer-title">—</div>
+        <div class="sp-body" id="sp-body-${sId}" style="display:none" data-epickey="${epicKey}">
+          <div id="sp-content-${sId}">
+            <div id="sp-loading-${sId}" style="padding:16px 20px;color:var(--text-muted);font-size:13px">Cargando historias...</div>
+          </div>
         </div>
-        <button onclick="document.getElementById('ent-drawer-overlay').style.display='none'" style="background:none;border:none;color:var(--text-muted);font-size:18px;cursor:pointer;padding:4px">&#x2715;</button>
+      </div>`;
+  }).join('');
+}
+
+// ── PESTAÑA ENTREGABLES ─────────────────────────────────────
+
+function getSemaforoEnt(e) {
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  const fin = e.duedate ? new Date(e.duedate+'T12:00:00') : null;
+  const vencido = fin && fin < hoy;
+  const tieneReplan = !!e.replanificacion;
+  // 1. Producción (prioridad máxima)
+  const statusLow = (e.status||'').toLowerCase();
+  if (statusLow === 'producción' || statusLow === 'produccion') return { color:'#3B82F6', label:'Producción', textColor:'#fff', border:'#1D4ED8' };
+  // 2. Vencido
+  if (vencido)     return { color:'#ef4444', label:'Vencido',       textColor:'#fff' };
+  // 3. Replanificado
+  if (tieneReplan) return { color:'#F5B800', label:'Replanificado', textColor:'#1a1a1a' };
+  // 4. En plazo
+  return             { color:'#4ade80', label:'En plazo',      textColor:'#1a1a1a' };
+}
+
+
+
+
+// ── TARJETAS STAND BY Y BACKLOG EN ENTREGABLES ──────────────
+
+function renderEntKpiCards() {
+  // Reutiliza el mismo renderKpiEjecutivo existente ya en ent-kpi-wrap
+  // Agrega tarjetas Stand By y Backlog en ent-cards-wrap
+  const wrap = document.getElementById('ent-cards-wrap');
+  if (!wrap) return;
+
+  const allEpics = (epics || []).filter(e => !SPECIAL_EPIC_KEYS.includes(e.key));
+  const standbyList = allEpics.filter(e => (e.status||'').toLowerCase() === 'stand by');
+  const backlogList = allEpics.filter(e => (e.status||'').toLowerCase() === 'backlog');
+
+  // Calcular días promedio en Stand By (desde fechaInicio si existe)
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  const diasSB = standbyList.map(e => {
+    if (!e.fechaInicio) return null;
+    const d = new Date(e.fechaInicio+'T12:00:00');
+    return Math.max(0, Math.round((hoy - d) / 86400000));
+  }).filter(v => v !== null);
+  const avgSB = diasSB.length ? Math.round(diasSB.reduce((a,b)=>a+b,0)/diasSB.length) : null;
+
+  const diasBL = backlogList.map(e => {
+    if (!e.fechaInicio) return null;
+    const d = new Date(e.fechaInicio+'T12:00:00');
+    return Math.max(0, Math.round((hoy - d) / 86400000));
+  }).filter(v => v !== null);
+  const avgBL = diasBL.length ? Math.round(diasBL.reduce((a,b)=>a+b,0)/diasBL.length) : null;
+
+  wrap.innerHTML = `
+    <div class="kpi ent-kpi-clickable" onclick="openEntDrawer('standby')" style="cursor:pointer" title="Ver proyectos Stand By">
+      <div class="kpi-label" style="display:flex;align-items:center;gap:5px">
+        ${WARN_ICON} Proyectos con Bloqueantes
       </div>
-      <div style="padding:16px;flex:1" id="ent-drawer-body"></div>
+      <div class="kpi-value" style="color:#F5B800">${standbyList.length}</div>
+      <div class="kpi-sub">Stand By${avgSB!==null?' · Prom: '+avgSB+'d':''}</div>
     </div>
-  </div>
-</div>
-</body>
-</html>
+    <div class="kpi ent-kpi-clickable" onclick="openEntDrawer('backlog')" style="cursor:pointer" title="Ver proyectos Backlog">
+      <div class="kpi-label" style="display:flex;align-items:center;gap:5px">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+        Backlog
+      </div>
+      <div class="kpi-value c-white">${backlogList.length}</div>
+      <div class="kpi-sub">Pendientes de iniciar${avgBL!==null?' · Prom: '+avgBL+'d':''}</div>
+    </div>`;
+}
+
+// Drawer propio para Stand By y Backlog
+function openEntDrawer(tipo) {
+  const allEpics = (epics || []).filter(e => !SPECIAL_EPIC_KEYS.includes(e.key));
+  const lista = tipo === 'standby'
+    ? allEpics.filter(e => (e.status||'').toLowerCase() === 'stand by')
+    : allEpics.filter(e => (e.status||'').toLowerCase() === 'backlog');
+
+  const titulo = tipo === 'standby' ? 'Proyectos Stand By' : 'Proyectos Backlog';
+  const icono = tipo === 'standby'
+    ? WARN_ICON
+    : '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>';
+
+  const epicIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>';
+  const items = lista.map(e => `
+    <div class="det-proj-card" onclick="openEntDetalle('${e.key}')" style="cursor:pointer">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        ${epicIcon}
+        <a href="${JIRA_BASE}${e.key}" target="_blank" onclick="event.stopPropagation()" style="font-size:11px;font-weight:600;color:var(--blue);text-decoration:none">${esc(e.codigo||e.key)}</a>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <span style="font-size:13px;font-weight:600;color:var(--text-primary)">${esc(e.summary)}</span>
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);display:flex;gap:12px;flex-wrap:wrap">
+        <span><span class="badge badge-${sbClass(e.status)}">${esc(e.status)}</span></span>
+        ${e.sponsor?`<span>Sponsor: ${esc(e.sponsor)}</span>`:''}
+        ${e.asignado?`<span>Resp: ${esc(e.asignado)}</span>`:''}
+        ${e.duedate?`<span>Fin: ${fmtD(e.duedate)}</span>`:''}
+      </div>
+    </div>`).join('');
+
+  document.getElementById('ent-drawer-title').textContent = titulo;
+  document.getElementById('ent-drawer-body').innerHTML =
+    items || '<div style="padding:20px;color:var(--text-muted)">No hay proyectos en este estado.</div>';
+  const ov = document.getElementById('ent-drawer-overlay');
+  ov.style.display = 'flex';
+}
+
+function closeEntDrawer(event) {
+  if (event && event.target !== document.getElementById('ent-drawer-overlay')) return;
+  document.getElementById('ent-drawer-overlay').style.display = 'none';
+  document.getElementById('ent-det-overlay').style.display = 'none';
+}
+
+// Panel de detalle dentro del drawer (bitácora, próximos pasos, etc.)
+function openEntDetalle(key) {
+  const e = (epics||[]).find(x => x.key === key);
+  if (!e) return;
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+
+  // Calcular días en estado actual desde fechaInicio
+  const diasEst = e.fechaInicio
+    ? Math.max(0, Math.round((hoy - new Date(e.fechaInicio+'T12:00:00')) / 86400000))
+    : null;
+
+  const bitHtml = e.bitacora
+    ? `<div class="log-box">${esc(e.bitacora)}</div>`
+    : `<div class="log-box empty">Sin bitácora registrada</div>`;
+  const proxHtml = e.proximosPasos
+    ? `<div class="log-box">${esc(e.proximosPasos)}</div>`
+    : `<div class="log-box empty">Sin próximos pasos definidos</div>`;
+  const condHtml = e.condicion
+    ? `<div class="log-box">${esc(e.condicion)}</div>`
+    : `<div class="log-box empty">Sin información</div>`;
+
+  const ov = document.getElementById('ent-det-overlay');
+  document.getElementById('ent-det-nombre').textContent = e.summary;
+  document.getElementById('ent-det-body').innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border-light);margin-bottom:16px;border-radius:6px;overflow:hidden">
+      <div style="background:var(--bg-surface);padding:12px;text-align:center">
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px">Estado</div>
+        <span class="badge badge-${sbClass(e.status)}">${esc(e.status)}</span>
+      </div>
+      <div style="background:var(--bg-surface);padding:12px;text-align:center">
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px">Días en estado</div>
+        <div style="font-size:20px;font-weight:700;color:var(--yellow)">${diasEst!==null?diasEst:'—'}</div>
+      </div>
+      <div style="background:var(--bg-surface);padding:12px;text-align:center">
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px">Fecha Fin</div>
+        <div style="font-size:13px;font-weight:600;color:var(--text-primary)">${fmtD(e.duedate)||'—'}</div>
+      </div>
+    </div>
+    <div class="gm-section">
+      <div class="gm-item"><span class="gm-lbl">Área</span><span class="gm-val">${esc(e.area)||'—'}</span></div>
+      <div class="gm-item"><span class="gm-lbl">Sponsor</span><span class="gm-val">${esc(e.sponsor)||'—'}</span></div>
+      <div class="gm-item"><span class="gm-lbl">Responsable</span><span class="gm-val">${esc(e.asignado)||'—'}</span></div>
+      <div class="gm-item"><span class="gm-lbl">Fecha Inicio</span><span class="gm-val">${fmtD(e.fechaInicio)||'—'}</span></div>
+      <div class="gm-item"><span class="gm-lbl">COND.</span><span class="gm-val">${esc(e.condicion)||'—'}</span></div>
+    </div>
+    <div class="log-section" style="margin-top:12px">
+      <div class="log-title"><div class="log-title-bar" style="background:var(--blue)"></div>Detalles clave</div>
+      ${condHtml}
+      <div class="log-spacer"></div>
+      <div class="log-title"><div class="log-title-bar"></div>Bitácora</div>
+      ${bitHtml}
+      <div class="log-spacer"></div>
+      <div class="log-title"><div class="log-title-bar"></div>Próximos pasos</div>
+      ${proxHtml}
+    </div>`;
+  ov.style.display = 'flex';
+  ov.style.flexDirection = 'column';
+}
+
+// ── TARJETA KPI EJECUTIVO ENTREGABLES ───────────────────────
+function renderKpiEjecutivo() {
+  const wrap = document.getElementById('ent-kpi-wrap');
+  if (!wrap) return;
+
+  const desde = document.getElementById('ent-desde')?.value || '';
+  const hasta  = document.getElementById('ent-hasta')?.value  || '';
+
+  const allEpics = (epics || []).filter(e => !SPECIAL_EPIC_KEYS.includes(e.key));
+  const excluded = ['stand by','backlog','desestimado','planificado'];
+  const data = allEpics.filter(e => {
+    if (!e.duedate) return false;
+    if (excluded.includes((e.status||'').toLowerCase())) return false;
+    if (desde && e.duedate < desde) return false;
+    if (hasta && e.duedate > hasta) return false;
+    return true;
+  });
+  const total = data.length;
+  const nStandby = allEpics.filter(e => (e.status||'').toLowerCase()==='stand by').length;
+  const nBacklog  = allEpics.filter(e => (e.status||'').toLowerCase()==='backlog').length;
+
+  let nPlazo=0, nProd=0, nReplan=0, nVencido=0;
+  data.forEach(e => {
+    const s = getSemaforoEnt(e).label;
+    if (s==='En plazo')        nPlazo++;
+    else if (s==='Producción') nProd++;
+    else if (s==='Replanificado') nReplan++;
+    else if (s==='Vencido')    nVencido++;
+  });
+
+  const pct = n => total ? Math.round(n/total*100) : 0;
+  const cumplimiento = pct(nPlazo + nProd);
+  const cumColor = cumplimiento>=80?'var(--green)':cumplimiento>=60?'var(--yellow)':'var(--red)';
+
+  const rowInteractive = (onclick, icon, label, num, numColor) =>
+    `<div class="ent-kpi-row ent-kpi-btn" onclick="${onclick}" title="Ver proyectos">
+      <span class="ent-kpi-lbl">${icon} ${label}</span>
+      <div class="ent-kpi-vals"><span class="ent-kpi-num" style="color:${numColor||'var(--text-primary)'}">${num}</span></div>
+    </div>`;
+
+  wrap.innerHTML = `
+    <div class="ent-kpi-card">
+      <div class="ent-kpi-card-title">📊 Indicadores del Portafolio</div>
+      <div class="ent-kpi-row">
+        <span class="ent-kpi-lbl">📦 Total entregables</span>
+        <div class="ent-kpi-vals"><span class="ent-kpi-num">${total}</span></div>
+      </div>
+      <div class="ent-kpi-row">
+        <span class="ent-kpi-lbl"><span style="color:#4ade80">●</span> En plazo</span>
+        <div class="ent-kpi-vals"><span class="ent-kpi-num" style="color:#4ade80">${nPlazo}</span><span class="ent-kpi-pct">${pct(nPlazo)}%</span></div>
+      </div>
+      <div class="ent-kpi-row">
+        <span class="ent-kpi-lbl"><span style="color:#3B82F6">●</span> Producción</span>
+        <div class="ent-kpi-vals"><span class="ent-kpi-num" style="color:#14B8A6">${nProd}</span><span class="ent-kpi-pct">${pct(nProd)}%</span></div>
+      </div>
+      <div class="ent-kpi-row">
+        <span class="ent-kpi-lbl"><span style="color:#F5B800">●</span> Replanificados</span>
+        <div class="ent-kpi-vals"><span class="ent-kpi-num" style="color:#F5B800">${nReplan}</span><span class="ent-kpi-pct">${pct(nReplan)}%</span></div>
+      </div>
+      <div class="ent-kpi-row">
+        <span class="ent-kpi-lbl"><span style="color:#ef4444">●</span> Vencidos</span>
+        <div class="ent-kpi-vals"><span class="ent-kpi-num" style="color:#ef4444">${nVencido}</span><span class="ent-kpi-pct">${pct(nVencido)}%</span></div>
+      </div>
+      ${rowInteractive("openEntDrawer('standby')", WARN_ICON, 'Proyectos con Bloqueantes', nStandby, '#F5B800')}
+      ${rowInteractive("openEntDrawer('backlog')", '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>', 'Backlog', nBacklog, 'var(--text-primary)')}
+      <hr class="ent-kpi-divider">
+      <div class="ent-kpi-cumplimiento">
+        <div class="ent-kpi-cum-lbl">📈 Cumplimiento General</div>
+        <div class="ent-kpi-cum-val" style="color:${cumColor}">${cumplimiento}%</div>
+      </div>
+    </div>`;
+}
+
+// ── RESUMEN MENSUAL ENTREGABLES ──────────────────────────────
+function renderResumenMensual() {
+  renderKpiEjecutivo();
+  const wrap = document.getElementById('ent-resumen-wrap');
+  if (!wrap) return;
+
+  // Todos los entregables sin filtro de fechas, excluyendo Stand By, Backlog y Desestimado
+  const EXCLUIR_RESUMEN = ['stand by','standby','stand-by','backlog','desestimado'];
+  const data = (epics || []).filter(e => !SPECIAL_EPIC_KEYS.includes(e.key) && e.duedate && !EXCLUIR_RESUMEN.includes((e.status||'').toLowerCase()));
+  if (!data.length) { wrap.innerHTML = ''; return; }
+
+  // Rango de meses: desde el mínimo hasta el máximo de fechas fin
+  const fechas = data.map(e => e.duedate).sort();
+  const dMin = new Date(fechas[0]+'T12:00:00');
+  const dMax = new Date(fechas[fechas.length-1]+'T12:00:00');
+  dMin.setDate(1); dMax.setDate(1);
+
+  // Agrupar por mes
+  const byMonth = {};
+  data.forEach(e => {
+    const d = new Date(e.duedate+'T12:00:00');
+    const mk = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    if (!byMonth[mk]) byMonth[mk] = [];
+    byMonth[mk].push(e);
+  });
+
+  // Orden de estados para mostrar bloques
+  const ORDEN = ['En plazo','Replanificado','Vencido','Producción'];
+  const COLORS = {
+    'En plazo':      '#4ade80',
+    'Replanificado': '#F5B800',
+    'Vencido':       '#ef4444',
+    'Producción':    '#3B82F6'
+  };
+
+  // Generar todas las filas de meses en el rango
+  let html = '<div class="ent-resumen-title">Resumen mensual de entregables</div><div class="ent-resumen-grid">';
+
+  let cur = new Date(dMin);
+  while (cur <= dMax) {
+    const mk = `${cur.getFullYear()}-${String(cur.getMonth()+1).padStart(2,'0')}`;
+    const mesLabel = cur.toLocaleDateString('es-PE', { month:'long', year:'numeric' });
+    const items = byMonth[mk] || [];
+
+    html += `<div class="ent-mes-row">
+      <span class="ent-mes-label">${mesLabel.charAt(0).toUpperCase()+mesLabel.slice(1)}</span>`;
+
+    if (!items.length) {
+      html += '<span class="ent-mes-vacio">Sin entregables</span>';
+    } else {
+      // Agrupar por estado
+      const grupos = {};
+      items.forEach(e => {
+        const sem = getSemaforoEnt(e);
+        if (!grupos[sem.label]) grupos[sem.label] = [];
+        grupos[sem.label].push(e);
+      });
+
+      html += '<div class="ent-mes-bloques">';
+      ORDEN.forEach(estado => {
+        const grupo = grupos[estado] || [];
+        if (!grupo.length) return;
+        const col = COLORS[estado];
+        html += `<div class="ent-grupo">`;
+        grupo.forEach(e => {
+          const bit = esc(e.bitacora || 'Sin bitácora').replace(/"/g,'&quot;');
+          const tip = `${esc(e.codigo||e.key)} · ${esc(e.summary)}&#10;Fin: ${fmtD(e.duedate)||e.duedate}&#10;Estado: ${estado}&#10;${bit}`;
+          html += `<div class="ent-bloque" style="background:${col}" title="${tip}" onclick="showEntDetalle(event,'${e.key}')"></div>`;
+        });
+        html += `<span class="ent-grupo-count">${grupo.length}</span></div>`;
+      });
+      html += '</div>';
+    }
+
+    html += '</div>';
+    cur.setMonth(cur.getMonth()+1);
+  }
+
+  html += '</div>';
+  wrap.innerHTML = html;
+}
+
+function limpiarEntFiltros() {
+  document.getElementById('ent-desde').value = '';
+  document.getElementById('ent-hasta').value = '';
+  const s = document.getElementById('ent-search'); if(s) s.value = '';
+  renderEntregables();
+}
+
+function renderEntregables() {
+  renderResumenMensual();
+  const wrap = document.getElementById('ent-gantt-wrap');
+  if (!wrap) return;
+
+  const desde = document.getElementById('ent-desde')?.value || '';
+  const hasta = document.getElementById('ent-hasta')?.value || '';
+  const search = (document.getElementById('ent-search')?.value || '').toLowerCase().trim();
+
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  const hoyIso = hoy.toISOString().slice(0,10);
+
+  const EXCLUIR_GANTT = ['backlog','desestimado','stand by','standby','stand-by','bloqueado','blocked'];
+  let data = (epics || []).filter(e => {
+    if (SPECIAL_EPIC_KEYS.includes(e.key)) return false;
+    if (!e.duedate) return false;
+    if (EXCLUIR_GANTT.includes((e.status||'').toLowerCase())) return false;
+    if (desde && e.duedate < desde) return false;
+    if (hasta && e.duedate > hasta) return false;
+    if (search && !(e.codigo||'').toLowerCase().includes(search) && !e.summary.toLowerCase().includes(search) && !e.key.toLowerCase().includes(search)) return false;
+    return true;
+  }).sort((a,b) => a.duedate.localeCompare(b.duedate));
+
+  if (!data.length) {
+    wrap.innerHTML = '<div class="ent-empty">No hay entregables con fecha fin en el rango seleccionado.</div>';
+    return;
+  }
+
+  // Rango del Gantt: desde hoy (o la más temprana si ya venció) hasta la más lejana + 7 días
+  const fechas = data.map(e => e.duedate);
+  const minFin = fechas.reduce((a,b) => a<b?a:b);
+  const maxFin = fechas.reduce((a,b) => a>b?a:b);
+  const ganttStart = new Date(Math.min(hoy, new Date(minFin+'T12:00:00')));
+  ganttStart.setHours(0,0,0,0);
+  const ganttEnd = new Date(maxFin+'T12:00:00');
+  ganttEnd.setDate(ganttEnd.getDate() + 10);
+  ganttEnd.setHours(0,0,0,0);
+
+  const totalDays = Math.round((ganttEnd - ganttStart) / 86400000);
+  const COL_W = 28; // px por día
+  const ROW_H = 36;
+  const LABEL_W = 320;
+  const ganttW = totalDays * COL_W;
+
+  // Construir cabeceras: meses y días
+  let months = [];
+  let days = [];
+  let cur = new Date(ganttStart);
+  while (cur <= ganttEnd) {
+    const iso = cur.toISOString().slice(0,10);
+    const dow = cur.getDay();
+    const isWE = dow === 0 || dow === 6;
+    const isHoy = iso === hoyIso;
+    days.push({ iso, day: cur.getDate(), dow, isWE, isHoy });
+    // mes
+    const mKey = `${cur.getFullYear()}-${cur.getMonth()}`;
+    if (!months.length || months[months.length-1].key !== mKey) {
+      months.push({ key: mKey, label: cur.toLocaleDateString('es-PE',{month:'short',year:'numeric'}), count: 1 });
+    } else {
+      months[months.length-1].count++;
+    }
+    cur.setDate(cur.getDate()+1);
+  }
+
+  // Función para calcular posición X de una fecha
+  function xOf(isoDate) {
+    const d = new Date(isoDate+'T12:00:00'); d.setHours(0,0,0,0);
+    return Math.round((d - ganttStart) / 86400000) * COL_W;
+  }
+
+  const totalW = LABEL_W + ganttW;
+
+  let html = `<div style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 180px)">
+  <div class="ent-gantt-tbl" style="width:${totalW}px">
+    <div style="position:sticky;top:0;z-index:6;background:var(--bg-base)">
+      <div style="display:flex">
+        <div style="width:${LABEL_W}px;min-width:${LABEL_W}px;background:var(--bg-base);border-bottom:1px solid var(--border-light);border-right:1px solid var(--border-light);padding:4px 10px;font-size:11px;color:var(--text-muted);display:flex;align-items:center;box-sizing:border-box">Proyecto</div>
+        <div style="display:flex;border-bottom:1px solid var(--border-light)">`;
+  months.forEach(m => {
+    html += `<div style="width:${m.count*COL_W}px;min-width:${m.count*COL_W}px;padding:4px 6px;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;border-right:1px solid var(--border-light);overflow:hidden;white-space:nowrap;box-sizing:border-box">${m.label}</div>`;
+  });
+  html += `</div>
+      </div>
+      <div style="display:flex">
+        <div style="width:${LABEL_W}px;min-width:${LABEL_W}px;background:var(--bg-base);border-bottom:1px solid var(--border-light);border-right:1px solid var(--border-light);box-sizing:border-box"></div>
+        <div style="display:flex;border-bottom:1px solid var(--border-light)">`;
+  days.forEach(d => {
+    const bg = d.isHoy ? 'rgba(59,130,246,.25)' : d.isWE ? 'rgba(255,255,255,.03)' : 'transparent';
+    const col = d.isHoy ? '#60a5fa' : d.isWE ? 'var(--text-dim)' : 'var(--text-muted)';
+    html += `<div style="width:${COL_W}px;min-width:${COL_W}px;text-align:center;font-size:9px;padding:3px 0;background:${bg};color:${col};border-right:1px solid rgba(255,255,255,.04);box-sizing:border-box">${d.day}</div>`;
+  });
+  html += `</div>
+      </div>
+    </div>`;
+
+  // Línea de hoy (posición)
+  const hoyX = xOf(hoyIso);
+
+  data.forEach((e, i) => {
+    const sem = getSemaforoEnt(e);
+    const fin = new Date(e.duedate+'T12:00:00'); fin.setHours(0,0,0,0);
+    const vencido = fin < hoy;
+
+    // Barra: SOLO la columna de la Fecha Fin (1 día de ancho = hito)
+    const bx = xOf(e.duedate);
+    const bw = COL_W;
+
+    const bg = i%2===0 ? 'transparent' : 'rgba(255,255,255,.015)';
+
+    html += `<div style="display:flex;height:${ROW_H}px;background:${bg}">
+      <div style="width:${LABEL_W}px;min-width:${LABEL_W}px;padding:4px 10px;border-right:1px solid var(--border-light);border-bottom:1px solid rgba(255,255,255,.05);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;box-sizing:border-box">
+        <div style="font-size:11px;font-weight:600;color:var(--blue)"><a href="${JIRA_BASE}${e.key}" target="_blank" onclick="event.stopPropagation()" style="color:var(--blue);text-decoration:none">${esc(e.codigo||e.key)}</a></div>
+        <div style="font-size:11px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(e.summary)}">${esc(e.summary)}</div>
+      </div>
+      <div style="width:${ganttW}px;min-width:${ganttW}px;border-bottom:1px solid rgba(255,255,255,.05);position:relative;box-sizing:border-box">
+        <!-- grid lines fin de semana -->
+        <div style="display:flex;height:100%;position:absolute;inset:0">`;
+    days.forEach(d => {
+      const colBg = d.isHoy ? 'rgba(59,130,246,.08)' : d.isWE ? 'rgba(255,255,255,.025)' : 'transparent';
+      html += `<div style="width:${COL_W}px;min-width:${COL_W}px;height:100%;background:${colBg};border-right:1px solid rgba(255,255,255,.035)"></div>`;
+    });
+    html += `</div>
+        <!-- barra -->
+        <div style="position:absolute;top:50%;transform:translateY(-50%);left:${bx}px;width:${bw}px;height:22px;background:${sem.color};border-radius:4px;display:flex;align-items:center;padding:0 8px;cursor:pointer;box-sizing:border-box;overflow:hidden;white-space:nowrap"
+             onclick="showEntDetalle(event,'${e.key}')" title="${esc(e.summary)} · ${fmtD(e.duedate)}">
+
+        </div>
+        <!-- línea de hoy -->
+        <div style="position:absolute;top:0;bottom:0;left:${hoyX}px;width:2px;background:#3b82f6;opacity:.6;pointer-events:none"></div>
+      </div>
+    </div>`;
+  });
+
+  html += `</div></div>`;
+  wrap.innerHTML = html;
+}
+
+function showEntDetalle(event, key) {
+  event.stopPropagation();
+  const e = (epics||[]).find(x => x.key === key);
+  if (!e) return;
+  const sem = getSemaforoEnt(e);
+  const tt = document.getElementById('ent-tooltip');
+  document.getElementById('ent-tooltip-title').textContent = `${e.codigo||e.key} · ${e.summary}`;
+  document.getElementById('ent-tooltip-fecha').textContent = `Fecha Fin: ${fmtD(e.duedate)||'—'} · ${sem.label}`;
+  document.getElementById('ent-tooltip-bit').textContent = e.replanificacion || e.bitacora || 'Sin información registrada.';
+  const x = Math.min(event.clientX + 12, window.innerWidth - 380);
+  const y = Math.min(event.clientY + 12, window.innerHeight - 300);
+  tt.style.left = x + 'px';
+  tt.style.top  = y + 'px';
+  tt.style.display = 'block';
+}
+
+document.addEventListener('click', e => {
+  const tt = document.getElementById('ent-tooltip');
+  if (tt && !tt.contains(e.target)) tt.style.display = 'none';
+});
