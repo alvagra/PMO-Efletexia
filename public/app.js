@@ -887,34 +887,20 @@ function recomputeRecursos(){
     // También se guarda el set de días asignados a cada proyecto, para la matriz día a día del Bloque 1.
     // Y el detalle de tareas del mes (con su porción de horas), para que el popup "Ver" coincida con la matriz.
     const proyectosMes = Object.values(p.epicasMap).map(e => {
-      let horasMes = 0, horasPendMes = 0, pendientesMes = 0;
-      const diasHoras = {}; // fecha -> horas estimadas ese día (campo "Horas estimadas" de Jira, distribuido/prorrateado)
-      const tareasMes = [];
-      (e.tareas||[]).forEach(t => {
-        let horasTareaMes = 0;
-        if(t.fechaInicio && t.fechaFin){
-          distribuirHoras(t.horasEst, t.fechaInicio, t.fechaFin, pais)
-            .filter(d => d.fecha.startsWith(ymPrefix))
-            .forEach(d => { horasMes += d.horas; horasTareaMes += d.horas; diasHoras[d.fecha] = (diasHoras[d.fecha]||0) + d.horas; });
-        } else if(t.fecha && t.fecha.startsWith(ymPrefix)) {
-          // Fallback si falta alguna fecha: contar la hora estimada completa si su única fecha cae en el mes
-          horasMes += t.horasEst; horasTareaMes = t.horasEst;
-          diasHoras[t.fecha] = (diasHoras[t.fecha]||0) + t.horasEst;
-        }
-        if(horasTareaMes > 0){
-          tareasMes.push({...t, horasMes:+horasTareaMes.toFixed(1)});
-          horasPendMes += t.horasPend;
-          if(!t.isDone) pendientesMes++;
-        }
-      });
+      // Se incluyen TODAS las subtareas del proyecto, sin filtrar por mes ni por si tienen fechas cargadas —
+      // así ninguna subtarea se pierde por falta de fecha o por inconsistencias de datos en Jira.
+      const tareasMes = (e.tareas||[]).map(t => ({...t, horasMes:t.horasEst}));
+      const horasMes = tareasMes.reduce((s,t)=>s+t.horasEst,0);
+      const horasPendMes = tareasMes.reduce((s,t)=>s+t.horasPend,0);
+      const pendientesMes = tareasMes.filter(t=>!t.isDone).length;
       return {
         key:e.key, nombre:e.nombre, codigo:e.codigo||e.key, contexto:e.contexto||null,
         epicaFechaInicio:e.epicaFechaInicio||null, epicaFechaFin:e.epicaFechaFin||null,
-        horas:+horasMes.toFixed(1), diasHoras, dias:Object.keys(diasHoras),
+        horas:+horasMes.toFixed(1),
         actividades:tareasMes.length, pendientes:pendientesMes, horasPend:+horasPendMes.toFixed(1),
         tareas:tareasMes,
       };
-    }).filter(pr => pr.horas > 0).sort((a,b)=>b.horas-a.horas);
+    }).filter(pr => pr.actividades > 0).sort((a,b)=>b.horas-a.horas);
 
     const proyectosMesCount = proyectosMes.length;
     const horasPendMesTotal = +proyectosMes.reduce((s,pr)=>s+pr.horasPend,0).toFixed(1);
