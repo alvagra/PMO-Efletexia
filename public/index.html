@@ -623,14 +623,13 @@ a.jlink:hover{text-decoration:underline}
     <button class="btn-export" id="btn-export-rec" type="button"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>CSV</button>
   </div>
 
-  <!-- Fecha de corte -->
+  <!-- Rango de fechas -->
   <div class="rec-corte">
     <div class="rec-corte-label">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-      FECHA DE CORTE
+      RANGO DE FECHAS
     </div>
-    <input type="date" id="rec-fecha-corte" class="rec-date-input"/>
-    <div id="rec-corte-info" style="margin-left:16px;font-size:12px;color:var(--text-muted)"></div>
+    <div id="rec-corte-info" style="font-size:12px;color:var(--text-muted)"></div>
     <div style="display:flex;align-items:center;gap:8px;margin-left:24px">
       <span style="font-size:11px;color:var(--text-muted)">Desde</span>
       <input type="date" id="rec-rango-desde" class="rec-date-input"/>
@@ -639,6 +638,8 @@ a.jlink:hover{text-decoration:underline}
       <button id="rec-rango-limpiar" class="rec-ver-btn" style="font-size:11px;padding:4px 10px">Limpiar rango</button>
     </div>
   </div>
+  <!-- Fecha de corte (oculto): sigue existiendo en el DOM para no romper el cálculo mensual interno, pero ya no se muestra ni es editable -->
+  <input type="hidden" id="rec-fecha-corte"/>
 
   <div class="rec-table-info" id="rec-table-info">Sin datos cargados</div>
 
