@@ -752,6 +752,16 @@ document.getElementById('modal-overlay').addEventListener('click',function(ev){ 
   const fi=document.getElementById('rec-fecha-corte');
   if(fi){ fi.value=today; fi.addEventListener('change',()=>{ if(recursos.length>0) recomputeRecursos(); }); }
   document.getElementById('rec-search').addEventListener('input', renderRecursos);
+  const rDesde=document.getElementById('rec-rango-desde');
+  const rHasta=document.getElementById('rec-rango-hasta');
+  if(rDesde) rDesde.addEventListener('change', renderRecursos);
+  if(rHasta) rHasta.addEventListener('change', renderRecursos);
+  const rLimpiar=document.getElementById('rec-rango-limpiar');
+  if(rLimpiar) rLimpiar.addEventListener('click', ()=>{
+    if(rDesde) rDesde.value='';
+    if(rHasta) rHasta.value='';
+    renderRecursos();
+  });
 })();
 
 let recHistoriasCache = [];
@@ -961,10 +971,25 @@ function renderRecursos(){
       if(!ordenProyectos.length){
         cardsWrap.innerHTML = '<div class="rec-card-proj-empty">Sin proyectos este mes</div>';
       } else {
-        cardsWrap.innerHTML = ordenProyectos.map(key=>{
+        const rangoDesde = document.getElementById('rec-rango-desde')?.value || '';
+        const rangoHasta = document.getElementById('rec-rango-hasta')?.value || '';
+        const hayRango = !!(rangoDesde || rangoHasta);
+
+        const bloques = ordenProyectos.map(key=>{
           const p = proyectosPorKey[key];
+          let tareasFiltradas = p.tareas||[];
+          if(hayRango){
+            tareasFiltradas = tareasFiltradas.filter(t=>{
+              if(!t.fechaInicio && !t.fechaFin) return false; // sin fecha: no se puede ubicar en el rango
+              const ini = t.fechaInicio || t.fechaFin;
+              const fin = t.fechaFin || t.fechaInicio;
+              if(rangoDesde && fin < rangoDesde) return false;
+              if(rangoHasta && ini > rangoHasta) return false;
+              return true;
+            });
+          }
           // Ordenar tareas por fecha de inicio ascendente (las sin fecha van al final)
-          const tareasOrdenadas = (p.tareas||[]).slice().sort((a,b)=>{
+          const tareasOrdenadas = tareasFiltradas.slice().sort((a,b)=>{
             if(!a.fechaInicio && !b.fechaInicio) return 0;
             if(!a.fechaInicio) return 1;
             if(!b.fechaInicio) return -1;
@@ -981,6 +1006,8 @@ function renderRecursos(){
               <td><span class="det-badge det-badge-${st.cls}">${st.label}</span></td>
             </tr>`;
           }).join('');
+          if(hayRango && !tareasOrdenadas.length) return null; // sin coincidencias en el rango: no mostrar este proyecto
+
           return `<div class="rec-card">
             <div class="rec-proj-block">
               <div class="rec-proj-left">
@@ -1003,7 +1030,9 @@ function renderRecursos(){
               </div>
             </div>
           </div>`;
-        }).join('');
+        }).filter(Boolean);
+
+        cardsWrap.innerHTML = bloques.length ? bloques.join('') : '<div class="rec-card-proj-empty">Sin resultados para el rango de fechas seleccionado</div>';
       }
     }
   }
