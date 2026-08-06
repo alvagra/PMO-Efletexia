@@ -860,7 +860,8 @@ function recomputeRecursos(){
       if(!isDone) p.epicasMap[epicaKey].pendientes++;
       let contexto = f._tareaParent?.description || null;
       if(contexto && typeof contexto==='object') contexto = adfToText(contexto).trim();
-      p.epicasMap[epicaKey].tareas.push({key:h.key,nombre:f.summary||h.key,status,isDone,horasEst,horasPend,fechaInicio:f.customfield_10015||null,fechaFin:f.duedate||null,fecha:f.customfield_10015||f.duedate||null,updated:f.updated||null,contexto});
+      const tareaParentKey = f._tareaParent?.key || null;
+      p.epicasMap[epicaKey].tareas.push({key:h.key,nombre:f.summary||h.key,status,isDone,horasEst,horasPend,fechaInicio:f.customfield_10015||null,fechaFin:f.duedate||null,fecha:f.customfield_10015||f.duedate||null,updated:f.updated||null,contexto,tareaParentKey});
     }
   });
 
@@ -966,23 +967,36 @@ function renderRecursos(){
           proyectosHtml = '<div class="rec-card-proj-empty">Sin proyectos este mes</div>';
         } else {
           proyectosHtml = r.proyectosMes.map(p=>{
-            const tareasRows = (p.tareas||[]).map(t=>{
-              const st = clsActStatus(t.status);
-              return `<tr>
-                <td>${esc(t.nombre)}</td>
-                <td class="rec-tarea-contexto" title="${esc(t.contexto||'')}">${esc(t.contexto||'—')}</td>
-                <td>${fmtD(t.fechaInicio)||'—'}</td>
-                <td>${fmtD(t.fechaFin)||'—'}</td>
-                <td>${t.horasEst}h</td>
-                <td><span class="det-badge det-badge-${st.cls}">${st.label}</span></td>
-              </tr>`;
+            // Agrupar subtareas por su Historia padre, para fusionar la celda de Contexto del desarrollo (es el mismo texto para todas las subtareas de una misma historia)
+            const grupos = [];
+            const grupoPorTarea = {};
+            (p.tareas||[]).forEach(t=>{
+              const gKey = t.tareaParentKey || t.key;
+              if(!grupoPorTarea[gKey]){ grupoPorTarea[gKey] = { contexto:t.contexto, items:[] }; grupos.push(grupoPorTarea[gKey]); }
+              grupoPorTarea[gKey].items.push(t);
+            });
+            const tareasRows = grupos.map(g=>{
+              return g.items.map((t,i)=>{
+                const st = clsActStatus(t.status);
+                const contextoCell = i===0
+                  ? `<td class="rec-tarea-contexto" rowspan="${g.items.length}">${esc(g.contexto||'—')}</td>`
+                  : '';
+                return `<tr>
+                  <td>${esc(t.nombre)}</td>
+                  ${contextoCell}
+                  <td>${fmtD(t.fechaInicio)||'—'}</td>
+                  <td>${fmtD(t.fechaFin)||'—'}</td>
+                  <td>${t.horasEst}h</td>
+                  <td><span class="det-badge det-badge-${st.cls}">${st.label}</span></td>
+                </tr>`;
+              }).join('');
             }).join('');
             return `<div class="rec-proj-block">
               <div class="rec-proj-block-header">
                 <a href="${JIRA_BASE}${esc(p.key)}" target="_blank" style="color:var(--blue);text-decoration:none">${esc(p.codigo)}</a> · ${esc(p.nombre)}
               </div>
               <table class="rec-tarea-tbl">
-                <thead><tr><th>Tarea</th><th>Contexto del desarrollo</th><th>Inicio</th><th>Fin</th><th>Horas</th><th>Estado</th></tr></thead>
+                <thead><tr><th></th><th>Contexto del desarrollo</th><th>Inicio</th><th>Fin</th><th>Horas</th><th>Estado</th></tr></thead>
                 <tbody>${tareasRows}</tbody>
               </table>
             </div>`;
