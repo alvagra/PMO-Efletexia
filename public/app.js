@@ -967,10 +967,17 @@ function renderRecursos(){
           proyectosHtml = '<div class="rec-card-proj-empty">Sin proyectos este mes</div>';
         } else {
           proyectosHtml = r.proyectosMes.map(p=>{
+            // Ordenar tareas por fecha de inicio ascendente (las sin fecha van al final)
+            const tareasOrdenadas = (p.tareas||[]).slice().sort((a,b)=>{
+              if(!a.fechaInicio && !b.fechaInicio) return 0;
+              if(!a.fechaInicio) return 1;
+              if(!b.fechaInicio) return -1;
+              return a.fechaInicio.localeCompare(b.fechaInicio);
+            });
             // Agrupar subtareas por su Historia padre, para fusionar la celda de Contexto del desarrollo (es el mismo texto para todas las subtareas de una misma historia)
             const grupos = [];
             const grupoPorTarea = {};
-            (p.tareas||[]).forEach(t=>{
+            tareasOrdenadas.forEach(t=>{
               const gKey = t.tareaParentKey || t.key;
               if(!grupoPorTarea[gKey]){ grupoPorTarea[gKey] = { contexto:t.contexto, items:[] }; grupos.push(grupoPorTarea[gKey]); }
               grupoPorTarea[gKey].items.push(t);
@@ -992,14 +999,14 @@ function renderRecursos(){
               }).join('');
             }).join('');
             return `<div class="rec-proj-block">
-              <div class="rec-proj-block-header">
-                <a href="${JIRA_BASE}${esc(p.key)}" target="_blank" style="color:var(--blue);text-decoration:none">${esc(p.codigo)}</a> · ${esc(p.nombre)}
-              </div>
               <table class="rec-tarea-tbl">
                 <colgroup>
                   <col style="width:20%"><col style="width:32%"><col style="width:12%"><col style="width:12%"><col style="width:8%"><col style="width:16%">
                 </colgroup>
-                <thead><tr><th></th><th>Contexto del desarrollo</th><th>Inicio</th><th>Fin</th><th>Horas</th><th>Estado</th></tr></thead>
+                <thead><tr>
+                  <th class="rec-proj-block-header"><a href="${JIRA_BASE}${esc(p.key)}" target="_blank" style="color:var(--blue);text-decoration:none">${esc(p.codigo)}</a> · ${esc(p.nombre)}</th>
+                  <th>Contexto del desarrollo</th><th>Inicio</th><th>Fin</th><th>Horas</th><th>Estado</th>
+                </tr></thead>
                 <tbody>${tareasRows}</tbody>
               </table>
             </div>`;
