@@ -940,7 +940,7 @@ function recomputeRecursos(){
       horasPend:horasPendMesTotal, horasTotal:p.horasEst, horasCerr:p.horasCerr,
       horasLibre:Math.max(0,CAPACITY-p.horasEst),
       entregasPend:entregasPendMesTotal, bloqueantes:p.bloqueantes,
-      proyectosDetalle:Object.values(p.epicasMap).map(e=>({key:e.key,nombre:e.nombre,horasTotal:e.horasEst,horasPend:e.horasPend,actividades:e.actividades,pendientes:e.pendientes,tareas:e.tareas||[]})).sort((a,b)=>b.horasTotal-a.horasTotal),
+      proyectosDetalle:Object.values(p.epicasMap).map(e=>({key:e.key,codigo:e.codigo||e.key,nombre:e.nombre,horasTotal:e.horasEst,horasPend:e.horasPend,actividades:e.actividades,pendientes:e.pendientes,tareas:e.tareas||[]})).sort((a,b)=>b.horasTotal-a.horasTotal),
       horasPlanificadas, horasRegistradas:+horasRegistradas.toFixed(1), horasDisponibles:+horasDisponibles.toFixed(1), proyectosMes,
     };
   }).filter(r=>r.nombre!=='Sin asignar').sort((a,b)=>b.horasPend-a.horasPend);
@@ -956,7 +956,6 @@ function renderRecursos(){
   const usuariosSel=[...document.querySelectorAll('.rec-user-cb:checked')].map(cb=>cb.value);
 
   let filtered=recursos.filter(r=>{
-    if(search&&!r.nombre.toLowerCase().includes(search)&&!r.proyectosDetalle.some(p=>p.nombre.toLowerCase().includes(search))) return false;
     if(area&&r.area!==area) return false;
     if(pais&&r.pais!==pais) return false;
     if(usuariosSel.length && !usuariosSel.includes(r.nombre)) return false;
@@ -1006,6 +1005,12 @@ function renderRecursos(){
         const bloques = ordenProyectos.map(key=>{
           const p = proyectosPorKey[key];
           let tareasFiltradas = p.tareas||[];
+          if(search){
+            const proyectoCoincide = p.nombre.toLowerCase().includes(search) || (p.codigo||'').toLowerCase().includes(search);
+            if(!proyectoCoincide){
+              tareasFiltradas = tareasFiltradas.filter(t => (t.responsable||'').toLowerCase().includes(search));
+            }
+          }
           if(hayRango){
             // Desde -> Fecha de Inicio de la subtarea; Hasta -> Fecha Fin de la subtarea
             tareasFiltradas = tareasFiltradas.filter(t=>{
@@ -1032,7 +1037,7 @@ function renderRecursos(){
               <td><span class="det-badge det-badge-${st.cls}">${st.label}</span></td>
             </tr>`;
           }).join('');
-          if(hayRango && !tareasOrdenadas.length) return null; // sin coincidencias en el rango: no mostrar este proyecto
+          if((hayRango || search) && !tareasOrdenadas.length) return null; // sin coincidencias: no mostrar este proyecto
 
           return `<div class="rec-card">
             <div class="rec-proj-block">
