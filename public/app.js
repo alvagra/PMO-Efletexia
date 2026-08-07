@@ -1068,20 +1068,48 @@ function renderRecursos(){
     }
   }
 
-  // ── Bloque 2: gráfico de barras — horas planificadas por recurso ──
+  // ── Bloque 2: gráfico de barras — horas estimadas (Jira) por recurso, esta semana (ref. 40h) ──
   const chartWrap=document.getElementById('rec-chart-wrap');
   if(chartWrap){
     if(!filtered.length){
       chartWrap.innerHTML = '';
     } else {
-      const maxH = Math.max(...filtered.map(r=>r.horasPlanificadas), 1);
-      chartWrap.innerHTML = `<div class="rec-chart-title">Horas planificadas por recurso — este mes</div>` +
-        filtered.map(r=>{
-          const pct = Math.round(r.horasPlanificadas / maxH * 100);
+      // Semana actual (lunes a domingo)
+      const hoy = new Date(); hoy.setHours(0,0,0,0);
+      const dow = hoy.getDay();
+      const monday = new Date(hoy); monday.setDate(hoy.getDate() + (dow===0?-6:1-dow));
+      const sunday = new Date(monday); sunday.setDate(monday.getDate()+6);
+      const semDesde = monday.toISOString().slice(0,10);
+      const semHasta = sunday.toISOString().slice(0,10);
+      const CAP_SEMANA = 40;
+
+      const conHoras = filtered.map(r=>{
+        let horasSemana = 0;
+        (r.proyectosMes||[]).forEach(p=>{
+          (p.tareas||[]).forEach(t=>{
+            const ini = t.fechaInicio || t.fechaFin;
+            const fin = t.fechaFin || t.fechaInicio;
+            if(!ini || !fin) return;
+            if(fin < semDesde || ini > semHasta) return; // sin solape con la semana actual
+            horasSemana += t.horasEst || 0;
+          });
+        });
+        return { nombre:r.nombre, horas:+horasSemana.toFixed(1) };
+      });
+
+      // Color según el nivel de horas: verde (libre) < 20h, amarillo (parcial) 20-39h, rojo (ocupado/sobrecargado) >=40h
+      function colorPorHoras(h){
+        return h >= CAP_SEMANA ? '#2ecc71' : '#f1c40f';
+      }
+
+      chartWrap.innerHTML = `<div class="rec-chart-title">Horas estimadas por recurso — esta semana (ref. ${CAP_SEMANA}h)</div>` +
+        conHoras.map(r=>{
+          const pct = Math.min(100, Math.round(r.horas / CAP_SEMANA * 100));
+          const color = colorPorHoras(r.horas);
           return `<div class="rec-chart-row">
             <span class="rec-chart-label" title="${esc(r.nombre)}">${esc(r.nombre)}</span>
-            <div class="rec-chart-track"><div class="rec-chart-fill" style="width:${pct}%"></div></div>
-            <span class="rec-chart-val">${r.horasPlanificadas}h</span>
+            <div class="rec-chart-track"><div class="rec-chart-fill" style="width:${pct}%;background:${color}"></div></div>
+            <span class="rec-chart-val">${r.horas}h / ${CAP_SEMANA}h</span>
           </div>`;
         }).join('');
     }
