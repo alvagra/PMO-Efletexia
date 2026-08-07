@@ -968,59 +968,85 @@ function renderRecursos(){
   const info=document.getElementById('rec-table-info');
   if(info) info.textContent=`Mostrando ${filtered.length} de ${recursos.length} recursos`;
 
-  // ── Bloque 1: tarjetas agrupadas por PROYECTO (no por recurso) ─
+  const rangoDesde = document.getElementById('rec-rango-desde')?.value || '';
+  const rangoHasta = document.getElementById('rec-rango-hasta')?.value || '';
+  const hayRango = !!(rangoDesde || rangoHasta);
+
+  // ── Calcular horas por recurso (para ordenar y para el gráfico), respetando el rango Desde/Hasta si está activo ──
+  function tareasDeRecursoFiltradas(r){
+    let todas = [];
+    (r.proyectosMes||[]).forEach(p=>{
+      (p.tareas||[]).forEach(t=> todas.push({...t, _proyecto:p}));
+    });
+    if(search){
+      const rCoincide = r.nombre.toLowerCase().includes(search);
+      if(!rCoincide){
+        todas = todas.filter(t => t._proyecto.nombre.toLowerCase().includes(search) || (t._proyecto.codigo||'').toLowerCase().includes(search));
+      }
+    }
+    if(hayRango){
+      todas = todas.filter(t=>{
+        if(rangoDesde && (!t.fechaInicio || t.fechaInicio < rangoDesde)) return false;
+        if(rangoHasta && (!t.fechaFin || t.fechaFin > rangoHasta)) return false;
+        return true;
+      });
+    }
+    return todas;
+  }
+
+  const recursosConHoras = filtered.map(r=>{
+    const tareas = tareasDeRecursoFiltradas(r);
+    const horas = +tareas.reduce((s,t)=>s+(t.horasEst||0),0).toFixed(1);
+    return { r, tareas, horas };
+  }).sort((a,b)=>b.horas-a.horas);
+
+  // ── Bloque 1: gráfico "Ocupabilidad de recurso (horas)" ──
+  const chartWrap=document.getElementById('rec-chart-wrap');
+  if(chartWrap){
+    if(!filtered.length){
+      chartWrap.innerHTML = '';
+    } else {
+      const CAP_SEMANA = 40;
+      const CHART_PERSONAS = ['Steven Díaz','Javier Carrillo','Daniel Valencia','Alexander Romero','Henry Salazar','Andrés Medina','Eric Cacho'];
+      const conHoras = recursosConHoras.filter(x=>CHART_PERSONAS.includes(x.r.nombre));
+
+      function colorPorHoras(h){
+        return h >= CAP_SEMANA ? '#2ecc71' : '#f1c40f';
+      }
+
+      chartWrap.innerHTML = `<div class="rec-chart-title">Ocupabilidad de recurso (horas)</div>` +
+        conHoras.map(x=>{
+          const pct = Math.min(100, Math.round(x.horas / CAP_SEMANA * 100));
+          const color = colorPorHoras(x.horas);
+          return `<div class="rec-chart-row">
+            <span class="rec-chart-label" title="${esc(x.r.nombre)}">${esc(x.r.nombre)}</span>
+            <div class="rec-chart-track"><div class="rec-chart-fill" style="width:${pct}%;background:${color}"></div></div>
+            <span class="rec-chart-val">${x.horas}h / ${CAP_SEMANA}h</span>
+          </div>`;
+        }).join('');
+    }
+  }
+
+  // ── Bloque 2: tarjetas por RECURSO, ordenadas de mayor a menor ocupabilidad ──
   const cardsWrap=document.getElementById('rec-cards-wrap');
   if(cardsWrap){
     if(!filtered.length){
       cardsWrap.innerHTML = `<div class="rec-empty">${recursos.length===0?'Los datos de recursos se cargarán al abrir esta pestaña':'Sin resultados para los filtros aplicados'}</div>`;
     } else {
-      // Agrupar todos los proyectos de todos los recursos filtrados, por clave de proyecto (épica)
-      const proyectosPorKey = {};
-      const ordenProyectos = [];
-      filtered.forEach(r=>{
-        (r.proyectosMes||[]).forEach(p=>{
-          if(!proyectosPorKey[p.key]){
-            proyectosPorKey[p.key] = { ...p, tareas: [] };
-            ordenProyectos.push(p.key);
-          }
-          proyectosPorKey[p.key].tareas.push(...(p.tareas||[]));
-        });
-      });
+      const bloques = recursosConHoras.map(({r, tareas})=>{
+        if((hayRango || search) && !tareas.length) return null; // sin coincidencias: no mostrar este recurso
 
-      if(!ordenProyectos.length){
-        cardsWrap.innerHTML = '<div class="rec-card-proj-empty">Sin proyectos este mes</div>';
-      } else {
-        // Ordenar proyectos por Fecha de Inicio ascendente (más antigua primero)
-        ordenProyectos.sort((ka,kb)=>{
-          const fa = proyectosPorKey[ka].epicaFechaInicio, fb = proyectosPorKey[kb].epicaFechaInicio;
-          if(!fa && !fb) return 0;
-          if(!fa) return 1;
-          if(!fb) return -1;
-          return fa.localeCompare(fb);
+        // Agrupar las tareas de este recurso por proyecto, preservando el orden de aparición
+        const porProyecto = [];
+        const idxPorKey = {};
+        tareas.forEach(t=>{
+          const p = t._proyecto;
+          if(!(p.key in idxPorKey)){ idxPorKey[p.key] = porProyecto.length; porProyecto.push({ proyecto:p, tareas:[] }); }
+          porProyecto[idxPorKey[p.key]].tareas.push(t);
         });
-        const rangoDesde = document.getElementById('rec-rango-desde')?.value || '';
-        const rangoHasta = document.getElementById('rec-rango-hasta')?.value || '';
-        const hayRango = !!(rangoDesde || rangoHasta);
 
-        const bloques = ordenProyectos.map(key=>{
-          const p = proyectosPorKey[key];
-          let tareasFiltradas = p.tareas||[];
-          if(search){
-            const proyectoCoincide = p.nombre.toLowerCase().includes(search) || (p.codigo||'').toLowerCase().includes(search);
-            if(!proyectoCoincide){
-              tareasFiltradas = tareasFiltradas.filter(t => (t.responsable||'').toLowerCase().includes(search));
-            }
-          }
-          if(hayRango){
-            // Desde -> Fecha de Inicio de la subtarea; Hasta -> Fecha Fin de la subtarea
-            tareasFiltradas = tareasFiltradas.filter(t=>{
-              if(rangoDesde && (!t.fechaInicio || t.fechaInicio < rangoDesde)) return false;
-              if(rangoHasta && (!t.fechaFin || t.fechaFin > rangoHasta)) return false;
-              return true;
-            });
-          }
-          // Ordenar tareas por fecha de inicio ascendente (las sin fecha van al final)
-          const tareasOrdenadas = tareasFiltradas.slice().sort((a,b)=>{
+        const subBloques = porProyecto.map(({proyecto:p, tareas:tareasProy})=>{
+          const tareasOrdenadas = tareasProy.slice().sort((a,b)=>{
             if(!a.fechaInicio && !b.fechaInicio) return 0;
             if(!a.fechaInicio) return 1;
             if(!b.fechaInicio) return -1;
@@ -1037,92 +1063,35 @@ function renderRecursos(){
               <td><span class="det-badge det-badge-${st.cls}">${st.label}</span></td>
             </tr>`;
           }).join('');
-          if((hayRango || search) && !tareasOrdenadas.length) return null; // sin coincidencias: no mostrar este proyecto
 
-          return `<div class="rec-card">
-            <div class="rec-proj-block">
-              <div class="rec-proj-left">
-                <div class="rec-proj-block-header">
-                  <a href="${JIRA_BASE}${esc(p.key)}" target="_blank" style="color:var(--blue);text-decoration:none">${esc(p.codigo)}</a> · ${esc(p.nombre)}
-                </div>
-                <div class="rec-proj-fechas">${fmtD(p.epicaFechaInicio)||'—'} → ${fmtD(p.epicaFechaFin)||'—'}</div>
-                <div class="rec-proj-contexto"><strong>Contexto del desarrollo:</strong><br>${esc(p.contexto||'—')}</div>
+          return `<div class="rec-proj-block">
+            <div class="rec-proj-left">
+              <div class="rec-proj-block-header">
+                <a href="${JIRA_BASE}${esc(p.key)}" target="_blank" style="color:var(--blue);text-decoration:none">${esc(p.codigo)}</a> · ${esc(p.nombre)}
               </div>
-              <div class="rec-proj-right">
-                <table class="rec-tarea-tbl">
-                  <colgroup>
-                    <col style="width:30%"><col style="width:16%"><col style="width:13%"><col style="width:13%"><col style="width:10%"><col style="width:18%">
-                  </colgroup>
-                  <thead><tr>
-                    <th>Tarea</th><th>Responsable</th><th>Inicio</th><th>Fin</th><th>Horas</th><th>Estado</th>
-                  </tr></thead>
-                  <tbody>${tareasRows}</tbody>
-                </table>
-              </div>
+              <div class="rec-proj-fechas">${fmtD(p.epicaFechaInicio)||'—'} → ${fmtD(p.epicaFechaFin)||'—'}</div>
+              <div class="rec-proj-contexto"><strong>Contexto del desarrollo:</strong><br>${esc(p.contexto||'—')}</div>
+            </div>
+            <div class="rec-proj-right">
+              <table class="rec-tarea-tbl">
+                <colgroup>
+                  <col style="width:30%"><col style="width:16%"><col style="width:13%"><col style="width:13%"><col style="width:10%"><col style="width:18%">
+                </colgroup>
+                <thead><tr>
+                  <th>Tarea</th><th>Responsable</th><th>Inicio</th><th>Fin</th><th>Horas</th><th>Estado</th>
+                </tr></thead>
+                <tbody>${tareasRows}</tbody>
+              </table>
             </div>
           </div>`;
-        }).filter(Boolean);
-
-        cardsWrap.innerHTML = bloques.length ? bloques.join('') : '<div class="rec-card-proj-empty">Sin resultados para el rango de fechas seleccionado</div>';
-      }
-    }
-  }
-
-  // ── Bloque 2: gráfico de barras — horas estimadas (Jira) por recurso, esta semana (ref. 40h) ──
-  const chartWrap=document.getElementById('rec-chart-wrap');
-  if(chartWrap){
-    if(!filtered.length){
-      chartWrap.innerHTML = '';
-    } else {
-      // Usa el rango de fechas del filtro (Desde/Hasta) si está definido; si no, cae a la semana actual (lunes a domingo)
-      const rangoDesdeChart = document.getElementById('rec-rango-desde')?.value || '';
-      const rangoHastaChart = document.getElementById('rec-rango-hasta')?.value || '';
-      let semDesde, semHasta;
-      if(rangoDesdeChart || rangoHastaChart){
-        semDesde = rangoDesdeChart || '0000-01-01';
-        semHasta = rangoHastaChart || '9999-12-31';
-      } else {
-        const hoy = new Date(); hoy.setHours(0,0,0,0);
-        const dow = hoy.getDay();
-        const monday = new Date(hoy); monday.setDate(hoy.getDate() + (dow===0?-6:1-dow));
-        const sunday = new Date(monday); sunday.setDate(monday.getDate()+6);
-        semDesde = monday.toISOString().slice(0,10);
-        semHasta = sunday.toISOString().slice(0,10);
-      }
-      const CAP_SEMANA = 40;
-
-      const CHART_PERSONAS = ['Steven Díaz','Javier Carrillo','Daniel Valencia','Alexander Romero','Henry Salazar','Andrés Medina','Eric Cacho'];
-      const conHoras = filtered.filter(r=>CHART_PERSONAS.includes(r.nombre)).map(r=>{
-        let horasSemana = 0;
-        (r.proyectosMes||[]).forEach(p=>{
-          (p.tareas||[]).forEach(t=>{
-            const ini = t.fechaInicio || t.fechaFin;
-            const fin = t.fechaFin || t.fechaInicio;
-            if(!ini || !fin) return;
-            if(fin < semDesde || ini > semHasta) return; // sin solape con el rango seleccionado
-            horasSemana += t.horasEst || 0;
-          });
-        });
-        return { nombre:r.nombre, horas:+horasSemana.toFixed(1) };
-      });
-      conHoras.sort((a,b)=>b.horas-a.horas);
-
-      // Color según el nivel de horas: verde (libre) < 20h, amarillo (parcial) 20-39h, rojo (ocupado/sobrecargado) >=40h
-      function colorPorHoras(h){
-        return h >= CAP_SEMANA ? '#2ecc71' : '#f1c40f';
-      }
-
-      const tituloRango = (rangoDesdeChart || rangoHastaChart) ? 'según el rango de fechas seleccionado' : 'esta semana';
-      chartWrap.innerHTML = `<div class="rec-chart-title">Horas estimadas por recurso — ${tituloRango} (ref. ${CAP_SEMANA}h)</div>` +
-        conHoras.map(r=>{
-          const pct = Math.min(100, Math.round(r.horas / CAP_SEMANA * 100));
-          const color = colorPorHoras(r.horas);
-          return `<div class="rec-chart-row">
-            <span class="rec-chart-label" title="${esc(r.nombre)}">${esc(r.nombre)}</span>
-            <div class="rec-chart-track"><div class="rec-chart-fill" style="width:${pct}%;background:${color}"></div></div>
-            <span class="rec-chart-val">${r.horas}h / ${CAP_SEMANA}h</span>
-          </div>`;
         }).join('');
+
+        return `<div class="rec-card">
+          ${subBloques}
+        </div>`;
+      }).filter(Boolean);
+
+      cardsWrap.innerHTML = bloques.length ? bloques.join('') : '<div class="rec-card-proj-empty">Sin resultados para los filtros aplicados</div>';
     }
   }
 }
