@@ -1074,35 +1074,46 @@ function renderRecursos(){
     if(!filtered.length){
       chartWrap.innerHTML = '';
     } else {
-      // Semana actual (lunes a domingo)
-      const hoy = new Date(); hoy.setHours(0,0,0,0);
-      const dow = hoy.getDay();
-      const monday = new Date(hoy); monday.setDate(hoy.getDate() + (dow===0?-6:1-dow));
-      const sunday = new Date(monday); sunday.setDate(monday.getDate()+6);
-      const semDesde = monday.toISOString().slice(0,10);
-      const semHasta = sunday.toISOString().slice(0,10);
+      // Usa el rango de fechas del filtro (Desde/Hasta) si está definido; si no, cae a la semana actual (lunes a domingo)
+      const rangoDesdeChart = document.getElementById('rec-rango-desde')?.value || '';
+      const rangoHastaChart = document.getElementById('rec-rango-hasta')?.value || '';
+      let semDesde, semHasta;
+      if(rangoDesdeChart || rangoHastaChart){
+        semDesde = rangoDesdeChart || '0000-01-01';
+        semHasta = rangoHastaChart || '9999-12-31';
+      } else {
+        const hoy = new Date(); hoy.setHours(0,0,0,0);
+        const dow = hoy.getDay();
+        const monday = new Date(hoy); monday.setDate(hoy.getDate() + (dow===0?-6:1-dow));
+        const sunday = new Date(monday); sunday.setDate(monday.getDate()+6);
+        semDesde = monday.toISOString().slice(0,10);
+        semHasta = sunday.toISOString().slice(0,10);
+      }
       const CAP_SEMANA = 40;
 
-      const conHoras = filtered.map(r=>{
+      const CHART_PERSONAS = ['Steven Díaz','Javier Carrillo','Daniel Valencia','Alexander Romero','Henry Salazar','Andrés Medina'];
+      const conHoras = filtered.filter(r=>CHART_PERSONAS.includes(r.nombre)).map(r=>{
         let horasSemana = 0;
         (r.proyectosMes||[]).forEach(p=>{
           (p.tareas||[]).forEach(t=>{
             const ini = t.fechaInicio || t.fechaFin;
             const fin = t.fechaFin || t.fechaInicio;
             if(!ini || !fin) return;
-            if(fin < semDesde || ini > semHasta) return; // sin solape con la semana actual
+            if(fin < semDesde || ini > semHasta) return; // sin solape con el rango seleccionado
             horasSemana += t.horasEst || 0;
           });
         });
         return { nombre:r.nombre, horas:+horasSemana.toFixed(1) };
       });
+      conHoras.sort((a,b)=>b.horas-a.horas);
 
       // Color según el nivel de horas: verde (libre) < 20h, amarillo (parcial) 20-39h, rojo (ocupado/sobrecargado) >=40h
       function colorPorHoras(h){
         return h >= CAP_SEMANA ? '#2ecc71' : '#f1c40f';
       }
 
-      chartWrap.innerHTML = `<div class="rec-chart-title">Horas estimadas por recurso — esta semana (ref. ${CAP_SEMANA}h)</div>` +
+      const tituloRango = (rangoDesdeChart || rangoHastaChart) ? 'según el rango de fechas seleccionado' : 'esta semana';
+      chartWrap.innerHTML = `<div class="rec-chart-title">Horas estimadas por recurso — ${tituloRango} (ref. ${CAP_SEMANA}h)</div>` +
         conHoras.map(r=>{
           const pct = Math.min(100, Math.round(r.horas / CAP_SEMANA * 100));
           const color = colorPorHoras(r.horas);
