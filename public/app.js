@@ -1091,7 +1091,7 @@ function renderRecursos(){
       }
       const CAP_SEMANA = 40;
 
-      const CHART_PERSONAS = ['Steven Díaz','Javier Carrillo','Daniel Valencia','Alexander Romero','Henry Salazar','Andrés Medina'];
+      const CHART_PERSONAS = ['Steven Díaz','Javier Carrillo','Daniel Valencia','Alexander Romero','Henry Salazar','Andrés Medina','Eric Cacho'];
       const conHoras = filtered.filter(r=>CHART_PERSONAS.includes(r.nombre)).map(r=>{
         let horasSemana = 0;
         (r.proyectosMes||[]).forEach(p=>{
