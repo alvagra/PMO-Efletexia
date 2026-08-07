@@ -991,6 +991,14 @@ function renderRecursos(){
       if(!ordenProyectos.length){
         cardsWrap.innerHTML = '<div class="rec-card-proj-empty">Sin proyectos este mes</div>';
       } else {
+        // Ordenar proyectos por Fecha de Inicio ascendente (más antigua primero)
+        ordenProyectos.sort((ka,kb)=>{
+          const fa = proyectosPorKey[ka].epicaFechaInicio, fb = proyectosPorKey[kb].epicaFechaInicio;
+          if(!fa && !fb) return 0;
+          if(!fa) return 1;
+          if(!fb) return -1;
+          return fa.localeCompare(fb);
+        });
         const rangoDesde = document.getElementById('rec-rango-desde')?.value || '';
         const rangoHasta = document.getElementById('rec-rango-hasta')?.value || '';
         const hayRango = !!(rangoDesde || rangoHasta);
@@ -1020,6 +1028,7 @@ function renderRecursos(){
               <td>${t.responsable?`<a href="#" onclick="verRecurso('${esc(t.responsable)}');return false" style="color:var(--blue);text-decoration:none">${esc(t.responsable)}</a>`:'—'}</td>
               <td>${fmtD(t.fechaInicio)||'—'}</td>
               <td>${fmtD(t.fechaFin)||'—'}</td>
+              <td>${t.horasEst}h</td>
               <td><span class="det-badge det-badge-${st.cls}">${st.label}</span></td>
             </tr>`;
           }).join('');
@@ -1037,10 +1046,10 @@ function renderRecursos(){
               <div class="rec-proj-right">
                 <table class="rec-tarea-tbl">
                   <colgroup>
-                    <col style="width:34%"><col style="width:18%"><col style="width:14%"><col style="width:14%"><col style="width:20%">
+                    <col style="width:30%"><col style="width:16%"><col style="width:13%"><col style="width:13%"><col style="width:10%"><col style="width:18%">
                   </colgroup>
                   <thead><tr>
-                    <th>Tarea</th><th>Responsable</th><th>Inicio</th><th>Fin</th><th>Estado</th>
+                    <th>Tarea</th><th>Responsable</th><th>Inicio</th><th>Fin</th><th>Horas</th><th>Estado</th>
                   </tr></thead>
                   <tbody>${tareasRows}</tbody>
                 </table>
