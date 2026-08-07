@@ -235,12 +235,12 @@ a.jlink:hover{text-decoration:underline}
 .rec-card-stat-val{font-weight:700;font-size:14px}
 .rec-card-ver-btn{align-self:flex-end}
 .rec-proj-block{margin-bottom:14px;display:flex;gap:0;border:1px solid var(--border-light);border-radius:6px;overflow:hidden}
-.rec-proj-left{width:32%;flex-shrink:0;background:var(--bg-elevated);border-right:1px solid var(--border-light);padding:10px 12px;box-sizing:border-box}
-.rec-proj-block-header{font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:6px}
+.rec-proj-left{width:32%;flex-shrink:0;min-width:0;background:var(--bg-elevated);border-right:1px solid var(--border-light);padding:10px 12px;box-sizing:border-box;overflow-wrap:break-word;word-break:break-word}
+.rec-proj-block-header{font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:6px;overflow-wrap:break-word;word-break:break-word}
 .rec-proj-fechas{font-size:11px;color:var(--text-muted);margin-bottom:8px}
 .rec-proj-contexto{font-size:12px;color:#fff;line-height:1.5}
 .rec-proj-contexto strong{color:#fff;font-weight:600;display:block;margin-bottom:4px}
-.rec-proj-right{flex:1;overflow-x:auto}
+.rec-proj-right{flex:1;min-width:0;overflow-x:auto}
 .rec-tarea-tbl{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}
 .rec-tarea-tbl th{text-align:left;color:var(--text-muted);font-weight:500;padding:6px 8px;border-bottom:1px solid var(--border-light);background:var(--bg-elevated)}
 .rec-tarea-tbl td{padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.04);color:var(--text-secondary);word-break:break-word}
@@ -658,13 +658,13 @@ a.jlink:hover{text-decoration:underline}
 
   <div class="rec-table-info" id="rec-table-info">Sin datos cargados</div>
 
-  <!-- BLOQUE 1: Recursos por Proyecto -->
+  <!-- BLOQUE 1: Ocupabilidad de recurso (horas) -->
+  <div class="rec-chart-wrap" id="rec-chart-wrap"></div>
+
+  <!-- BLOQUE 2: Recursos (tarjetas por recurso, ordenadas por ocupabilidad) -->
   <div class="rec-cards-wrap" id="rec-cards-wrap">
     <div class="rec-empty">Los datos de recursos se cargarán al abrir esta pestaña</div>
   </div>
-
-  <!-- BLOQUE 2: Dashboard Horas por Mes -->
-  <div class="rec-chart-wrap" id="rec-chart-wrap"></div>
 </div>
 
 
