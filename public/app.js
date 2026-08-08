@@ -817,11 +817,34 @@ async function loadRecursos(){
       document.addEventListener('click',(ev)=>{ if(!document.getElementById('rec-user-dd')?.contains(ev.target)) userPanel.classList.remove('open'); });
     }
 
+    // Populate dropdown de Estado (checkbox múltiple), con los estados reales de las subtareas
+    const estadosSet = new Set();
+    recursos.forEach(r=> (r.proyectosMes||[]).forEach(p=> (p.tareas||[]).forEach(t=> { if(t.status) estadosSet.add(t.status); })));
+    const estados = [...estadosSet].sort();
+    const statusPanel=document.getElementById('rec-status-dd-panel');
+    const statusBtn=document.getElementById('rec-status-dd-btn');
+    const statusCount=document.getElementById('rec-status-dd-count');
+    if(statusPanel){
+      statusPanel.innerHTML=estados.map(s=>`<label class="rec-user-dd-item"><input type="checkbox" class="rec-status-cb" value="${esc(s)}">${esc(s)}</label>`).join('');
+      statusPanel.querySelectorAll('.rec-status-cb').forEach(cb=>{
+        cb.addEventListener('change',()=>{
+          const n=statusPanel.querySelectorAll('.rec-status-cb:checked').length;
+          if(statusCount) statusCount.textContent = n>0 ? `(${n})` : '';
+          renderRecursos();
+        });
+      });
+    }
+    if(statusBtn && statusPanel){
+      statusBtn.addEventListener('click',(ev)=>{ ev.stopPropagation(); statusPanel.classList.toggle('open'); });
+      document.addEventListener('click',(ev)=>{ if(!document.getElementById('rec-status-dd')?.contains(ev.target)) statusPanel.classList.remove('open'); });
+    }
+
     document.getElementById('rec-limpiar-btn').addEventListener('click',()=>{
       document.getElementById('rec-search').value='';
       document.querySelectorAll('.rec-area-btn').forEach(b=>b.classList.remove('active'));
       if(paisSel) paisSel.value='';
       if(userPanel){ userPanel.querySelectorAll('.rec-user-cb').forEach(cb=>cb.checked=false); if(userCount) userCount.textContent=''; }
+      if(statusPanel){ statusPanel.querySelectorAll('.rec-status-cb').forEach(cb=>cb.checked=false); if(statusCount) statusCount.textContent=''; }
       renderRecursos();
     });
     document.getElementById('rec-pais-sel').addEventListener('change', renderRecursos);
@@ -973,6 +996,7 @@ function renderRecursos(){
   const hayRango = !!(rangoDesde || rangoHasta);
 
   // ── Calcular horas por recurso (para ordenar y para el gráfico), respetando el rango Desde/Hasta si está activo ──
+  const estadosSel=[...document.querySelectorAll('.rec-status-cb:checked')].map(cb=>cb.value);
   function tareasDeRecursoFiltradas(r){
     let todas = [];
     (r.proyectosMes||[]).forEach(p=>{
@@ -990,6 +1014,9 @@ function renderRecursos(){
         if(rangoHasta && (!t.fechaFin || t.fechaFin > rangoHasta)) return false;
         return true;
       });
+    }
+    if(estadosSel.length){
+      todas = todas.filter(t => estadosSel.includes(t.status));
     }
     return todas;
   }
@@ -1034,7 +1061,7 @@ function renderRecursos(){
       cardsWrap.innerHTML = `<div class="rec-empty">${recursos.length===0?'Los datos de recursos se cargarán al abrir esta pestaña':'Sin resultados para los filtros aplicados'}</div>`;
     } else {
       const bloques = recursosConHoras.map(({r, tareas})=>{
-        if((hayRango || search) && !tareas.length) return null; // sin coincidencias: no mostrar este recurso
+        if((hayRango || search || estadosSel.length) && !tareas.length) return null; // sin coincidencias: no mostrar este recurso
 
         // Agrupar las tareas de este recurso por proyecto, preservando el orden de aparición
         const porProyecto = [];
