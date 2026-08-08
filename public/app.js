@@ -1034,7 +1034,7 @@ function renderRecursos(){
       chartWrap.innerHTML = '';
     } else {
       const CAP_SEMANA = 40;
-      const CHART_PERSONAS = ['Steven Díaz','Javier Carrillo','Daniel Valencia','Alexander Romero','Henry Salazar','Andrés Medina','Eric Cacho','Alberto Llosa','Diego Corredor','Cesar Castañeda'];
+      const CHART_PERSONAS = ['Steven Díaz','Javier Carrillo','Daniel Valencia','Alexander Romero','Henry Salazar','Andrés Medina','Eric Cacho'];
       const conHoras = recursosConHoras.filter(x=>CHART_PERSONAS.includes(x.r.nombre));
 
       function colorPorHoras(h){
