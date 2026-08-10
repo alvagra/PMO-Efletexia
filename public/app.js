@@ -502,6 +502,7 @@ document.getElementById('btn-export-rec')?.addEventListener('click', () => {
 
 // ── GANTT & DETAIL (Portafolio) ────────────────────────────
 function buildGantt(e, stories){
+  stories = (stories||[]).filter(s => (s.fields?.issuetype?.name || '').toLowerCase() !== 'error');
   if(!e.fechaInicio&&!e.duedate){
     return `<div class="gno-dates"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="margin-bottom:10px;opacity:.4;display:block;margin-left:auto;margin-right:auto"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Sin fechas definidas en Jira.</div>`;
   }
