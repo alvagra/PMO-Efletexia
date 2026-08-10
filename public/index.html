@@ -246,7 +246,7 @@ a.jlink:hover{text-decoration:underline}
 .rec-proj-contexto{font-size:12px;color:#fff;line-height:1.5}
 .rec-proj-contexto strong{color:#fff;font-weight:600;display:block;margin-bottom:4px}
 .rec-proj-right{flex:1;min-width:0;overflow-x:auto}
-.rec-tarea-tbl{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}
+.rec-tarea-tbl{width:100%;min-width:560px;border-collapse:collapse;font-size:12px;table-layout:fixed}
 .rec-tarea-tbl th{text-align:left;color:var(--text-muted);font-weight:500;padding:6px 8px;border-bottom:1px solid var(--border-light);background:var(--bg-elevated)}
 .rec-tarea-tbl td{padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.04);color:var(--text-secondary);word-break:break-word}
 .rec-tarea-nombre{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
@@ -371,6 +371,14 @@ a.jlink:hover{text-decoration:underline}
 
 @media(max-width:900px){.kpis,.rec-kpis{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:600px){.kpis,.rec-kpis{grid-template-columns:repeat(2,1fr)}.modal-panel.w-gantt,.modal-panel.w-detail,.rec-modal-panel{width:100vw}}
+@media(max-width:768px){
+  .rec-proj-block{flex-direction:column}
+  .rec-proj-left{width:100%;border-right:none;border-bottom:1px solid var(--border-light)}
+  .rec-chart-row{flex-wrap:wrap}
+  .rec-chart-label{width:auto;white-space:normal;flex:1 1 100%}
+  .rec-chart-track{flex:1 1 auto;min-width:0}
+  .rec-chart-val{width:auto;flex-shrink:0}
+}
 
 
 /* ── CAPACITY TAB ─────────────────────────────────────── */
