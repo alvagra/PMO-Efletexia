@@ -252,6 +252,23 @@ function updateKpis(data){
     :`PMO TI · ${mainEpicsTotal} épicas`;
 }
 
+// Nombres de grupo conocidos por prefijo de código. 'MTS' -> 'Master' (requerido).
+// Los prefijos sin nombre asignado aquí se muestran con el prefijo tal cual.
+const GRUPO_NOMBRES = { 'MTS': 'Master', 'CEFU': 'Cedis del Futuro', 'MUE': 'Asignación Automática de Muelles', 'QUBO': 'Qubo' };
+let gruposColapsados = new Set(); // prefijos actualmente colapsados
+
+function getGrupoPrefix(codigo){
+  if(!codigo) return null;
+  const m = codigo.match(/^[A-Za-z]+/);
+  return m ? m[0] : null;
+}
+
+function toggleGrupo(prefix){
+  if(gruposColapsados.has(prefix)) gruposColapsados.delete(prefix);
+  else gruposColapsados.add(prefix);
+  renderTable(sortedData(getFiltered()));
+}
+
 function renderTable(data){
   const mainData = data.filter(e=>!SPECIAL_EPIC_KEYS.includes(e.key));
   updateKpis(mainData);
@@ -259,8 +276,9 @@ function renderTable(data){
   if(info) info.innerHTML=`Mostrando <strong>${mainData.length}</strong> de ${epics.filter(e=>!SPECIAL_EPIC_KEYS.includes(e.key)).length} épicas`;
   const data_=mainData;
   const tb=document.getElementById('table-body');
-  if(!data_.length){ tb.innerHTML='<tr><td colspan="15" style="text-align:center;padding:40px;color:var(--text-muted)">Sin resultados</td></tr>'; return; }
-  tb.innerHTML=data_.map(e=>{
+  if(!data_.length){ tb.innerHTML='<tr><td colspan="16" style="text-align:center;padding:40px;color:var(--text-muted)">Sin resultados</td></tr>'; return; }
+
+  function filaEpica(e){
     const semaforo = getSemaforoPortafolio(e);
     return `
     <tr data-key="${e.key}">
@@ -283,6 +301,31 @@ function renderTable(data){
       <td class="muted">${e.docFuncional==='Si'?'<span style="color:var(--green);font-size:15px">✓</span>':e.docFuncional==='No'?'<span style="color:var(--red);font-size:15px">✕</span>':'—'}</td>
       <td><button class="btn-action" type="button" title="Cronograma y detalles" onclick="openModal('${e.key}');event.stopPropagation()">···</button></td>
     </tr>`;
+  }
+
+  // Agrupar por prefijo de código, preservando el orden de aparición
+  const gruposOrden = [];
+  const gruposMap = {};
+  data_.forEach(e=>{
+    const prefix = getGrupoPrefix(e.codigo) || '—';
+    if(!gruposMap[prefix]){ gruposMap[prefix] = []; gruposOrden.push(prefix); }
+    gruposMap[prefix].push(e);
+  });
+
+  tb.innerHTML = gruposOrden.map(prefix=>{
+    const items = gruposMap[prefix];
+    const nombreGrupo = GRUPO_NOMBRES[prefix] || prefix;
+    const realPcts = items.map(e=>e.realPct).filter(v=>v!==null&&v!==undefined);
+    const avance = realPcts.length ? Math.round(realPcts.reduce((a,b)=>a+b,0)/realPcts.length*100) : null;
+    const colapsado = gruposColapsados.has(prefix);
+    const filasHtml = colapsado ? '' : items.map(filaEpica).join('');
+    return `<tr class="grupo-header-row" onclick="toggleGrupo('${esc(prefix)}')" style="cursor:pointer;background:var(--bg-elevated)">
+      <td colspan="16" style="padding:8px 12px;font-weight:600;color:var(--text-primary)">
+        <span style="display:inline-block;transition:transform .15s;transform:rotate(${colapsado?'-90deg':'0deg'})">▾</span>
+        ${esc(nombreGrupo)}
+        <span style="float:right;color:var(--text-muted);font-weight:400;font-size:12px">${avance!==null?`Avance promedio ${avance}%`:''}</span>
+      </td>
+    </tr>${filasHtml}`;
   }).join('');
 }
 
