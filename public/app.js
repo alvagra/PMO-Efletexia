@@ -175,7 +175,7 @@ const JIRA_FIELDS = [
   "customfield_10829","customfield_10862","customfield_10969",
   "customfield_10970","customfield_11003","customfield_11004",
   "customfield_11037","customfield_11070","customfield_11170","customfield_11269",
-  "customfield_11203"
+  "customfield_11203","customfield_11335"
 ];
 
 function parseIssue(i){
@@ -188,6 +188,9 @@ function parseIssue(i){
   let desc=f.description;
   if(desc&&typeof desc==='object') desc=adfToText(desc).trim();
   else if(typeof desc!=='string') desc=null;
+  let ctxDes=f.customfield_11335;
+  if(ctxDes&&typeof ctxDes==='object') ctxDes=adfToText(ctxDes).trim();
+  else if(typeof ctxDes!=='string') ctxDes=null;
   return{
     key:i.key,
     codigo:f.customfield_10934||null,
@@ -220,6 +223,7 @@ function parseIssue(i){
     proximosPasos:prox||null,
     replanificacion:replanificacion||null,
     descripcion:desc||null,
+    contextoDesarrollo:ctxDes||null,
   };
 }
 
@@ -717,16 +721,16 @@ function buildGantt(e, stories){
 }
 
 function buildDetail(e){
-  const bitHtml=e.bitacora?`<div class="log-box">${esc(e.bitacora)}</div>`:`<div class="log-box empty">Sin registros en bitácora</div>`;
+  const estatusHtml=e.bitacora?`<div class="log-box">${esc(e.bitacora)}</div>`:`<div class="log-box empty">Sin registros de estatus</div>`;
+  const ctxHtml=e.contextoDesarrollo?`<div class="log-box" style="border-left-color:var(--blue)">${esc(e.contextoDesarrollo)}</div>`:`<div class="log-box empty">Sin contexto del desarrollo definido</div>`;
   const proxHtml=e.proximosPasos?`<div class="log-box">${esc(e.proximosPasos)}</div>`:`<div class="log-box empty">Sin próximos pasos definidos</div>`;
-  const descHtml=e.descripcion?`<div class="log-box" style="border-left-color:var(--blue)">${esc(e.descripcion)}</div>`:`<div class="log-box empty">Sin descripción definida</div>`;
   return `
     <div class="log-section">
-      <div class="log-title"><div class="log-title-bar" style="background:var(--blue)"></div>Detalles clave</div>
-      ${descHtml}
+      <div class="log-title"><div class="log-title-bar" style="background:var(--blue)"></div>Estatus de Proyecto</div>
+      ${estatusHtml}
       <div class="log-spacer"></div>
-      <div class="log-title"><div class="log-title-bar"></div>Bitácora</div>
-      ${bitHtml}
+      <div class="log-title"><div class="log-title-bar" style="background:var(--blue)"></div>Contexto del desarrollo</div>
+      ${ctxHtml}
       <div class="log-spacer"></div>
       <div class="log-title"><div class="log-title-bar"></div>Próximos pasos</div>
       ${proxHtml}
@@ -760,6 +764,7 @@ function openModal(key){
   activeTab='gantt';
   document.getElementById('modal-key').textContent  = activeEpic.codigo||activeEpic.key;
   document.getElementById('modal-title').textContent = activeEpic.summary;
+  document.getElementById('modal-desc').textContent = activeEpic.descripcion||'';
   document.getElementById('modal-panel').className  = 'modal-panel w-gantt';
   document.querySelectorAll('.modal-tab').forEach(t=>t.classList.toggle('active',t.dataset.mtab==='gantt'));
   renderModalBody();
