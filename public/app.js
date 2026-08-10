@@ -172,7 +172,7 @@ const JIRA_FIELDS = [
   "customfield_10725","customfield_10726","customfield_10759",
   "customfield_10895","customfield_10928","customfield_10929",
   "customfield_10930","customfield_10931","customfield_10934",
-  "customfield_10829","customfield_10862","customfield_10969",
+  "customfield_10829","customfield_10862","customfield_10969","customfield_11336",
   "customfield_10970","customfield_11003","customfield_11004",
   "customfield_11037","customfield_11070","customfield_11170","customfield_11269",
   "customfield_11203","customfield_11335"
@@ -181,10 +181,13 @@ const JIRA_FIELDS = [
 function parseIssue(i){
   const f=i.fields, rep=f.reporter;
   let bit=f.customfield_10829, prox=f.customfield_10862;
+  let estadoProy=f.customfield_11336;
   const replanRaw = f.customfield_11269;
   const replanificacion = replanRaw ? (typeof replanRaw==='object' ? adfToText(replanRaw).trim() : replanRaw) : null;
   if(bit&&typeof bit==='object') bit=adfToText(bit).trim();
   if(prox&&typeof prox==='object') prox=adfToText(prox).trim();
+  if(estadoProy&&typeof estadoProy==='object') estadoProy=adfToText(estadoProy).trim();
+  else if(typeof estadoProy!=='string') estadoProy=null;
   let desc=f.description;
   if(desc&&typeof desc==='object') desc=adfToText(desc).trim();
   else if(typeof desc!=='string') desc=null;
@@ -220,6 +223,7 @@ function parseIssue(i){
     sponsor:f.customfield_11070?f.customfield_11070.value:null,
     condicion:f.customfield_11170||null,
     bitacora:bit||null,
+    estadoProyecto:estadoProy||null,
     proximosPasos:prox||null,
     replanificacion:replanificacion||null,
     descripcion:desc||null,
@@ -721,7 +725,7 @@ function buildGantt(e, stories){
 }
 
 function buildDetail(e){
-  const estatusHtml=e.bitacora?`<div class="log-box">${esc(e.bitacora)}</div>`:`<div class="log-box empty">Sin registros de estatus</div>`;
+  const estatusHtml=e.estadoProyecto?`<div class="log-box">${esc(e.estadoProyecto)}</div>`:`<div class="log-box empty">Sin registros de estatus</div>`;
   const ctxHtml=e.contextoDesarrollo?`<div class="log-box" style="border-left-color:var(--blue)">${esc(e.contextoDesarrollo)}</div>`:`<div class="log-box empty">Sin contexto del desarrollo definido</div>`;
   const proxHtml=e.proximosPasos?`<div class="log-box">${esc(e.proximosPasos)}</div>`:`<div class="log-box empty">Sin próximos pasos definidos</div>`;
   return `
