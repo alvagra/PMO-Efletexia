@@ -314,7 +314,7 @@ function renderTable(data){
 
   tb.innerHTML = gruposOrden.map(prefix=>{
     const items = gruposMap[prefix];
-    const nombreGrupo = GRUPO_NOMBRES[prefix] || prefix;
+    const nombreGrupo = GRUPO_NOMBRES[prefix] || items[0].summary || prefix;
     const realPcts = items.map(e=>e.realPct).filter(v=>v!==null&&v!==undefined);
     const avance = realPcts.length ? Math.round(realPcts.reduce((a,b)=>a+b,0)/realPcts.length*100) : null;
     const colapsado = gruposColapsados.has(prefix);
