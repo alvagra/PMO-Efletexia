@@ -769,6 +769,11 @@ function openModal(key){
   document.getElementById('modal-key').textContent  = activeEpic.codigo||activeEpic.key;
   document.getElementById('modal-title').textContent = activeEpic.summary;
   document.getElementById('modal-desc').textContent = activeEpic.descripcion||'';
+  const planV = activeEpic.planPct!==null ? Math.round(activeEpic.planPct*100)+'%' : '—';
+  const realV = activeEpic.realPct!==null ? Math.round(activeEpic.realPct*100)+'%' : '—';
+  document.getElementById('modal-hdr-pctwrap').innerHTML = `
+    <div class="modal-hdr-pct"><div class="modal-hdr-pct-lbl">PLAN</div><div class="modal-hdr-pct-val">${planV}</div></div>
+    <div class="modal-hdr-pct"><div class="modal-hdr-pct-lbl">REAL</div><div class="modal-hdr-pct-val" style="color:var(--blue)">${realV}</div></div>`;
   document.getElementById('modal-panel').className  = 'modal-panel w-gantt';
   document.querySelectorAll('.modal-tab').forEach(t=>t.classList.toggle('active',t.dataset.mtab==='gantt'));
   renderModalBody();
