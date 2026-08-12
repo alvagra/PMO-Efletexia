@@ -33,7 +33,7 @@ async function fetchAllPages(auth, cloud, jql, fields) {
     const page = result.body;
     allIssues = allIssues.concat(page.issues || []);
     nextPageToken = page.isLast ? null : page.nextPageToken;
-    if (allIssues.length >= 2000) break;
+    if (allIssues.length >= 10000) break;
   } while (nextPageToken);
   return allIssues;
 }
@@ -85,7 +85,7 @@ module.exports = async function handler(req, res) {
     } else if (type === 'recursos') {
       // Subtareas: parent = Tarea, Tarea.parent = Épica
       const SUBTAREA_FIELDS = [
-        'summary', 'status', 'assignee', 'parent', 'duedate', 'created',
+        'summary', 'status', 'assignee', 'parent', 'duedate', 'created', 'issuetype',
         'customfield_10015', // Fecha inicio
         'customfield_10930', // Área
         'customfield_10592', // País
@@ -93,11 +93,15 @@ module.exports = async function handler(req, res) {
         'customfield_11136', // Horas Estimadas
         'customfield_11137', // Horas Pendientes
       ];
-      const issues = await fetchAllPages(
+      // No se filtra por nombre de tipo ('Subtarea') porque el proyecto puede tener
+      // variantes (Subtask, Sub-tarea, Subtarea) y esas subtareas quedaban fuera.
+      // Se traen todos los issues con padre y se filtra por issuetype.subtask = true.
+      const issuesRaw = await fetchAllPages(
         auth, JIRA_CLOUD,
-        'project = PTS AND issuetype = Subtarea ORDER BY assignee ASC',
+        'project = PTS AND parent IS NOT EMPTY ORDER BY assignee ASC',
         SUBTAREA_FIELDS
       );
+      const issues = issuesRaw.filter(i => i.fields?.issuetype?.subtask === true);
 
       // Resolver el segundo nivel: Subtarea→Tarea→Épica
       // Recopilar todas las Tareas padre únicas que aún no conocemos la épica
