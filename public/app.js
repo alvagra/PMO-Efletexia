@@ -949,8 +949,11 @@ function recomputeRecursos(){
     const horasPend=f.customfield_11137||0;
     const horasCerr=Math.max(0,horasEst-horasPend);
     const epica=f._epicaParent||null;
-    const epicaKey=epica?epica.key:null;
-    const epicaNom=epica?(epica.summary||epica.key):'Sin épica';
+    const tareaPadre=f._tareaParent||null;
+    // Si la subtarea no llega a una épica (tarea padre sin épica), NO se descarta:
+    // se agrupa bajo su tarea padre para que siga siendo visible en Recursos.
+    const epicaKey=epica?epica.key:(tareaPadre?tareaPadre.key:'SIN-EPICA');
+    const epicaNom=epica?(epica.summary||epica.key):(tareaPadre?`Sin épica · ${tareaPadre.summary||tareaPadre.key}`:'Sin épica');
     const epicaCodigo=epica?.codigo||epicaKey;
     let epicaContexto=epica?.contexto||null;
     if(epicaContexto && typeof epicaContexto==='object') epicaContexto = adfToText(epicaContexto).trim();
