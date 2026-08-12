@@ -311,23 +311,25 @@ function renderTable(data){
     </tr>`;
   }
 
-  // Agrupar por prefijo de código, preservando el orden de aparición
+  // Agrupar SOLO por prefijos de grupo conocidos (GRUPO_NOMBRES), preservando el orden.
+  // Cualquier otra épica se registra como proyecto independiente (nunca se inserta en otro).
   const gruposOrden = [];
   const gruposMap = {};
   data_.forEach(e=>{
-    const prefix = getGrupoPrefix(e.codigo) || '—';
-    if(!gruposMap[prefix]){ gruposMap[prefix] = []; gruposOrden.push(prefix); }
-    gruposMap[prefix].push(e);
+    const prefix = getGrupoPrefix(e.codigo);
+    const gkey = (prefix && GRUPO_NOMBRES[prefix]) ? prefix : `solo:${e.key}`;
+    if(!gruposMap[gkey]){ gruposMap[gkey] = []; gruposOrden.push(gkey); }
+    gruposMap[gkey].push(e);
   });
 
-  tb.innerHTML = gruposOrden.map(prefix=>{
-    const items = gruposMap[prefix];
-    const nombreGrupo = GRUPO_NOMBRES[prefix] || items[0].summary || prefix;
+  tb.innerHTML = gruposOrden.map(gkey=>{
+    const items = gruposMap[gkey];
+    const nombreGrupo = GRUPO_NOMBRES[gkey] || items[0].summary || gkey;
     const realPcts = items.map(e=>e.realPct).filter(v=>v!==null&&v!==undefined);
     const avance = realPcts.length ? Math.round(realPcts.reduce((a,b)=>a+b,0)/realPcts.length*100) : null;
-    const colapsado = gruposColapsados.has(prefix);
+    const colapsado = gruposColapsados.has(gkey);
     const filasHtml = colapsado ? '' : items.map(filaEpica).join('');
-    return `<tr class="grupo-header-row" onclick="toggleGrupo('${esc(prefix)}')" style="cursor:pointer;background:var(--bg-elevated)">
+    return `<tr class="grupo-header-row" onclick="toggleGrupo('${esc(gkey)}')" style="cursor:pointer;background:var(--bg-elevated)">
       <td colspan="16" style="padding:8px 12px;font-weight:600;color:var(--text-primary)">
         <span style="display:inline-block;transition:transform .15s;transform:rotate(${colapsado?'-90deg':'0deg'})">▾</span>
         ${esc(nombreGrupo)}
