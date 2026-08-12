@@ -597,7 +597,8 @@ function buildGantt(e, stories){
       const sBarHtml=sPos?`<div class="g-bar ${sCls}" style="left:${sPos.l.toFixed(2)}%;width:${sPos.w.toFixed(2)}%"></div>`:'';
 
       // Historia: iniciales = union de asignados de subtareas (únicos, en orden de aparición)
-      // Fechas = min(inicio subtareas) → max(fin subtareas)
+      // Fechas = fechas propias de la historia (Jira). Solo si la historia no las tiene,
+      // se deriva del rango de subtareas como respaldo.
       const subItems = sf._subtasks||[];
       let sRightCol;
       if(subItems.length){
@@ -609,11 +610,11 @@ function buildGantt(e, stories){
           const ini  = initials(name);
           if(ini && !seenIni.has(ini)){ seenIni.add(ini); subInits.push(ini); }
         });
-        // Rango de fechas de subtareas
+        // Respaldo: rango de fechas de subtareas si la historia no tiene fechas
         const subStarts = subItems.map(s=>s.fields?.customfield_10015).filter(Boolean);
         const subEnds   = subItems.map(s=>s.fields?.duedate).filter(Boolean);
-        const minStart  = subStarts.length ? subStarts.reduce((a,b)=>a<b?a:b) : sStart;
-        const maxEnd    = subEnds.length   ? subEnds.reduce((a,b)=>a>b?a:b)   : sEnd;
+        const minStart  = sStart || (subStarts.length ? subStarts.reduce((a,b)=>a<b?a:b) : null);
+        const maxEnd    = sEnd   || (subEnds.length   ? subEnds.reduce((a,b)=>a>b?a:b)   : null);
         const inisHtml  = subInits.length
           ? `<span style="color:var(--blue);font-weight:700;letter-spacing:.3px">${subInits.join(', ')}</span>`
           : '';
