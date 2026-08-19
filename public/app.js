@@ -1073,9 +1073,17 @@ function renderRecursos(){
       }
     }
     if(hayRango){
+      // Se cuenta la subtarea si su intervalo [inicio, fin] SOLAPA con el rango elegido,
+      // no si está totalmente contenida: una tarea que arrancó antes del Desde pero sigue
+      // activa dentro del rango debe sumar sus horas estimadas.
+      // Si solo tiene una de las dos fechas, esa fecha hace de inicio y de fin.
+      // Si no tiene ninguna, no se descarta (mismo criterio que proyectosMes).
       todas = todas.filter(t=>{
-        if(rangoDesde && (!t.fechaInicio || t.fechaInicio < rangoDesde)) return false;
-        if(rangoHasta && (!t.fechaFin || t.fechaFin > rangoHasta)) return false;
+        const ini = t.fechaInicio || t.fechaFin || null;
+        const fin = t.fechaFin || t.fechaInicio || null;
+        if(!ini && !fin) return true;
+        if(rangoHasta && ini && ini > rangoHasta) return false;
+        if(rangoDesde && fin && fin < rangoDesde) return false;
         return true;
       });
     }
