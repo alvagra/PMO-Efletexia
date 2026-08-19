@@ -1001,6 +1001,9 @@ function recomputeRecursos(){
     // Proyectos del mes: distribuir horas estimadas de cada subtarea entre su fecha inicio y fin, contando solo el mes filtrado.
     // También se guarda el set de días asignados a cada proyecto, para la matriz día a día del Bloque 1.
     // Y el detalle de tareas del mes (con su porción de horas), para que el popup "Ver" coincida con la matriz.
+    // NOTA: aquí NO se aplica SPECIAL_EPIC_KEYS. Las épicas PTS-326 (Gestión PMO-TI) y PTS-327
+    // (Soporte Requerimientos) se ocultan de la bitácora del Portafolio, pero sus subtareas son
+    // horas de trabajo real del recurso y deben contar en la ocupabilidad.
     const proyectosMes = Object.values(p.epicasMap).map(e => {
       // Se incluyen TODAS las subtareas del proyecto, sin filtrar por mes ni por si tienen fechas cargadas —
       // así ninguna subtarea se pierde por falta de fecha o por inconsistencias de datos en Jira.
@@ -1015,7 +1018,7 @@ function recomputeRecursos(){
         actividades:tareasMes.length, pendientes:pendientesMes, horasPend:+horasPendMes.toFixed(1),
         tareas:tareasMes,
       };
-    }).filter(pr => pr.actividades > 0 && !SPECIAL_EPIC_KEYS.includes(pr.key)).sort((a,b)=>b.horas-a.horas);
+    }).filter(pr => pr.actividades > 0).sort((a,b)=>b.horas-a.horas);
 
     const proyectosMesCount = proyectosMes.length;
     const horasPendMesTotal = +proyectosMes.reduce((s,pr)=>s+pr.horasPend,0).toFixed(1);
