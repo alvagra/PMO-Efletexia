@@ -1035,6 +1035,10 @@ function recomputeRecursos(){
   renderRecursos();
 }
 
+// Equipo de Desarrollo: única lista válida de recursos para el área "Desarrollo".
+// Se usa tanto para el filtro de tarjetas/KPI como para el gráfico de Ocupabilidad.
+const DESARROLLO_PERSONAS = ['Stiven Díaz','Javier Carrillo','Daniel Valencia','Alexander Romero','Henry Salazar','Andrés Medina','Eric Cacho'];
+
 function renderRecursos(){
   const search=(document.getElementById('rec-search')?.value||'').toLowerCase();
   const activeAreaBtn=document.querySelector('.rec-area-btn.active');
@@ -1044,6 +1048,8 @@ function renderRecursos(){
 
   let filtered=recursos.filter(r=>{
     if(area&&r.area!==area) return false;
+    // En "Desarrollo" solo se consideran los recursos del equipo definido arriba.
+    if(area==='Desarrollo' && !DESARROLLO_PERSONAS.includes(r.nombre)) return false;
     if(pais&&r.pais!==pais) return false;
     if(usuariosSel.length && !usuariosSel.includes(r.nombre)) return false;
     return true;
@@ -1106,8 +1112,7 @@ function renderRecursos(){
       chartWrap.innerHTML = '';
     } else {
       const CAP_SEMANA = 40;
-      const CHART_PERSONAS = ['Steven Díaz','Javier Carrillo','Daniel Valencia','Alexander Romero','Henry Salazar','Andrés Medina','Eric Cacho'];
-      const conHoras = recursosConHoras.filter(x=>CHART_PERSONAS.includes(x.r.nombre));
+      const conHoras = recursosConHoras.filter(x=>DESARROLLO_PERSONAS.includes(x.r.nombre));
 
       function colorPorHoras(h){
         return h >= CAP_SEMANA ? '#2ecc71' : '#f1c40f';
@@ -1319,7 +1324,7 @@ const NOMENCLATURA = {
   'EC':  { nombre: 'Eric Cacho',         pais: 'Mexico',    area: 'Desarrollo' },
   'HS':  { nombre: 'Henry Salazar',      pais: 'Colombia',  area: 'Desarrollo' },
   'DV':  { nombre: 'Daniel Valencia',    pais: 'Colombia',  area: 'Desarrollo' },
-  'SD':  { nombre: 'Steven Díaz',        pais: 'Colombia',  area: 'Desarrollo', alias: ['stiven d','stiven diaz','steven d'] },
+  'SD':  { nombre: 'Stiven Díaz',        pais: 'Colombia',  area: 'Desarrollo', alias: ['steven d','steven diaz','stiven d'] },
   'AR':  { nombre: 'Alexander Romero',   pais: 'Peru',      area: 'Desarrollo' },
   'HR':  { nombre: 'Hamhner Remuzgo',    pais: 'Peru',      area: 'Soporte TI', alias: ['soporte efletexia'] },
   'AA':  { nombre: 'Abel Alva',          pais: 'Peru',      area: 'PMO' },
@@ -1402,7 +1407,7 @@ function resolveNombreDesdeJira(displayName) {
     const cn = norm(rec.nombre);
     if(dn.includes(cn) || cn.includes(dn)) return { ini, ...rec };
   }
-  // 3. Primera palabra + inicial de apellido (ej. "Henry S." → "Henry Salazar", "Stiven D" → "Steven Díaz")
+  // 3. Primera palabra + inicial de apellido (ej. "Henry S." → "Henry Salazar", "Steven D" → "Stiven Díaz")
   const parts = dn.split(/\s+/);
   if(parts.length >= 2){
     for(const [ini, rec] of Object.entries(NOMENCLATURA)){
