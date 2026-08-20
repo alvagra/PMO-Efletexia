@@ -953,6 +953,9 @@ function recomputeRecursos(){
     // Si la subtarea no llega a una épica (tarea padre sin épica), NO se descarta:
     // se agrupa bajo su tarea padre para que siga siendo visible en Recursos.
     const epicaKey=epica?epica.key:(tareaPadre?tareaPadre.key:'SIN-EPICA');
+    // Las épicas PTS-326 (Gestión PMO-TI) y PTS-327 (Soporte Requerimientos) quedan fuera
+    // de Recursos por completo: no generan tarjeta ni suman horas a la ocupabilidad.
+    if(SPECIAL_EPIC_KEYS.includes(epicaKey)) return;
     const epicaNom=epica?(epica.summary||epica.key):(tareaPadre?`Sin épica · ${tareaPadre.summary||tareaPadre.key}`:'Sin épica');
     const epicaCodigo=epica?.codigo||epicaKey;
     let epicaContexto=epica?.contexto||null;
@@ -1001,9 +1004,8 @@ function recomputeRecursos(){
     // Proyectos del mes: distribuir horas estimadas de cada subtarea entre su fecha inicio y fin, contando solo el mes filtrado.
     // También se guarda el set de días asignados a cada proyecto, para la matriz día a día del Bloque 1.
     // Y el detalle de tareas del mes (con su porción de horas), para que el popup "Ver" coincida con la matriz.
-    // NOTA: aquí NO se aplica SPECIAL_EPIC_KEYS. Las épicas PTS-326 (Gestión PMO-TI) y PTS-327
-    // (Soporte Requerimientos) se ocultan de la bitácora del Portafolio, pero sus subtareas son
-    // horas de trabajo real del recurso y deben contar en la ocupabilidad.
+    // NOTA: las épicas especiales (SPECIAL_EPIC_KEYS) ya se descartaron al agregar por persona,
+    // más arriba. El filtro se mantiene aquí como salvaguarda por si cambia el flujo.
     const proyectosMes = Object.values(p.epicasMap).map(e => {
       // Se incluyen TODAS las subtareas del proyecto, sin filtrar por mes ni por si tienen fechas cargadas —
       // así ninguna subtarea se pierde por falta de fecha o por inconsistencias de datos en Jira.
@@ -1018,7 +1020,7 @@ function recomputeRecursos(){
         actividades:tareasMes.length, pendientes:pendientesMes, horasPend:+horasPendMes.toFixed(1),
         tareas:tareasMes,
       };
-    }).filter(pr => pr.actividades > 0).sort((a,b)=>b.horas-a.horas);
+    }).filter(pr => pr.actividades > 0 && !SPECIAL_EPIC_KEYS.includes(pr.key)).sort((a,b)=>b.horas-a.horas);
 
     const proyectosMesCount = proyectosMes.length;
     const horasPendMesTotal = +proyectosMes.reduce((s,pr)=>s+pr.horasPend,0).toFixed(1);
