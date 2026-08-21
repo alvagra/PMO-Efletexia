@@ -977,7 +977,7 @@ function recomputeRecursos(){
       if(!isDone) p.epicasMap[epicaKey].pendientes++;
       const tareaParentKey = f._tareaParent?.key || null;
       const responsable = f.assignee ? (findNomenclaturaByNombre(f.assignee.displayName)?.nombre || f.assignee.displayName) : null;
-      p.epicasMap[epicaKey].tareas.push({key:h.key,nombre:f.summary||h.key,status,isDone,horasEst,horasPend,fechaInicio:f.customfield_10015||null,fechaFin:f.duedate||null,fecha:f.customfield_10015||f.duedate||null,updated:f.updated||null,tareaParentKey,responsable});
+      p.epicasMap[epicaKey].tareas.push({key:h.key,nombre:f.summary||h.key,status,isDone,horasEst,horasPend,fechaInicio:f.customfield_10015||null,fechaFin:f.duedate||null,fecha:f.customfield_10015||f.duedate||null,updated:f.updated||null,tareaParentKey,responsable,esBug:!!f._esBug});
     }
   });
 
@@ -1145,8 +1145,11 @@ function renderRecursos(){
           });
           const tareasRows = tareasOrdenadas.map(t=>{
             const st = clsActStatus(t.status);
+            const bugBadge = t.esBug
+              ? `<span title="Levantamiento de bug" style="display:inline-block;padding:1px 6px;margin-right:6px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:.03em;background:rgba(239,68,68,.15);color:#ef4444;border:1px solid rgba(239,68,68,.35);vertical-align:middle">BUG</span>`
+              : '';
             return `<tr>
-              <td><span class="rec-tarea-nombre" onclick="this.classList.toggle('expandida')">${esc(t.nombre)}</span></td>
+              <td>${bugBadge}<span class="rec-tarea-nombre" onclick="this.classList.toggle('expandida')">${esc(t.nombre)}</span></td>
               <td>${t.responsable?`<a href="#" onclick="verRecurso('${esc(t.responsable)}');return false" style="color:var(--blue);text-decoration:none">${esc(t.responsable)}</a>`:'—'}</td>
               <td>${fmtD(t.fechaInicio)||'—'}</td>
               <td>${fmtD(t.fechaFin)||'—'}</td>
