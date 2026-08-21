@@ -1188,7 +1188,7 @@ function renderRecursos(){
               ? `<span title="Levantamiento de bug" style="display:inline-block;padding:1px 6px;margin-right:6px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:.03em;background:rgba(239,68,68,.15);color:#ef4444;border:1px solid rgba(239,68,68,.35);vertical-align:middle">BUG</span>`
               : '';
             return `<tr>
-              <td>${bugBadge}<span class="rec-tarea-nombre" onclick="this.classList.toggle('expandida')">${esc(t.nombre)}</span></td>
+              <td><span class="rec-tarea-nombre" onclick="this.classList.toggle('expandida')">${bugBadge}${esc(t.nombre)}</span></td>
               <td>${t.responsable?`<a href="#" onclick="verRecurso('${esc(t.responsable)}');return false" style="color:var(--blue);text-decoration:none">${esc(t.responsable)}</a>`:'—'}</td>
               <td>${fmtD(t.fechaInicio)||'—'}</td>
               <td>${fmtD(t.fechaFin)||'—'}</td>
