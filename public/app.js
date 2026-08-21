@@ -718,44 +718,53 @@ function buildGantt(e, stories){
     ${(()=>{
       // Collect hours per assignee from all subtasks across all stories
       if(!stories||!stories.length) return '';
-      const PART_COLORS=['#3fb950','#f0883e','#39c5f0','#f85149','#bc8cff','#58a6ff','#d29922','#ff7b72','#56d364','#ffa657'];
       const byPerson={};
       let regSeg=0; // horas registradas (Registro de actividad) en segundos
+      const acum=(name,plan,seg)=>{
+        if(!name) return;
+        if(!byPerson[name]) byPerson[name]={name,hrs:0,seg:0};
+        byPerson[name].hrs+=plan;
+        byPerson[name].seg+=seg;
+      };
       stories.forEach(story=>{
         const subs=story.fields._subtasks||[];
         subs.forEach(sub=>{
-          regSeg += sub.fields?.timespent||0;
-          const name=sub.fields?.assignee?.displayName||'';
-          if(!name) return;
-          const hrs=sub.fields?.customfield_11136||0;
-          if(!byPerson[name]) byPerson[name]={name,hrs:0};
-          byPerson[name].hrs+=hrs;
+          const seg=sub.fields?.timespent||0;
+          regSeg += seg;
+          acum(sub.fields?.assignee?.displayName||'', sub.fields?.customfield_11136||0, seg);
         });
         // Also count story-level hours if no subtasks
         if(!subs.length){
-          regSeg += story.fields?.timespent||0;
-          const name=story.fields?.assignee?.displayName||'';
-          if(!name) return;
-          const hrs=story.fields?.customfield_11136||0;
-          if(!byPerson[name]) byPerson[name]={name,hrs:0};
-          byPerson[name].hrs+=hrs;
+          const seg=story.fields?.timespent||0;
+          regSeg += seg;
+          acum(story.fields?.assignee?.displayName||'', story.fields?.customfield_11136||0, seg);
         }
       });
-      const entries=Object.values(byPerson).filter(p=>p.hrs>0).sort((a,b)=>b.hrs-a.hrs);
+      // Se incluye a quien tenga horas planificadas O registradas (antes se perdían
+      // los recursos con subtareas sin "Horas estimadas" cargadas en Jira).
+      const entries=Object.values(byPerson)
+        .map(p=>({...p, real:+(p.seg/3600).toFixed(1)}))
+        .filter(p=>p.hrs>0 || p.real>0)
+        .sort((a,b)=>(b.hrs-a.hrs)||(b.real-a.real));
       if(!entries.length) return '';
       const totalHrs=entries.reduce((s,p)=>s+p.hrs,0);
-      const maxHrs=entries[0].hrs;
-      const rows=entries.map((p,i)=>{
+      const rows=entries.map(p=>{
         const ini=p.name.trim().split(/\s+/).map(w=>w[0]||'').join('').toUpperCase();
-        const pct=Math.round((p.hrs/totalHrs)*100);
-        const barW=Math.round((p.hrs/maxHrs)*100);
-        const col=PART_COLORS[i%PART_COLORS.length];
+        const sinPlan = p.hrs<=0;
+        const pct  = sinPlan ? null : Math.round((p.real/p.hrs)*100);
+        const barW = sinPlan ? 100 : Math.min(100, pct);
+        const col  = sinPlan ? '#ef4444' : pct>100 ? '#ef4444' : pct>=85 ? '#F5B800' : '#3fb950';
+        const lbl  = sinPlan ? 'Sin plan' : pct+'%';
         return `<div class="gpart-row">
           <div class="gpart-ini" style="background:${col}22;color:${col}">${esc(ini)}</div>
           <div class="gpart-name">${esc(p.name)}</div>
-          <div class="gpart-bar-wrap"><div class="gpart-bar" style="width:${barW}%;background:${col}"></div></div>
-          <div class="gpart-pct">${pct}%</div>
-          <div class="gpart-hrs">${p.hrs}h</div>
+          <div class="gpart-bar-wrap" style="position:relative;border:1px solid var(--border);border-radius:5px;overflow:hidden">
+            <div class="gpart-bar" style="width:${barW}%;background:${col};border-radius:0"></div>
+            <span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--text-primary);text-shadow:0 1px 2px rgba(0,0,0,.55)">${lbl}</span>
+          </div>
+          <div class="gpart-hrs" style="white-space:nowrap;min-width:130px;text-align:right">
+            Plan ${sinPlan?'—':p.hrs+'h'} / <span style="color:${col};font-weight:700">Real ${p.real}h</span>
+          </div>
         </div>`;
       }).join('');
       // ── Consumo: horas planificadas vs horas registradas (Registro de actividad) ──
