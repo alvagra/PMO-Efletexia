@@ -953,9 +953,6 @@ function recomputeRecursos(){
     // Si la subtarea no llega a una épica (tarea padre sin épica), NO se descarta:
     // se agrupa bajo su tarea padre para que siga siendo visible en Recursos.
     const epicaKey=epica?epica.key:(tareaPadre?tareaPadre.key:'SIN-EPICA');
-    // Las épicas PTS-326 (Gestión PMO-TI) y PTS-327 (Soporte Requerimientos) quedan fuera
-    // de Recursos por completo: no generan tarjeta ni suman horas a la ocupabilidad.
-    if(SPECIAL_EPIC_KEYS.includes(epicaKey)) return;
     const epicaNom=epica?(epica.summary||epica.key):(tareaPadre?`Sin épica · ${tareaPadre.summary||tareaPadre.key}`:'Sin épica');
     const epicaCodigo=epica?.codigo||epicaKey;
     let epicaContexto=epica?.contexto||null;
@@ -1004,8 +1001,6 @@ function recomputeRecursos(){
     // Proyectos del mes: distribuir horas estimadas de cada subtarea entre su fecha inicio y fin, contando solo el mes filtrado.
     // También se guarda el set de días asignados a cada proyecto, para la matriz día a día del Bloque 1.
     // Y el detalle de tareas del mes (con su porción de horas), para que el popup "Ver" coincida con la matriz.
-    // NOTA: las épicas especiales (SPECIAL_EPIC_KEYS) ya se descartaron al agregar por persona,
-    // más arriba. El filtro se mantiene aquí como salvaguarda por si cambia el flujo.
     const proyectosMes = Object.values(p.epicasMap).map(e => {
       // Se incluyen TODAS las subtareas del proyecto, sin filtrar por mes ni por si tienen fechas cargadas —
       // así ninguna subtarea se pierde por falta de fecha o por inconsistencias de datos en Jira.
@@ -1040,10 +1035,6 @@ function recomputeRecursos(){
   renderRecursos();
 }
 
-// Equipo de Desarrollo: única lista válida de recursos para el área "Desarrollo".
-// Se usa tanto para el filtro de tarjetas/KPI como para el gráfico de Ocupabilidad.
-const DESARROLLO_PERSONAS = ['Stiven Díaz','Javier Carrillo','Daniel Valencia','Alexander Romero','Henry Salazar','Andrés Medina','Eric Cacho'];
-
 function renderRecursos(){
   const search=(document.getElementById('rec-search')?.value||'').toLowerCase();
   const activeAreaBtn=document.querySelector('.rec-area-btn.active');
@@ -1053,8 +1044,6 @@ function renderRecursos(){
 
   let filtered=recursos.filter(r=>{
     if(area&&r.area!==area) return false;
-    // En "Desarrollo" solo se consideran los recursos del equipo definido arriba.
-    if(area==='Desarrollo' && !DESARROLLO_PERSONAS.includes(r.nombre)) return false;
     if(pais&&r.pais!==pais) return false;
     if(usuariosSel.length && !usuariosSel.includes(r.nombre)) return false;
     return true;
@@ -1084,17 +1073,9 @@ function renderRecursos(){
       }
     }
     if(hayRango){
-      // Se cuenta la subtarea si su intervalo [inicio, fin] SOLAPA con el rango elegido,
-      // no si está totalmente contenida: una tarea que arrancó antes del Desde pero sigue
-      // activa dentro del rango debe sumar sus horas estimadas.
-      // Si solo tiene una de las dos fechas, esa fecha hace de inicio y de fin.
-      // Si no tiene ninguna, no se descarta (mismo criterio que proyectosMes).
       todas = todas.filter(t=>{
-        const ini = t.fechaInicio || t.fechaFin || null;
-        const fin = t.fechaFin || t.fechaInicio || null;
-        if(!ini && !fin) return true;
-        if(rangoHasta && ini && ini > rangoHasta) return false;
-        if(rangoDesde && fin && fin < rangoDesde) return false;
+        if(rangoDesde && (!t.fechaInicio || t.fechaInicio < rangoDesde)) return false;
+        if(rangoHasta && (!t.fechaFin || t.fechaFin > rangoHasta)) return false;
         return true;
       });
     }
@@ -1117,7 +1098,8 @@ function renderRecursos(){
       chartWrap.innerHTML = '';
     } else {
       const CAP_SEMANA = 40;
-      const conHoras = recursosConHoras.filter(x=>DESARROLLO_PERSONAS.includes(x.r.nombre));
+      const CHART_PERSONAS = ['Steven Díaz','Javier Carrillo','Daniel Valencia','Alexander Romero','Henry Salazar','Andrés Medina','Eric Cacho'];
+      const conHoras = recursosConHoras.filter(x=>CHART_PERSONAS.includes(x.r.nombre));
 
       function colorPorHoras(h){
         return h >= CAP_SEMANA ? '#2ecc71' : '#f1c40f';
@@ -1329,7 +1311,7 @@ const NOMENCLATURA = {
   'EC':  { nombre: 'Eric Cacho',         pais: 'Mexico',    area: 'Desarrollo' },
   'HS':  { nombre: 'Henry Salazar',      pais: 'Colombia',  area: 'Desarrollo' },
   'DV':  { nombre: 'Daniel Valencia',    pais: 'Colombia',  area: 'Desarrollo' },
-  'SD':  { nombre: 'Stiven Díaz',        pais: 'Colombia',  area: 'Desarrollo', alias: ['steven d','steven diaz','stiven d'] },
+  'SD':  { nombre: 'Steven Díaz',        pais: 'Colombia',  area: 'Desarrollo', alias: ['stiven d','stiven diaz','steven d'] },
   'AR':  { nombre: 'Alexander Romero',   pais: 'Peru',      area: 'Desarrollo' },
   'HR':  { nombre: 'Hamhner Remuzgo',    pais: 'Peru',      area: 'Soporte TI', alias: ['soporte efletexia'] },
   'AA':  { nombre: 'Abel Alva',          pais: 'Peru',      area: 'PMO' },
@@ -1412,7 +1394,7 @@ function resolveNombreDesdeJira(displayName) {
     const cn = norm(rec.nombre);
     if(dn.includes(cn) || cn.includes(dn)) return { ini, ...rec };
   }
-  // 3. Primera palabra + inicial de apellido (ej. "Henry S." → "Henry Salazar", "Steven D" → "Stiven Díaz")
+  // 3. Primera palabra + inicial de apellido (ej. "Henry S." → "Henry Salazar", "Stiven D" → "Steven Díaz")
   const parts = dn.split(/\s+/);
   if(parts.length >= 2){
     for(const [ini, rec] of Object.entries(NOMENCLATURA)){
@@ -1506,6 +1488,11 @@ async function loadCapacity(){
       const codigoProy   = f._epicCodigo || '';
       const logs = f._worklogs || [];
 
+      // Marca de "levantamiento de bug": el issue es un Error,
+      // o es una subtarea que cuelga de un Error.
+      const esBug = (f.issuetype?.name === 'Error') ||
+                    (f.parent?.fields?.issuetype?.name === 'Error');
+
       // Solo mostrar subtareas con horas registradas en "Registro de actividad" de Jira
       // Si logs está vacío = el recurso no registró actividad → no aparece en el calendario
       if(logs.length > 0){
@@ -1523,7 +1510,7 @@ async function loadCapacity(){
           capRows.push({
             fecha: fechaIso, persona: personaNom, horas,
             proyecto: proyectoNom, codigoProy, subKey: sub.key, subtarea: subtareaNom,
-            comentario, esPlaneado: false,
+            comentario, esPlaneado: false, esBug,
             area: recReal?.area || '', pais: recReal?.pais || ''
           });
         });
@@ -1929,12 +1916,15 @@ function openCapDetail(persona, fecha){
     const codigoCell = r.codigoProy
       ? `<span style="font-weight:600;color:var(--blue)">${esc(r.codigoProy)}</span>`
       : '—';
+    const bugBadge = r.esBug
+      ? `<span title="Levantamiento de bug" style="display:inline-block;padding:1px 6px;margin-right:6px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:.03em;background:rgba(239,68,68,.15);color:#ef4444;border:1px solid rgba(239,68,68,.35);vertical-align:middle">BUG</span>`
+      : '';
     return `<tr>
       <td style="color:var(--text-muted);white-space:nowrap">${fmtD(r.fecha)||'—'}</td>
       <td><span class="cap-horas-badge ${horasCls}">${r.horas}h</span></td>
       <td style="white-space:nowrap">${codigoCell}</td>
       <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-muted)" title="${esc(r.proyecto||'')}">${esc(r.proyecto||'—')}</td>
-      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.subtarea)}">${esc(r.subtarea)}</td>
+      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.subtarea)}">${bugBadge}${esc(r.subtarea)}</td>
       <td style="color:var(--text-muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(comentario)}">${esc(comentario)}</td>
     </tr>`;
   }).join('');
