@@ -200,7 +200,7 @@ module.exports = async function handler(req, res) {
       // Subtareas + worklogs por fecha
       // 1. Traer todas las subtareas (mínimo de campos necesarios)
       const CAP_FIELDS = [
-        'summary', 'assignee', 'parent',
+        'summary', 'assignee', 'parent', 'issuetype',
         'customfield_10015', // Fecha inicio
         'duedate',
         'customfield_10930', // Área
