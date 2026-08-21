@@ -504,6 +504,8 @@ document.getElementById('btn-export-rec')?.addEventListener('click', () => {
 
 // ── GANTT & DETAIL (Portafolio) ────────────────────────────
 function buildGantt(e, stories){
+  // Los Errores no se dibujan en el cronograma, pero sí se cuentan en la tarjeta de bugs.
+  const bugs = (stories||[]).filter(s => (s.fields?.issuetype?.name || '').toLowerCase() === 'error');
   stories = (stories||[]).filter(s => (s.fields?.issuetype?.name || '').toLowerCase() !== 'error');
   if(!e.fechaInicio&&!e.duedate){
     return `<div class="gno-dates"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="margin-bottom:10px;opacity:.4;display:block;margin-left:auto;margin-right:auto"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Sin fechas definidas en Jira.</div>`;
@@ -647,6 +649,42 @@ function buildGantt(e, stories){
       });
     });
   }
+  // ── Tarjeta de bugs por estado ───────────────────────────
+  // Pendiente = "Tareas por hacer" · En curso = "En curso" · Bloqueado = "Bloqueado" · Cerrado = "Cerrado"
+  // Si no hay bugs, o si todos están cerrados, la tarjeta no se muestra.
+  const bugCard = (()=>{
+    if(!bugs.length) return '';
+    const norm = s => (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+    const cont = { pendiente:0, encurso:0, bloqueado:0, cerrado:0 };
+    bugs.forEach(b=>{
+      const st = norm(b.fields?.status?.name);
+      if(st.includes('bloque') || st.includes('blocked'))            cont.bloqueado++;
+      else if(st.includes('cerrado') || st.includes('closed'))       cont.cerrado++;
+      else if(st.includes('en curso') || st.includes('progress'))    cont.encurso++;
+      else if(st.includes('por hacer') || st.includes('to do'))      cont.pendiente++;
+      else                                                           cont.pendiente++;
+    });
+    const abiertos = cont.pendiente + cont.encurso + cont.bloqueado;
+    if(abiertos === 0) return '';
+    const chip = (lbl, val, color) => `<div class="g-stat">
+      <div class="g-stat-lbl">${lbl}</div>
+      <div class="g-stat-val" style="color:${val>0?color:'var(--text-dim)'}">${val}</div>
+    </div>`;
+    return `
+    <div style="margin-top:14px;padding:12px 14px;border:1px solid rgba(239,68,68,.28);border-radius:8px;background:rgba(239,68,68,.06)">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:.03em;background:rgba(239,68,68,.15);color:#ef4444;border:1px solid rgba(239,68,68,.35)">BUGS</span>
+        <span style="font-size:12px;color:var(--text-muted)">${bugs.length} registrado${bugs.length===1?'':'s'} · ${abiertos} abierto${abiertos===1?'':'s'}</span>
+      </div>
+      <div class="g-stats" style="margin:0">
+        ${chip('Pendiente',  cont.pendiente, 'var(--text-muted)')}
+        ${chip('En curso',   cont.encurso,   'var(--yellow)')}
+        ${chip('Bloqueado',  cont.bloqueado, 'var(--red)')}
+        ${chip('Cerrado',    cont.cerrado,   'var(--green)')}
+      </div>
+    </div>`;
+  })();
+
   return `
     <div class="gantt-meta">
       <div class="gm-item"><span class="gm-lbl">Fecha inicio</span><span class="gm-val">${fmtD(e.fechaInicio)||'—'}</span></div>
@@ -676,6 +714,7 @@ function buildGantt(e, stories){
       <div class="g-legend-item"><div class="g-legend-dot" style="background:#8b1a1a"></div>Bloqueado</div>
       <div class="g-legend-item"><div class="g-legend-dot" style="background:var(--red);width:2px;border-radius:0"></div>Hoy</div>
     </div>
+    ${bugCard}
     ${(()=>{
       // Collect hours per assignee from all subtasks across all stories
       if(!stories||!stories.length) return '';
