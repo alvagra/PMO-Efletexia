@@ -101,7 +101,12 @@ module.exports = async function handler(req, res) {
         'project = PTS AND parent IS NOT EMPTY ORDER BY assignee ASC',
         SUBTAREA_FIELDS
       );
-      const issues = issuesRaw.filter(i => i.fields?.issuetype?.subtask === true);
+      // Subtareas + Errores (bugs). Los Errores cuelgan directo de la Épica,
+      // por eso más abajo se resuelve el padre según sea Tarea o Épica.
+      const issues = issuesRaw.filter(i =>
+        i.fields?.issuetype?.subtask === true ||
+        i.fields?.issuetype?.name === 'Error'
+      );
 
       // Resolver el segundo nivel: Subtarea→Tarea→Épica
       // Recopilar todas las Tareas padre únicas que aún no conocemos la épica
@@ -117,15 +122,19 @@ module.exports = async function handler(req, res) {
       for (let i = 0; i < tareaKeys.length; i += CHUNK) {
         const chunk = tareaKeys.slice(i, i + CHUNK);
         const jqlChunk = `key in (${chunk.join(',')})`;
-        const tareas = await fetchAllPages(auth, JIRA_CLOUD, jqlChunk, ['summary', 'parent', 'description']);
+        const tareas = await fetchAllPages(auth, JIRA_CLOUD, jqlChunk, ['summary', 'parent', 'description', 'issuetype']);
         tareas.forEach(t => { tareaMap[t.key] = t; });
       }
 
       // Enriquecer cada subtarea con la épica de su tarea padre
       // También se traen los campos "Código" (customfield_10934), "Contexto del desarrollo" (customfield_11335),
       // "Fecha de inicio" (customfield_10015) y "Fecha de vencimiento" (duedate) de la épica
+      // Épicas a consultar: las de las Tareas padre, y las que ya son padre directo (caso Error)
+      const esEpica = t => (t?.fields?.issuetype?.hierarchyLevel === 1) || (t?.fields?.issuetype?.name === 'Epic');
       const epicaKeysUnicas = [...new Set(
-        Object.values(tareaMap).map(t => t.fields?.parent?.key).filter(Boolean)
+        Object.values(tareaMap)
+          .map(t => esEpica(t) ? t.key : t.fields?.parent?.key)
+          .filter(Boolean)
       )];
       const epicaCodigoMap = {};
       const epicaContextoMap = {};
@@ -143,12 +152,18 @@ module.exports = async function handler(req, res) {
       }
 
       issues.forEach(sub => {
-        const tareaKey = sub.fields.parent?.key;
-        const tarea = tareaKey ? tareaMap[tareaKey] : null;
-        sub.fields._tareaParent  = tarea ? { key: tarea.key, summary: tarea.fields?.summary } : null;
-        sub.fields._epicaParent  = tarea?.fields?.parent
-          ? { key: tarea.fields.parent.key, summary: tarea.fields.parent.fields?.summary, codigo: epicaCodigoMap[tarea.fields.parent.key] || '', contexto: epicaContextoMap[tarea.fields.parent.key] || null, fechaInicio: epicaFechasMap[tarea.fields.parent.key]?.inicio || null, fechaFin: epicaFechasMap[tarea.fields.parent.key]?.fin || null }
+        const padreKey = sub.fields.parent?.key;
+        const padre    = padreKey ? tareaMap[padreKey] : null;
+        // Si el padre ya es la Épica (caso Error), no hay Tarea intermedia.
+        const padreEsEpica = esEpica(padre);
+        sub.fields._tareaParent = (padre && !padreEsEpica) ? { key: padre.key, summary: padre.fields?.summary } : null;
+
+        const epKey     = padreEsEpica ? padre.key : padre?.fields?.parent?.key;
+        const epSummary = padreEsEpica ? padre.fields?.summary : padre?.fields?.parent?.fields?.summary;
+        sub.fields._epicaParent = epKey
+          ? { key: epKey, summary: epSummary, codigo: epicaCodigoMap[epKey] || '', contexto: epicaContextoMap[epKey] || null, fechaInicio: epicaFechasMap[epKey]?.inicio || null, fechaFin: epicaFechasMap[epKey]?.fin || null }
           : null;
+        sub.fields._esBug = sub.fields?.issuetype?.name === 'Error';
       });
 
       return res.status(200).json({ issues, total: issues.length, type: 'recursos' });
