@@ -720,9 +720,11 @@ function buildGantt(e, stories){
       if(!stories||!stories.length) return '';
       const PART_COLORS=['#3fb950','#f0883e','#39c5f0','#f85149','#bc8cff','#58a6ff','#d29922','#ff7b72','#56d364','#ffa657'];
       const byPerson={};
+      let regSeg=0; // horas registradas (Registro de actividad) en segundos
       stories.forEach(story=>{
         const subs=story.fields._subtasks||[];
         subs.forEach(sub=>{
+          regSeg += sub.fields?.timespent||0;
           const name=sub.fields?.assignee?.displayName||'';
           if(!name) return;
           const hrs=sub.fields?.customfield_11136||0;
@@ -731,6 +733,7 @@ function buildGantt(e, stories){
         });
         // Also count story-level hours if no subtasks
         if(!subs.length){
+          regSeg += story.fields?.timespent||0;
           const name=story.fields?.assignee?.displayName||'';
           if(!name) return;
           const hrs=story.fields?.customfield_11136||0;
@@ -755,13 +758,36 @@ function buildGantt(e, stories){
           <div class="gpart-hrs">${p.hrs}h</div>
         </div>`;
       }).join('');
+      // ── Consumo: horas planificadas vs horas registradas (Registro de actividad) ──
+      const regTotal  = +(regSeg/3600).toFixed(1);
+      const pctCons   = totalHrs>0 ? Math.round((regTotal/totalHrs)*100) : 0;
+      const excede    = regTotal > totalHrs;
+      const dif       = +Math.abs(totalHrs - regTotal).toFixed(1);
+      const colCons   = excede ? '#ef4444' : pctCons>=85 ? '#F5B800' : '#3fb950';
+      const consumoHtml = `
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;font-size:11px;color:var(--text-muted);margin-bottom:6px">
+            <span style="letter-spacing:.04em">CONSUMO DE HORAS</span>
+            <span style="color:${colCons};font-weight:700;font-size:12px">${pctCons}%</span>
+          </div>
+          <div style="height:9px;border-radius:5px;background:var(--bg-hover);overflow:hidden">
+            <div style="height:100%;width:${Math.min(100,pctCons)}%;background:${colCons};border-radius:5px"></div>
+          </div>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px;font-size:11px;color:var(--text-muted)">
+            <span>Planificado <b style="color:var(--text-primary)">${totalHrs}h</b></span>
+            <span>Registrado <b style="color:${colCons}">${regTotal}h</b></span>
+            <span>${excede
+              ? `Excedido en <b style="color:#ef4444">${dif}h</b>`
+              : `Restan <b style="color:var(--text-primary)">${dif}h</b>`}</span>
+          </div>
+        </div>`;
       return `<div class="gpart-section">
         <div class="gpart-title">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><path d="M21 21v-2a4 4 0 0 0-3-3.87"/></svg>
           PARTICIPACIÓN DE RECURSOS
         </div>
         ${rows}
-        <div class="gpart-total">Total: ${totalHrs}h</div>
+        ${consumoHtml}
       </div>`;
     })()}
   `;
@@ -1357,18 +1383,19 @@ const NOMENCLATURA = {
   'AR':  { nombre: 'Alexander Romero',   pais: 'Peru',      area: 'Desarrollo' },
   'HR':  { nombre: 'Hamhner Remuzgo',    pais: 'Peru',      area: 'Soporte TI', alias: ['soporte efletexia'] },
   'AA':  { nombre: 'Abel Alva',          pais: 'Peru',      area: 'PMO' },
-  'RP':  { nombre: 'Roxana Peralta',     pais: 'Peru',      area: 'Desarrollo' },
+  'RP':  { nombre: 'Roxana Peralta',     pais: 'Peru',      area: 'PM' },
   'ALL': { nombre: 'Alberto Llosa',      pais: 'Peru',      area: 'PM' },
   'FF':  { nombre: 'Farah Fidel',        pais: 'Mexico',    area: 'Comercial' },
   'JM':  { nombre: 'Juan Menco',         pais: 'Colombia',  area: 'Comercial' },
   'CC':  { nombre: 'Cesar Castañeda',    pais: 'Peru',      area: 'TC' },
-  'DC':  { nombre: 'Diego Corredor',     pais: 'Peru',      area: 'TC', alias: ['diego.corredor'] },
+  'DC':  { nombre: 'Diego Correa',       pais: 'Colombia',  area: 'TC', alias: ['diego.corredor','diego corredor'] },
   'EN':  { nombre: 'Edgar Noriega',      pais: 'Colombia',  area: 'TC' },
   'JC2': { nombre: 'Jose Carlos Cautle', pais: 'Mexico',    area: 'TC' },
   'MA':  { nombre: 'Maria Aguilar',      pais: 'Guatemala', area: 'TC' },
   'NB':  { nombre: 'Nalia Blanco',       pais: 'Peru',      area: 'Comercial' },
   'DV2': { nombre: 'Daniela Velarde',    pais: 'Peru',      area: 'Data' },
   'LE':  { nombre: 'Lucia Escobar',      pais: 'Colombia',  area: 'Operación' },
+  'JC3': { nombre: 'Jesus Castillon',    pais: 'Peru',      area: 'Finanzas' },
 };
 
 // Vacaciones por persona: { 'Nombre': [['YYYY-MM-DD','YYYY-MM-DD'], ...] }
