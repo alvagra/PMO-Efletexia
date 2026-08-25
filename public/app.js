@@ -398,6 +398,200 @@ document.getElementById('btn-limpiar').addEventListener('click',()=>{
   renderTable(epics);
 });
 
+// ═══════════════════════════════════════════════════════════
+//  MÓDULO DE GESTIÓN DE BUGS  (botón "Bugs" en Portafolio)
+// ═══════════════════════════════════════════════════════════
+let bugsData = null;      // crudo de la API
+let bugsRows = [];         // normalizado
+let bugsAbierto = false;
+
+function bgEstadoCls(status){
+  const s=(status||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  if(s.includes('bloque')||s.includes('blocked')) return {bg:'rgba(239,68,68,.15)',c:'#ef4444',g:'Bloqueado'};
+  if(s.includes('cerrado')||s.includes('closed')) return {bg:'rgba(63,185,80,.15)',c:'#3fb950',g:'Cerrado'};
+  if(s.includes('en curso')||s.includes('progress')) return {bg:'rgba(245,184,0,.15)',c:'#F5B800',g:'En curso'};
+  return {bg:'rgba(139,148,158,.15)',c:'#8b949e',g:'Pendiente'};
+}
+
+async function cargarBugs(){
+  const panel=document.getElementById('bugs-panel');
+  panel.innerHTML='<div class="bg-empty">Cargando bugs…</div>';
+  try{
+    const r=await fetch('/api/jira',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'bugs'})});
+    const j=await r.json();
+    if(!r.ok) throw new Error(j.error||'Error de API');
+    bugsData=j.bugs||[];
+    bugsRows=bugsData.map(b=>{
+      const f=b.fields||{};
+      const ep=f._epica||null;
+      return {
+        key:b.key,
+        resumen:f.summary||b.key,
+        estado:f.status?.name||'—',
+        grupo:bgEstadoCls(f.status?.name).g,
+        responsable:f.assignee?.displayName ? (resolveNombreDesdeJira(f.assignee.displayName)||f.assignee.displayName) : '—',
+        proyKey:ep?.key||'SIN-EPICA',
+        proyecto:ep?.summary||'Sin épica',
+        codigo:ep?.codigo||'',
+        inicio:f.customfield_10015||null,
+        fin:f.duedate||null,
+        creado:(f.created||'').slice(0,10)||null,
+        est:f._estTotal||0,
+        reg:+(((f._segTotal||0)/3600).toFixed(1)),
+        nSub:f._nSubtareas||0
+      };
+    });
+    renderBugsUI();
+  }catch(e){
+    panel.innerHTML=`<div class="bg-empty">No se pudieron cargar los bugs.<br><span style="font-size:11px">${esc(e.message)}</span></div>`;
+  }
+}
+
+function bugsFiltrados(){
+  const q=(document.getElementById('bg-q')?.value||'').toLowerCase();
+  const proy=document.getElementById('bg-proy')?.value||'';
+  const est=document.getElementById('bg-est')?.value||'';
+  const resp=document.getElementById('bg-resp')?.value||'';
+  const desde=document.getElementById('bg-desde')?.value||'';
+  const hasta=document.getElementById('bg-hasta')?.value||'';
+  const sf=document.getElementById('bg-sinfecha')?.checked;
+  return bugsRows.filter(b=>{
+    if(q && !(b.resumen.toLowerCase().includes(q)||b.key.toLowerCase().includes(q))) return false;
+    if(proy && b.proyKey!==proy) return false;
+    if(est && b.grupo!==est) return false;
+    if(resp && b.responsable!==resp) return false;
+    if(sf && b.fin) return false;
+    // El rango se aplica sobre la fecha de vencimiento
+    if(desde && (!b.fin || b.fin<desde)) return false;
+    if(hasta && (!b.fin || b.fin>hasta)) return false;
+    return true;
+  });
+}
+
+function renderBugsUI(){
+  const panel=document.getElementById('bugs-panel');
+  const proys=[...new Map(bugsRows.map(b=>[b.proyKey,b])).values()]
+    .sort((a,b)=>a.proyecto.localeCompare(b.proyecto));
+  const resps=[...new Set(bugsRows.map(b=>b.responsable))].sort();
+  panel.innerHTML=`<div class="bg-wrap">
+    <div class="bg-kpis" id="bg-kpis"></div>
+    <div class="bg-filtros">
+      <input id="bg-q" type="text" placeholder="Buscar bug o clave…" style="min-width:190px"/>
+      <select id="bg-proy"><option value="">Todos los proyectos</option>${
+        proys.map(p=>`<option value="${esc(p.proyKey)}">${esc(p.codigo?p.codigo+' · ':'')}${esc(p.proyecto)}</option>`).join('')}</select>
+      <select id="bg-est"><option value="">Todos los estados</option>
+        <option>Pendiente</option><option>En curso</option><option>Bloqueado</option><option>Cerrado</option></select>
+      <select id="bg-resp"><option value="">Todos los responsables</option>${
+        resps.map(r=>`<option>${esc(r)}</option>`).join('')}</select>
+      <span style="font-size:11px;color:var(--text-muted)">Vence</span>
+      <input id="bg-desde" type="date"/><input id="bg-hasta" type="date"/>
+      <label style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:5px;cursor:pointer">
+        <input id="bg-sinfecha" type="checkbox"/> Sin fecha</label>
+      <button class="btn-limpiar" id="bg-limpiar" type="button" style="margin-left:0">Limpiar</button>
+      <button class="btn-export" id="bg-csv" type="button">CSV</button>
+    </div>
+    <div id="bg-tabla-wrap"></div>
+  </div>`;
+  ['bg-q','bg-proy','bg-est','bg-resp','bg-desde','bg-hasta','bg-sinfecha'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.addEventListener(el.tagName==='INPUT'&&el.type!=='date'&&el.type!=='checkbox'?'input':'change',renderBugsTabla);
+  });
+  document.getElementById('bg-limpiar').addEventListener('click',()=>{
+    ['bg-q','bg-proy','bg-est','bg-resp','bg-desde','bg-hasta'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
+    const cb=document.getElementById('bg-sinfecha'); if(cb) cb.checked=false;
+    renderBugsTabla();
+  });
+  document.getElementById('bg-csv').addEventListener('click',exportBugsCSV);
+  renderBugsTabla();
+}
+
+function renderBugsTabla(){
+  const rows=bugsFiltrados();
+  const hoy=new Date().toISOString().slice(0,10);
+  const cont={Pendiente:0,'En curso':0,Bloqueado:0,Cerrado:0};
+  let est=0,reg=0,venc=0,sinF=0;
+  rows.forEach(b=>{
+    cont[b.grupo]=(cont[b.grupo]||0)+1;
+    est+=b.est; reg+=b.reg;
+    if(!b.fin) sinF++;
+    else if(b.fin<hoy && b.grupo!=='Cerrado') venc++;
+  });
+  const abiertos=cont.Pendiente+cont['En curso']+cont.Bloqueado;
+  const kpi=(l,v,c)=>`<div class="bg-kpi"><div class="bg-kpi-lbl">${l}</div><div class="bg-kpi-val" style="color:${c||'var(--text-primary)'}">${v}</div></div>`;
+  document.getElementById('bg-kpis').innerHTML=
+    kpi('TOTAL',rows.length)+
+    kpi('ABIERTOS',abiertos,abiertos?'#ef4444':'var(--text-dim)')+
+    kpi('PENDIENTE',cont.Pendiente,'var(--text-muted)')+
+    kpi('EN CURSO',cont['En curso'],'#F5B800')+
+    kpi('BLOQUEADO',cont.Bloqueado,cont.Bloqueado?'#ef4444':'var(--text-dim)')+
+    kpi('CERRADO',cont.Cerrado,'#3fb950')+
+    kpi('VENCIDOS',venc,venc?'#ef4444':'var(--text-dim)')+
+    kpi('SIN FECHA',sinF,sinF?'#F5B800':'var(--text-dim)')+
+    kpi('HRS EST.',est+'h')+
+    kpi('HRS REG.',reg+'h',reg>est&&est>0?'#ef4444':'var(--text-primary)');
+
+  const wrap=document.getElementById('bg-tabla-wrap');
+  if(!rows.length){ wrap.innerHTML='<div class="bg-empty">No hay bugs que coincidan con los filtros.</div>'; return; }
+
+  // Agrupado por proyecto
+  const grupos={}, orden=[];
+  rows.forEach(b=>{ if(!grupos[b.proyKey]){grupos[b.proyKey]=[];orden.push(b.proyKey);} grupos[b.proyKey].push(b); });
+  orden.sort((a,b)=>grupos[b].length-grupos[a].length);
+
+  const cuerpo=orden.map(k=>{
+    const g=grupos[k], p=g[0];
+    const gEst=g.reduce((s,x)=>s+x.est,0), gReg=g.reduce((s,x)=>s+x.reg,0);
+    const gAb=g.filter(x=>x.grupo!=='Cerrado').length;
+    const filas=g.map(b=>{
+      const c=bgEstadoCls(b.estado);
+      const vencido=b.fin && b.fin<hoy && b.grupo!=='Cerrado';
+      return `<tr>
+        <td><a class="jlink" href="${JIRA_BASE}${b.key}" target="_blank">${b.key}</a></td>
+        <td style="max-width:300px">${esc(b.resumen)}${b.nSub?`<span style="color:var(--text-dim);font-size:10px"> · ${b.nSub} subt.</span>`:''}</td>
+        <td><span class="bg-est" style="background:${c.bg};color:${c.c}">${esc(b.estado)}</span></td>
+        <td style="color:var(--text-muted);white-space:nowrap">${esc(b.responsable)}</td>
+        <td style="color:var(--text-muted);white-space:nowrap">${b.inicio?fmtD(b.inicio):'—'}</td>
+        <td style="white-space:nowrap;color:${vencido?'#ef4444':(b.fin?'var(--text-muted)':'#F5B800')}">${b.fin?fmtD(b.fin):'sin fecha'}</td>
+        <td style="text-align:right;color:${b.est?'var(--text-primary)':'var(--text-dim)'}">${b.est?b.est+'h':'—'}</td>
+        <td style="text-align:right;color:${b.reg>b.est&&b.est>0?'#ef4444':'var(--text-primary)'}">${b.reg?b.reg+'h':'—'}</td>
+      </tr>`;
+    }).join('');
+    return `<tr class="bg-grupo"><td colspan="8">
+      ${esc(p.codigo?p.codigo+' · ':'')}${esc(p.proyecto)}
+      <span style="font-weight:400;color:var(--text-muted);margin-left:8px">${g.length} bug${g.length===1?'':'s'} · ${gAb} abierto${gAb===1?'':'s'} · ${gEst}h est. / ${gReg}h reg.</span>
+    </td></tr>${filas}`;
+  }).join('');
+
+  wrap.innerHTML=`<table class="bg-tabla">
+    <thead><tr><th>CLAVE</th><th>BUG</th><th>ESTADO</th><th>RESPONSABLE</th><th>INICIO</th><th>VENCE</th>
+    <th style="text-align:right">HRS EST.</th><th style="text-align:right">HRS REG.</th></tr></thead>
+    <tbody>${cuerpo}</tbody></table>`;
+}
+
+function exportBugsCSV(){
+  const rows=bugsFiltrados();
+  const q=v=>`"${String(v??'').replace(/"/g,'""')}"`;
+  const csv=[['Clave','Bug','Proyecto','Codigo','Estado','Responsable','Inicio','Vence','Horas estimadas','Horas registradas'].join(',')]
+    .concat(rows.map(b=>[b.key,b.resumen,b.proyecto,b.codigo,b.estado,b.responsable,b.inicio||'',b.fin||'',b.est,b.reg].map(q).join(',')))
+    .join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'}));
+  a.download=`bugs_PTS_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+document.getElementById('btn-bugs').addEventListener('click',()=>{
+  bugsAbierto=!bugsAbierto;
+  const panel=document.getElementById('bugs-panel');
+  const tabla=document.querySelector('#panel-portafolio .table-wrap');
+  const info=document.getElementById('table-info');
+  document.getElementById('btn-bugs').classList.toggle('activo',bugsAbierto);
+  panel.style.display=bugsAbierto?'block':'none';
+  if(tabla) tabla.style.display=bugsAbierto?'none':'';
+  if(info) info.style.display=bugsAbierto?'none':'';
+  if(bugsAbierto && !bugsData) cargarBugs();
+});
+
 document.querySelectorAll('#panel-portafolio thead th[data-col]').forEach(th=>{
   th.addEventListener('click',()=>{
     const col=th.dataset.col;
