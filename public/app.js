@@ -404,6 +404,7 @@ document.getElementById('btn-limpiar').addEventListener('click',()=>{
 let bugsData = null;      // crudo de la API
 let bugsRows = [];         // normalizado
 let bugsAbierto = false;
+let bugEstadosSel = new Set();   // estados seleccionados en el filtro (multi)
 
 function bgEstadoCls(status){
   const s=(status||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
@@ -451,7 +452,7 @@ async function cargarBugs(){
 function bugsFiltrados(){
   const q=(document.getElementById('bg-q')?.value||'').toLowerCase();
   const proy=document.getElementById('bg-proy')?.value||'';
-  const est=document.getElementById('bg-est')?.value||'';
+  const est=bugEstadosSel;
   const resp=document.getElementById('bg-resp')?.value||'';
   const desde=document.getElementById('bg-desde')?.value||'';
   const hasta=document.getElementById('bg-hasta')?.value||'';
@@ -459,7 +460,7 @@ function bugsFiltrados(){
   return bugsRows.filter(b=>{
     if(q && !(b.resumen.toLowerCase().includes(q)||b.key.toLowerCase().includes(q))) return false;
     if(proy && b.proyKey!==proy) return false;
-    if(est && b.estado!==est) return false;
+    if(est.size && !est.has(b.estado)) return false;
     if(resp && b.responsable!==resp) return false;
     if(sf && b.fin) return false;
     // El rango se aplica sobre la fecha de vencimiento
@@ -481,8 +482,8 @@ function renderBugsUI(){
       <input id="bg-q" type="text" placeholder="Buscar bug o clave…" style="min-width:190px"/>
       <select id="bg-proy"><option value="">Todos los proyectos</option>${
         proys.map(p=>`<option value="${esc(p.proyKey)}">${esc(p.codigo?p.codigo+' · ':'')}${esc(p.proyecto)}</option>`).join('')}</select>
-      <select id="bg-est"><option value="">Todos los estados</option>${
-        estados.map(e=>`<option>${esc(e)}</option>`).join('')}</select>
+      <span id="bg-est-chips" class="bg-chips">${
+        estados.map(e=>`<button type="button" class="bg-chip" data-est="${esc(e)}">${esc(e)}</button>`).join('')}</span>
       <select id="bg-resp"><option value="">Todos los responsables</option>${
         resps.map(r=>`<option>${esc(r)}</option>`).join('')}</select>
       <span style="font-size:11px;color:var(--text-muted)">Vence</span>
@@ -494,13 +495,22 @@ function renderBugsUI(){
     </div>
     <div id="bg-tabla-wrap"></div>
   </div>`;
-  ['bg-q','bg-proy','bg-est','bg-resp','bg-desde','bg-hasta','bg-sinfecha'].forEach(id=>{
+  ['bg-q','bg-proy','bg-resp','bg-desde','bg-hasta','bg-sinfecha'].forEach(id=>{
     const el=document.getElementById(id);
     if(el) el.addEventListener(el.tagName==='INPUT'&&el.type!=='date'&&el.type!=='checkbox'?'input':'change',renderBugsTabla);
   });
+  document.getElementById('bg-est-chips').addEventListener('click',ev=>{
+    const b=ev.target.closest('.bg-chip'); if(!b) return;
+    const e=b.dataset.est;
+    if(bugEstadosSel.has(e)) bugEstadosSel.delete(e); else bugEstadosSel.add(e);
+    b.classList.toggle('on',bugEstadosSel.has(e));
+    renderBugsTabla();
+  });
   document.getElementById('bg-limpiar').addEventListener('click',()=>{
-    ['bg-q','bg-proy','bg-est','bg-resp','bg-desde','bg-hasta'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
+    ['bg-q','bg-proy','bg-resp','bg-desde','bg-hasta'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
     const cb=document.getElementById('bg-sinfecha'); if(cb) cb.checked=false;
+    bugEstadosSel.clear();
+    document.querySelectorAll('#bg-est-chips .bg-chip').forEach(c=>c.classList.remove('on'));
     renderBugsTabla();
   });
   document.getElementById('bg-csv').addEventListener('click',exportBugsCSV);
@@ -556,9 +566,10 @@ function renderBugsTabla(){
         <td style="white-space:nowrap;color:${vencido?'#ef4444':(b.fin?'var(--text-muted)':'#F5B800')}">${b.fin?fmtD(b.fin):'sin fecha'}</td>
         <td style="text-align:right;color:${b.est?'var(--text-primary)':'var(--text-dim)'}">${b.est?b.est+'h':'—'}</td>
         <td style="text-align:right;color:${b.reg>b.est&&b.est>0?'#ef4444':'var(--text-primary)'}">${b.reg?b.reg+'h':'—'}</td>
+        <td style="text-align:center"><button class="bg-ciclo-btn" type="button" onclick="verCicloBug('${b.key}')" title="Ciclo de vida">⧗</button></td>
       </tr>`;
     }).join('');
-    return `<tr class="bg-grupo"><td colspan="8">
+    return `<tr class="bg-grupo"><td colspan="9">
       ${esc(p.codigo?p.codigo+' · ':'')}${esc(p.proyecto)}
       <span style="font-weight:400;color:var(--text-muted);margin-left:8px">${g.length} bug${g.length===1?'':'s'} · ${gAb} abierto${gAb===1?'':'s'} · ${gEst}h est. / ${gReg}h reg.</span>
     </td></tr>${filas}`;
@@ -566,8 +577,109 @@ function renderBugsTabla(){
 
   wrap.innerHTML=`<table class="bg-tabla">
     <thead><tr><th>CLAVE</th><th>BUG</th><th>ESTADO</th><th>RESPONSABLE</th><th>INICIO</th><th>VENCE</th>
-    <th style="text-align:right">HRS EST.</th><th style="text-align:right">HRS REG.</th></tr></thead>
+    <th style="text-align:right">HRS EST.</th><th style="text-align:right">HRS REG.</th><th style="text-align:center">CICLO</th></tr></thead>
     <tbody>${cuerpo}</tbody></table>`;
+}
+
+// ── Ciclo de vida del bug ─────────────────────────────────
+const cicloCache = {};
+
+function fmtDT(iso){
+  if(!iso) return '—';
+  const d=new Date(iso);
+  return d.toLocaleDateString('es-PE',{day:'2-digit',month:'short',year:'2-digit'})+
+         ' '+d.toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'});
+}
+function diasEntre(a,b){
+  const ms=(b?new Date(b):new Date())-new Date(a);
+  return Math.max(0,Math.round(ms/86400000*10)/10);
+}
+
+async function verCicloBug(key){
+  let ov=document.getElementById('bg-ciclo-ov');
+  if(!ov){
+    ov=document.createElement('div');
+    ov.id='bg-ciclo-ov';
+    ov.className='bg-ciclo-ov';
+    ov.addEventListener('click',e=>{ if(e.target===ov) ov.style.display='none'; });
+    document.body.appendChild(ov);
+  }
+  ov.style.display='flex';
+  ov.innerHTML='<div class="bg-ciclo-box"><div class="bg-empty">Cargando ciclo de vida…</div></div>';
+  try{
+    if(!cicloCache[key]){
+      const r=await fetch('/api/jira',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'bugHistory',key})});
+      const j=await r.json();
+      if(!r.ok) throw new Error(j.error||'Error');
+      cicloCache[key]=j;
+    }
+    ov.innerHTML=renderCiclo(cicloCache[key]);
+  }catch(e){
+    ov.innerHTML=`<div class="bg-ciclo-box"><div class="bg-empty">No se pudo cargar el historial.<br><span style="font-size:11px">${esc(e.message)}</span></div></div>`;
+  }
+}
+
+function renderCiclo(d){
+  const ev=d.eventos||[];
+  // Reconstrucción de tramos: se recorre en orden y se arrastran los valores vigentes.
+  const primerEstado=ev.find(e=>e.tipo==='estado');
+  let estado=primerEstado?primerEstado.de:(d.estadoActual||'—');
+  let ini=null, ven=null, resp=null;
+  let tIni=d.creado;
+  const tramos=[];
+  ev.forEach(e=>{
+    if(e.tipo==='inicio') ini=e.a;
+    else if(e.tipo==='vence') ven=e.a;
+    else if(e.tipo==='responsable') resp=e.a;
+    else if(e.tipo==='estado'){
+      tramos.push({estado,desde:tIni,hasta:e.t,ini,ven,resp});
+      estado=e.a; tIni=e.t;
+    }
+  });
+  tramos.push({estado,desde:tIni,hasta:null,ini,ven,resp,actual:true});
+
+  const filas=tramos.map(t=>{
+    const c=bgEstadoCls(t.estado);
+    return `<tr>
+      <td><span class="bg-est" style="background:${c.bg};color:${c.c}">${esc(t.estado||'—')}</span>${t.actual?' <span style="font-size:10px;color:var(--text-dim)">actual</span>':''}</td>
+      <td style="color:var(--text-muted);white-space:nowrap">${fmtDT(t.desde)}</td>
+      <td style="color:var(--text-muted);white-space:nowrap">${t.hasta?fmtDT(t.hasta):'—'}</td>
+      <td style="text-align:right;white-space:nowrap">${diasEntre(t.desde,t.hasta)} d</td>
+      <td style="color:var(--text-muted);white-space:nowrap">${t.ini?fmtD(t.ini):'—'}</td>
+      <td style="white-space:nowrap;color:${t.ven?'var(--text-primary)':'#F5B800'}">${t.ven?fmtD(t.ven):'sin fecha'}</td>
+      <td style="color:var(--text-muted);white-space:nowrap">${esc(t.resp||'—')}</td>
+    </tr>`;
+  }).join('');
+
+  const cambios=ev.filter(e=>e.tipo==='vence'||e.tipo==='inicio').map(e=>
+    `<div class="bg-ciclo-ev">
+      <span style="color:var(--text-muted);white-space:nowrap">${fmtDT(e.t)}</span>
+      <span>${e.tipo==='vence'?'Vencimiento':'Fecha inicio'}
+        <b style="color:var(--text-dim)">${e.de?fmtD(e.de):'—'}</b> →
+        <b>${e.a?fmtD(e.a):'—'}</b></span>
+      <span style="color:var(--text-muted)">${esc(e.autor)}</span>
+    </div>`).join('') || '<div style="font-size:12px;color:var(--text-muted);padding:6px 0">Sin cambios de fecha registrados.</div>';
+
+  const total=diasEntre(d.creado,null);
+  return `<div class="bg-ciclo-box">
+    <div class="bg-ciclo-head">
+      <div>
+        <div style="font-size:11px;color:var(--text-muted)">${esc(d.key)} · ${total} días desde su creación</div>
+        <div style="font-size:14px;font-weight:600;margin-top:3px">${esc(d.summary)}</div>
+      </div>
+      <button class="bg-ciclo-x" type="button" onclick="document.getElementById('bg-ciclo-ov').style.display='none'">✕</button>
+    </div>
+    <div style="padding:14px 18px">
+      <div style="font-size:11px;color:var(--text-muted);letter-spacing:.04em;margin-bottom:8px">TIEMPO EN CADA ESTADO</div>
+      <table class="bg-tabla">
+        <thead><tr><th>ESTADO</th><th>ENTRÓ</th><th>SALIÓ</th><th style="text-align:right">DURACIÓN</th>
+        <th>INICIO VIG.</th><th>VENCE VIG.</th><th>RESPONSABLE</th></tr></thead>
+        <tbody>${filas}</tbody>
+      </table>
+      <div style="font-size:11px;color:var(--text-muted);letter-spacing:.04em;margin:18px 0 8px">CAMBIOS DE FECHA</div>
+      ${cambios}
+    </div>
+  </div>`;
 }
 
 function exportBugsCSV(){
