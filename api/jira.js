@@ -276,6 +276,46 @@ module.exports = async function handler(req, res) {
 
       return res.status(200).json({ bugs, total: bugs.length, type: 'bugs' });
 
+    } else if (type === 'bugHistory') {
+      // Ciclo de vida de un bug: se reconstruye desde el changelog de Jira,
+      // que conserva los valores anteriores aunque los campos se sobrescriban.
+      const { key } = req.body;
+      if (!key) return res.status(400).json({ error: 'Falta la clave del bug' });
+      const r = await jiraGet(auth, JIRA_CLOUD,
+        `/rest/api/3/issue/${encodeURIComponent(key)}?expand=changelog&fields=summary,status,duedate,created,customfield_10015`);
+      if (!r.ok) return res.status(r.status).json({ error: 'No se pudo leer el historial' });
+      const d = r.body || {};
+      // Se devuelve solo lo necesario: evita mandar avatares y campos irrelevantes.
+      const eventos = [];
+      (d.changelog?.histories || []).forEach(h => {
+        (h.items || []).forEach(it => {
+          const fid = (it.fieldId || it.field || '').toLowerCase();
+          let tipo = null;
+          if (fid === 'status') tipo = 'estado';
+          else if (fid === 'duedate') tipo = 'vence';
+          else if (fid === 'customfield_10015') tipo = 'inicio';
+          else if (fid === 'assignee') tipo = 'responsable';
+          else if (fid === 'customfield_11136') tipo = 'horas';
+          if (!tipo) return;
+          eventos.push({
+            t: h.created,
+            tipo,
+            de: it.fromString || it.from || null,
+            a: it.toString || it.to || null,
+            autor: h.author?.displayName || '—'
+          });
+        });
+      });
+      eventos.sort((a, b) => new Date(a.t) - new Date(b.t));
+      return res.status(200).json({
+        key: d.key,
+        summary: d.fields?.summary || '',
+        estadoActual: d.fields?.status?.name || '',
+        creado: d.fields?.created || null,
+        eventos,
+        type: 'bugHistory'
+      });
+
     } else if (type === 'capacity') {
       // Subtareas + worklogs por fecha
       // 1. Traer todas las subtareas (mínimo de campos necesarios)
