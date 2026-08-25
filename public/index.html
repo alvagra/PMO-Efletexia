@@ -68,6 +68,18 @@ select.filter-input option{background:var(--bg-elevated)}
 .bg-grupo td{background:var(--bg-elevated);font-weight:600;font-size:11px;letter-spacing:.03em;padding:8px 9px}
 .bg-est{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;white-space:nowrap}
 .bg-empty{padding:34px;text-align:center;color:var(--text-muted);font-size:13px}
+.bg-chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.bg-chip{background:var(--bg-elevated);border:1px solid var(--border);border-radius:5px;padding:5px 11px;font-size:12px;color:var(--text-muted);cursor:pointer;font-family:var(--font);height:30px}
+.bg-chip:hover{background:var(--bg-hover);color:var(--text-primary)}
+.bg-chip.on{background:var(--blue-bg);border-color:var(--blue);color:#fff}
+.bg-ciclo-btn{background:transparent;border:1px solid var(--border);border-radius:4px;color:var(--text-muted);cursor:pointer;font-size:13px;line-height:1;padding:3px 7px;font-family:var(--font)}
+.bg-ciclo-btn:hover{border-color:var(--blue);color:var(--blue)}
+.bg-ciclo-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.66);z-index:900;align-items:flex-start;justify-content:center;padding:44px 16px;overflow-y:auto}
+.bg-ciclo-box{background:var(--bg-surface);border:1px solid var(--border);border-radius:10px;max-width:920px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+.bg-ciclo-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;padding:14px 18px;border-bottom:1px solid var(--border)}
+.bg-ciclo-x{background:transparent;border:none;color:var(--text-muted);font-size:16px;cursor:pointer;line-height:1}
+.bg-ciclo-x:hover{color:var(--text-primary)}
+.bg-ciclo-ev{display:flex;gap:14px;align-items:baseline;font-size:12px;padding:5px 0;border-bottom:1px solid var(--border)}
 .btn-export{background:var(--bg-elevated);border:1px solid var(--border);border-radius:5px;padding:5px 14px;font-size:12px;color:var(--green);cursor:pointer;display:flex;align-items:center;gap:5px;font-family:var(--font);height:30px}
 .btn-export:hover{background:var(--border)}
 .table-info{padding:8px 20px;font-size:11px;color:var(--text-muted);background:var(--bg-base);border-bottom:1px solid var(--border-light);display:flex;align-items:center;gap:12px}
