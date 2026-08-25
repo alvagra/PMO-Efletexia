@@ -421,7 +421,8 @@ async function cargarBugs(){
     const j=await r.json();
     if(!r.ok) throw new Error(j.error||'Error de API');
     bugsData=j.bugs||[];
-    bugsRows=bugsData.map(b=>{
+    // Solo bugs con Persona asignada en Jira
+    bugsRows=bugsData.filter(b=>b.fields?.assignee?.displayName).map(b=>{
       const f=b.fields||{};
       const ep=f._epica||null;
       return {
@@ -429,7 +430,7 @@ async function cargarBugs(){
         resumen:f.summary||b.key,
         estado:f.status?.name||'—',
         grupo:bgEstadoCls(f.status?.name).g,
-        responsable:f.assignee?.displayName ? (resolveNombreDesdeJira(f.assignee.displayName)||f.assignee.displayName) : '—',
+        responsable:f.assignee?.displayName ? (resolveNombreDesdeJira(f.assignee.displayName)?.nombre||f.assignee.displayName) : '—',
         proyKey:ep?.key||'SIN-EPICA',
         proyecto:ep?.summary||'Sin épica',
         codigo:ep?.codigo||'',
@@ -547,7 +548,7 @@ function renderBugsTabla(){
       const vencido=b.fin && b.fin<hoy && b.grupo!=='Cerrado';
       return `<tr>
         <td><a class="jlink" href="${JIRA_BASE}${b.key}" target="_blank">${b.key}</a></td>
-        <td style="max-width:300px">${esc(b.resumen)}${b.nSub?`<span style="color:var(--text-dim);font-size:10px"> · ${b.nSub} subt.</span>`:''}</td>
+        <td><div style="max-width:340px;overflow-wrap:anywhere">${esc(b.resumen)}${b.nSub?`<span style="color:var(--text-dim);font-size:10px"> · ${b.nSub} subt.</span>`:''}</div></td>
         <td><span class="bg-est" style="background:${c.bg};color:${c.c}">${esc(b.estado)}</span></td>
         <td style="color:var(--text-muted);white-space:nowrap">${esc(b.responsable)}</td>
         <td style="color:var(--text-muted);white-space:nowrap">${b.inicio?fmtD(b.inicio):'—'}</td>
