@@ -211,6 +211,71 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ stories: storiesFinal, total: storiesFinal.length, type: 'stories' });
 
 
+    } else if (type === 'bugs') {
+      // Módulo de gestión de bugs: todos los Errores del proyecto con su épica,
+      // fechas, horas estimadas y horas registradas (propias + de sus subtareas).
+      const BUG_FIELDS = [
+        'summary', 'status', 'assignee', 'parent', 'duedate', 'created', 'issuetype',
+        'timespent',
+        'customfield_10015', // Fecha inicio
+        'customfield_11136', // Horas estimadas
+      ];
+      const bugs = await fetchAllPages(
+        auth, JIRA_CLOUD,
+        'project = PTS AND issuetype = Error ORDER BY created DESC',
+        BUG_FIELDS
+      );
+
+      // Subtareas colgadas de un bug: sus horas se suman al bug padre.
+      const bugKeys = bugs.map(b => b.key);
+      const subHoras = {};
+      for (let i = 0; i < bugKeys.length; i += 50) {
+        const chunk = bugKeys.slice(i, i + 50);
+        if (!chunk.length) continue;
+        const subs = await fetchAllPages(auth, JIRA_CLOUD,
+          `project = PTS AND parent in (${chunk.join(',')})`,
+          ['parent', 'timespent', 'customfield_11136']);
+        subs.forEach(s => {
+          const pk = s.fields.parent?.key;
+          if (!pk) return;
+          if (!subHoras[pk]) subHoras[pk] = { seg: 0, est: 0, n: 0 };
+          subHoras[pk].seg += s.fields.timespent || 0;
+          subHoras[pk].est += s.fields.customfield_11136 || 0;
+          subHoras[pk].n += 1;
+        });
+      }
+
+      // Épicas padre: nombre y código para agrupar por proyecto.
+      const epKeys = [...new Set(bugs.map(b => b.fields.parent?.key).filter(Boolean))];
+      const epMap = {};
+      for (let i = 0; i < epKeys.length; i += 50) {
+        const chunk = epKeys.slice(i, i + 50);
+        if (!chunk.length) continue;
+        const eps = await fetchAllPages(auth, JIRA_CLOUD,
+          `key in (${chunk.join(',')})`,
+          ['summary', 'parent', 'customfield_10934', 'issuetype']);
+        eps.forEach(e => { epMap[e.key] = e; });
+      }
+
+      bugs.forEach(b => {
+        const pk = b.fields.parent?.key;
+        const padre = pk ? epMap[pk] : null;
+        const esEpica = (padre?.fields?.issuetype?.hierarchyLevel === 1) ||
+                        (padre?.fields?.issuetype?.name === 'Epic');
+        // Si el bug cuelga de una historia, se sube un nivel hasta la épica.
+        const epKey = esEpica ? padre?.key : padre?.fields?.parent?.key;
+        const epSum = esEpica ? padre?.fields?.summary : padre?.fields?.parent?.fields?.summary;
+        b.fields._epica = epKey
+          ? { key: epKey, summary: epSum || epKey, codigo: (esEpica ? padre?.fields?.customfield_10934 : '') || '' }
+          : null;
+        const extra = subHoras[b.key] || { seg: 0, est: 0, n: 0 };
+        b.fields._segTotal   = (b.fields.timespent || 0) + extra.seg;
+        b.fields._estTotal   = (b.fields.customfield_11136 || 0) + extra.est;
+        b.fields._nSubtareas = extra.n;
+      });
+
+      return res.status(200).json({ bugs, total: bugs.length, type: 'bugs' });
+
     } else if (type === 'capacity') {
       // Subtareas + worklogs por fecha
       // 1. Traer todas las subtareas (mínimo de campos necesarios)
