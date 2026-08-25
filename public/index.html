@@ -51,6 +51,23 @@ select.filter-input option{background:var(--bg-elevated)}
 .estado-item input[type=checkbox]{accent-color:var(--blue);width:12px;height:12px;cursor:pointer}
 .btn-limpiar{margin-left:auto;background:var(--bg-elevated);border:1px solid var(--border);border-radius:5px;padding:5px 14px;font-size:12px;color:var(--blue);cursor:pointer;display:flex;align-items:center;gap:5px;font-family:var(--font);height:30px}
 .btn-limpiar:hover{background:var(--border)}
+.btn-bugs{background:rgba(239,68,68,.10);border:1px solid rgba(239,68,68,.35);border-radius:5px;padding:5px 14px;font-size:12px;color:#ef4444;cursor:pointer;display:flex;align-items:center;gap:5px;font-family:var(--font);height:30px}
+.btn-bugs:hover{background:rgba(239,68,68,.18)}
+.btn-bugs.activo{background:#ef4444;color:#fff;border-color:#ef4444}
+.bg-wrap{padding:16px 20px}
+.bg-kpis{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.bg-kpi{background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;padding:10px 16px;min-width:104px}
+.bg-kpi-lbl{font-size:10px;color:var(--text-muted);letter-spacing:.04em;margin-bottom:5px}
+.bg-kpi-val{font-size:21px;font-weight:700;line-height:1}
+.bg-filtros{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.bg-filtros select,.bg-filtros input{background:var(--bg-elevated);border:1px solid var(--border);border-radius:5px;padding:5px 9px;font-size:12px;color:var(--text-primary);font-family:var(--font);height:30px}
+.bg-tabla{width:100%;border-collapse:collapse;font-size:12px}
+.bg-tabla th{text-align:left;font-weight:500;color:var(--text-muted);font-size:10px;letter-spacing:.04em;padding:7px 9px;border-bottom:1px solid var(--border);white-space:nowrap}
+.bg-tabla td{padding:8px 9px;border-bottom:1px solid var(--border);vertical-align:top;line-height:1.5}
+.bg-tabla tr:hover td{background:var(--bg-hover)}
+.bg-grupo td{background:var(--bg-elevated);font-weight:600;font-size:11px;letter-spacing:.03em;padding:8px 9px}
+.bg-est{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;white-space:nowrap}
+.bg-empty{padding:34px;text-align:center;color:var(--text-muted);font-size:13px}
 .btn-export{background:var(--bg-elevated);border:1px solid var(--border);border-radius:5px;padding:5px 14px;font-size:12px;color:var(--green);cursor:pointer;display:flex;align-items:center;gap:5px;font-family:var(--font);height:30px}
 .btn-export:hover{background:var(--border)}
 .table-info{padding:8px 20px;font-size:11px;color:var(--text-muted);background:var(--bg-base);border-bottom:1px solid var(--border-light);display:flex;align-items:center;gap:12px}
@@ -583,7 +600,11 @@ a.jlink:hover{text-decoration:underline}
     <button class="btn-export" id="btn-export-port" type="button" title="Exportar a CSV">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>CSV
     </button>
+    <button class="btn-bugs" id="btn-bugs" type="button" title="Gestión de bugs">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 2l1.88 1.88M14.12 3.88L16 2"/><path d="M9 7.13V6a3 3 0 1 1 6 0v1.13"/><path d="M12 20a6 6 0 0 0 6-6v-3a6 6 0 0 0-12 0v3a6 6 0 0 0 6 6z"/><path d="M3 13h3M18 13h3M4.5 7l2.5 1.5M19.5 7L17 8.5M4.5 19L7 17.5M19.5 19L17 17.5"/></svg>Bugs
+    </button>
   </div>
+  <div id="bugs-panel" style="display:none"></div>
   <div class="table-info" id="table-info" style="justify-content:space-between">
     <span id="table-info-text"></span>
     <div class="semaforo-legend" style="display:flex;gap:14px;align-items:center;font-size:11px;color:var(--text-muted)">
