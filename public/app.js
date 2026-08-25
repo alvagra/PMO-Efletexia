@@ -459,7 +459,7 @@ function bugsFiltrados(){
   return bugsRows.filter(b=>{
     if(q && !(b.resumen.toLowerCase().includes(q)||b.key.toLowerCase().includes(q))) return false;
     if(proy && b.proyKey!==proy) return false;
-    if(est && b.grupo!==est) return false;
+    if(est && b.estado!==est) return false;
     if(resp && b.responsable!==resp) return false;
     if(sf && b.fin) return false;
     // El rango se aplica sobre la fecha de vencimiento
@@ -473,6 +473,7 @@ function renderBugsUI(){
   const panel=document.getElementById('bugs-panel');
   const proys=[...new Map(bugsRows.map(b=>[b.proyKey,b])).values()]
     .sort((a,b)=>a.proyecto.localeCompare(b.proyecto));
+  const estados=[...new Set(bugsRows.map(b=>b.estado))].sort();
   const resps=[...new Set(bugsRows.map(b=>b.responsable))].sort();
   panel.innerHTML=`<div class="bg-wrap">
     <div class="bg-kpis" id="bg-kpis"></div>
@@ -480,8 +481,8 @@ function renderBugsUI(){
       <input id="bg-q" type="text" placeholder="Buscar bug o clave…" style="min-width:190px"/>
       <select id="bg-proy"><option value="">Todos los proyectos</option>${
         proys.map(p=>`<option value="${esc(p.proyKey)}">${esc(p.codigo?p.codigo+' · ':'')}${esc(p.proyecto)}</option>`).join('')}</select>
-      <select id="bg-est"><option value="">Todos los estados</option>
-        <option>Pendiente</option><option>En curso</option><option>Bloqueado</option><option>Cerrado</option></select>
+      <select id="bg-est"><option value="">Todos los estados</option>${
+        estados.map(e=>`<option>${esc(e)}</option>`).join('')}</select>
       <select id="bg-resp"><option value="">Todos los responsables</option>${
         resps.map(r=>`<option>${esc(r)}</option>`).join('')}</select>
       <span style="font-size:11px;color:var(--text-muted)">Vence</span>
