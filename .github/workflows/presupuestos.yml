@@ -1,0 +1,55 @@
+name: Presupuestos desde Drive
+
+on:
+  schedule:
+    # 02:00 en Lima (UTC-5) = 07:00 UTC, de lunes a viernes
+    - cron: "0 7 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  consolidar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependencias
+        run: |
+          pip install --quiet \
+            google-api-python-client google-auth openpyxl
+
+      - name: Leer presupuestos de Drive
+        env:
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          python scripts/leer_presupuestos.py \
+            --out public/data/presupuestos.json | tee salida.log
+
+      - name: Publicar si hubo cambios
+        run: |
+          git config user.name  "PMO Bot"
+          git config user.email "pmo-bot@efletexia.com"
+          git add public/data/presupuestos.json
+          if git diff --staged --quiet; then
+            echo "Sin cambios en los presupuestos"
+          else
+            git commit -m "Presupuestos: actualización automática $(date +%F)"
+            git push
+          fi
+
+      - name: Avisar rechazos
+        if: always()
+        env:
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+        run: |
+          RECHAZOS=$(python -c "import json;d=json.load(open('public/data/presupuestos.json'));print(d['resumen']['rechazados'])" 2>/dev/null || echo 0)
+          if [ "$RECHAZOS" != "0" ]; then
+            echo "::warning::$RECHAZOS archivos rechazados"
+            python scripts/avisar_rechazos.py
+          fi
