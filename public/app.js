@@ -1456,8 +1456,17 @@ function renderRecursos(){
     }
     if(hayRango){
       todas = todas.filter(t=>{
-        if(rangoDesde && (!t.fechaInicio || t.fechaInicio < rangoDesde)) return false;
-        if(rangoHasta && (!t.fechaFin || t.fechaFin > rangoHasta)) return false;
+        // Se muestran TODAS las subtareas y bugs registrados en Jira, tengan o no
+        // horas estimadas/registradas. Una tarea sin fechas cargadas no se descarta:
+        // no hay dato para excluirla, y ocultarla la haría invisible en Recursos.
+        if(!t.fechaInicio && !t.fechaFin) return true;
+        // Criterio de solapamiento (no de contención): basta con que la tarea
+        // toque el rango. Antes se exigía que empezara y terminara dentro de él,
+        // lo que dejaba fuera cualquier tarea que cruzara los límites.
+        const ini = t.fechaInicio || t.fechaFin;
+        const fin = t.fechaFin    || t.fechaInicio;
+        if(rangoHasta && ini > rangoHasta) return false;
+        if(rangoDesde && fin < rangoDesde) return false;
         return true;
       });
     }
