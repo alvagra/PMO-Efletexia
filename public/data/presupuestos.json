@@ -1,13 +1,18 @@
 {
- "generado": "2026-09-01T20:37:30+00:00",
+ "generado": "2026-09-01T20:48:40+00:00",
  "carpeta": "1EXwrEtFKh7Q0MdPB2hcUMpBpRc3cRFTm",
  "version_plantilla": "v2",
  "resumen": {
-  "leidos": 2,
+  "leidos": 3,
   "cargados": 2,
-  "rechazados": 0
+  "rechazados": 1
  },
- "rechazos": [],
+ "rechazos": [
+  {
+   "archivo": "Presupuesto_Viax.xlsx",
+   "motivo": "el nombre del archivo no contiene un key PTS-###"
+  }
+ ],
  "proyectos": [
   {
    "key": "PTS-148",
