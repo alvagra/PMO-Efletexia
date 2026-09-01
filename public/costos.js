@@ -122,12 +122,15 @@
 
     // Metadatos desde Jira. Reutiliza allEpics si el portafolio ya cargó.
     try {
-      const fuente = (typeof window.allEpics !== 'undefined' && window.allEpics) ? window.allEpics : [];
+      const fuente = (typeof epics !== 'undefined' && epics && epics.length) ? epics
+                   : (window.allEpics || []);
       fuente.forEach(e => {
         JIRA[e.key] = {
-          estado: e.estado || e.status || '',
+          estado: e.status || e.estado || '',
           area: e.area || '',
-          pais: e.pais || ''
+          pais: e.pais || '',
+          nombre: e.summary || '',
+          codigo: e.codigo || ''
         };
       });
     } catch (e) { /* sin metadatos: no bloquea */ }
@@ -144,7 +147,10 @@
       const meta = JIRA[p.key] || {};
       return {
         key: p.key,
-        nombre: p.nombre_proyecto || p.codigo_proyecto || p.key,
+        nombre: meta.nombre || p.nombre_proyecto || p.key,
+        codigo: meta.codigo || p.codigo_proyecto || '—',
+        difiere: !!(meta.nombre && p.nombre_proyecto &&
+                    meta.nombre.trim() !== p.nombre_proyecto.trim()),
         estado: meta.estado || '—',
         area: meta.area || '—',
         bac: num(p.linea_base_bac),
@@ -190,10 +196,15 @@
       `${DATA.resumen.cargados} proyectos con presupuesto · actualizado ${gen} · TC ${TC}`;
 
     const rech = DATA.rechazos || [];
-    el('cos-aviso').innerHTML = rech.length
+    let aviso = rech.length
       ? `<div class="cos-msg"><b>${rech.length} archivo(s) no se pudieron cargar:</b><br>` +
         rech.map(r => `${r.archivo} — ${r.motivo}`).join('<br>') + `</div>`
       : '';
+    const dif = DATA.filas.filter(f => f.difiere);
+    if (dif.length) aviso += `<div class="cos-msg"><b>${dif.length} plantilla(s) con nombre distinto al de Jira.</b>
+      Se muestra el de Jira. Corrige Parametros!B4 en: ` +
+      dif.map(f => f.key).join(', ') + `</div>`;
+    el('cos-aviso').innerHTML = aviso;
 
     el('cos-foot').textContent =
       `Fuente: plantillas Excel en Drive (9. Costos), leídas cada noche por el job automático. ` +
@@ -327,6 +338,7 @@
 
     el('cos-tbody').innerHTML = s.map(f => `<tr>
       <td class="cos-key">${f.url ? `<a href="${f.url}" target="_blank" rel="noopener">${f.key}</a>` : f.key}</td>
+      <td><span class="cos-pill">${f.codigo}</span></td>
       <td><span class="cos-name" title="${f.nombre}">${f.nombre}</span></td>
       <td><span class="cos-pill">${f.estado}</span></td>
       <td class="n">${full(f.bac)}</td>
