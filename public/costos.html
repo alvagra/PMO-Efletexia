@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Costos · Dashboard PMO Efletexia</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0B0E14; --surface:#141922; --surface2:#1A212C; --line:#242D3B; --line2:#2F3A4B;
+  --pv:#8B9DF7; --ev:#4ECFA0; --ac:#E0913C; --risk:#F2637E; --ok:#4ECFA0;
+  --txt:#E8ECF3; --muted:#8892A4; --dim:#5A6478;
+  --mono:'IBM Plex Mono',ui-monospace,monospace;
+  --sans:'IBM Plex Sans',system-ui,sans-serif;
+  --disp:'Archivo',system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--txt);font-family:var(--sans);font-size:14px;
+  line-height:1.6;-webkit-font-smoothing:antialiased;padding:24px 20px 60px}
+.wrap{max-width:1320px;margin:0 auto}
+
+header{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;justify-content:space-between;
+  padding-bottom:16px;border-bottom:1px solid var(--line);margin-bottom:20px}
+h1{font-family:var(--disp);font-weight:800;font-size:25px;letter-spacing:-.02em}
+.sub{color:var(--muted);font-size:12.5px;margin-top:3px}
+.ctrl{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+select,button.tg{background:var(--surface2);color:var(--txt);border:1px solid var(--line);
+  border-radius:6px;padding:7px 11px;font-family:var(--sans);font-size:12.5px;cursor:pointer}
+button.tg[aria-pressed="true"]{border-color:var(--pv);color:var(--pv)}
+select:focus-visible,button:focus-visible{outline:2px solid var(--pv);outline-offset:1px}
+
+.msg{background:var(--surface);border:1px solid var(--line);border-left:2px solid var(--ac);
+  border-radius:8px;padding:14px 16px;margin-bottom:16px;font-size:13px;color:var(--muted)}
+.msg b{color:var(--txt)}
+.msg.err{border-left-color:var(--risk)}
+
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:11px;margin-bottom:16px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-left:2px solid var(--line2);
+  border-radius:10px;padding:14px 15px}
+.kpi-lab{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--dim);margin-bottom:6px}
+.kpi-val{font-family:var(--mono);font-size:21px;font-weight:600;letter-spacing:-.02em}
+.kpi-note{font-size:11.5px;color:var(--muted);margin-top:2px}
+
+.grid2{display:grid;grid-template-columns:1.35fr 1fr;gap:14px;margin-bottom:16px}
+@media(max-width:980px){.grid2{grid-template-columns:1fr}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:19px 21px}
+.eyebrow{font-family:var(--disp);font-weight:600;font-size:11.5px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--muted)}
+.p-sub{font-size:12px;color:var(--dim);margin:5px 0 15px;max-width:56ch}
+svg{width:100%;height:auto;display:block;overflow:visible}
+.leg{display:flex;gap:16px;flex-wrap:wrap;margin-top:11px;font-size:11.5px;color:var(--muted)}
+.leg i{display:inline-block;width:14px;height:2.5px;border-radius:2px;margin-right:6px;vertical-align:middle}
+
+.bar-row{margin-bottom:11px}
+.bar-top{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:4px;gap:10px}
+.bar-top span:last-child{font-family:var(--mono);color:var(--muted);font-size:11.5px;flex:none}
+.track{height:7px;background:var(--surface2);border-radius:4px;overflow:hidden}
+.track i{display:block;height:100%;border-radius:4px}
+.blk-h{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--dim);margin:16px 0 10px}
+
+.tbl-wrap{max-height:400px;overflow:auto;border-radius:8px;border:1px solid var(--line)}
+.tbl-wrap::-webkit-scrollbar{width:9px;height:9px}
+.tbl-wrap::-webkit-scrollbar-thumb{background:var(--line2);border-radius:5px}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+thead th{position:sticky;top:0;background:var(--surface2);text-align:left;padding:9px 11px;
+  font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--dim);
+  border-bottom:1px solid var(--line);cursor:pointer;white-space:nowrap;user-select:none}
+thead th:hover{color:var(--txt)}
+thead th.n,tbody td.n{text-align:right;font-family:var(--mono)}
+tbody td{padding:8px 11px;border-bottom:1px solid rgba(36,45,59,.55);white-space:nowrap}
+tbody tr:hover{background:var(--surface2)}
+.key{font-family:var(--mono);font-size:11.5px}
+.key a{color:var(--pv);text-decoration:none}
+.key a:hover{text-decoration:underline}
+.name{max-width:230px;overflow:hidden;text-overflow:ellipsis;display:block}
+.pill{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10.5px;
+  background:var(--surface2);color:var(--muted);border:1px solid var(--line)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:7px}
+.pos{color:var(--ok)} .neg{color:var(--risk)}
+footer{margin-top:24px;padding-top:14px;border-top:1px solid var(--line);
+  font-size:11.5px;color:var(--dim);max-width:64ch}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div>
+    <h1>Costos del portafolio</h1>
+    <div class="sub" id="meta">Cargando…</div>
+  </div>
+  <div class="ctrl">
+    <select id="fEstado"><option value="">Todos los estados</option></select>
+    <select id="fArea"><option value="">Todas las áreas</option></select>
+    <button class="tg" id="btnMoneda" aria-pressed="false">Ver en US$</button>
+  </div>
+</header>
+
+<div id="aviso"></div>
+<div class="kpis" id="kpis"></div>
+
+<div class="grid2">
+  <section class="panel">
+    <div class="eyebrow">Curva S del portafolio</div>
+    <div class="p-sub">Valor planificado, valor ganado y costo real acumulados mes a mes. La separación entre las tres líneas es el desvío en plata y en tiempo.</div>
+    <div id="curva"></div>
+    <div class="leg">
+      <span><i style="background:var(--pv)"></i>PV planificado</span>
+      <span><i style="background:var(--ev)"></i>EV ganado</span>
+      <span><i style="background:var(--ac)"></i>AC real</span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="eyebrow">Estructura de costos</div>
+    <div class="p-sub">Composición del presupuesto por categoría, agregando todos los proyectos.</div>
+    <div id="cats"></div>
+  </section>
+</div>
+
+<section class="panel">
+  <div class="eyebrow">Detalle por proyecto</div>
+  <div class="p-sub">Clic en el encabezado para ordenar. El key abre el Excel de origen en Drive.</div>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr>
+        <th data-k="key">Proyecto</th>
+        <th data-k="nombre">Nombre</th>
+        <th data-k="estado">Estado</th>
+        <th data-k="bac" class="n">Línea base</th>
+        <th data-k="reservas" class="n">Reservas</th>
+        <th data-k="total" class="n">Presup. total</th>
+        <th data-k="ac" class="n">Costo real</th>
+        <th data-k="cpi" class="n">CPI</th>
+        <th data-k="spi" class="n">SPI</th>
+        <th data-k="eac" class="n">EAC</th>
+        <th data-k="vac" class="n">VAC</th>
+        <th data-k="diagnostico">Diagnóstico</th>
+      </tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+</section>
+
+<footer id="pie"></footer>
+</div>
+
+<script>
+const RUTA_JSON = "/data/presupuestos.json";
+const RUTA_JIRA = "/api/jira";
+
+let DATA = null, JIRA = {}, USD = false, TC = 3.75;
+let filtro = {estado:"", area:""}, sortK = "total", sortDir = -1;
+
+/* ---------- formato ---------- */
+const cv  = n => USD ? n / TC : n;
+const sim = () => USD ? "US$" : "S/";
+const full= n => sim() + " " + Math.round(cv(n)).toLocaleString("es-PE");
+const fmt = n => { const v = cv(n); const a = Math.abs(v);
+  return sim()+" "+(a>=1e6?(v/1e6).toFixed(2)+"M":a>=1000?Math.round(v/1000)+"k":Math.round(v)); };
+const num = n => (n===null||n===undefined||isNaN(n)) ? 0 : Number(n);
+const dec = n => num(n).toFixed(2);
+
+/* ---------- carga ---------- */
+async function cargar(){
+  try{
+    const r = await fetch(RUTA_JSON, {cache:"no-store"});
+    if(!r.ok) throw new Error("HTTP " + r.status);
+    DATA = await r.json();
+  }catch(e){
+    document.getElementById("aviso").innerHTML =
+      `<div class="msg err"><b>No se pudo leer ${RUTA_JSON}</b> — ${e.message}.
+       Verifica que el job de presupuestos haya corrido y publicado el archivo.</div>`;
+    document.getElementById("meta").textContent = "sin datos";
+    return;
+  }
+
+  // Metadatos de Jira: opcionales. Si fallan, la vista sigue funcionando.
+  try{
+    const keys = DATA.proyectos.map(p => p.key);
+    const r = await fetch(`${RUTA_JIRA}?keys=${encodeURIComponent(keys.join(","))}`);
+    if(r.ok){
+      const j = await r.json();
+      (j.issues || j || []).forEach(it => {
+        const f = it.fields || it;
+        JIRA[it.key || f.key] = {
+          estado: (f.status && f.status.name) || f.estado || "",
+          area:   (f.customfield_10930 && f.customfield_10930.value) || f.area || "",
+          pais:   (f.customfield_10592 && f.customfield_10592.value) || f.pais || "",
+        };
+      });
+    }
+  }catch(e){ /* metadatos ausentes: no es bloqueante */ }
+
+  preparar();
+  render();
+}
+
+function preparar(){
+  const ps = DATA.proyectos || [];
+  if(ps.length) TC = num(ps[0].tipo_cambio) || 3.75;
+
+  DATA.filas = ps.map(p => {
+    const meta = JIRA[p.key] || {};
+    const reservas = num(p.reserva_contingencia) + num(p.reserva_gestion);
+    return {
+      key: p.key,
+      nombre: p.nombre_proyecto || p.codigo_proyecto || p.key,
+      codigo: p.codigo_proyecto || "",
+      responsable: p.responsable || "",
+      estado: meta.estado || "—",
+      area: meta.area || "—",
+      pais: meta.pais || "—",
+      bac: num(p.linea_base_bac),
+      reservas,
+      total: num(p.presupuesto_total),
+      ac: num(p.evm_ac),
+      pv: num(p.evm_pv),
+      ev: num(p.evm_ev),
+      cpi: num(p.evm_cpi),
+      spi: num(p.evm_spi),
+      eac: num(p.evm_eac),
+      vac: num(p.evm_vac),
+      diagnostico: p.evm_diagnostico || "",
+      opex_anual: num(p.opex_anual),
+      categorias: p.categorias || {},
+      curva: p.curva_s || {},
+      url: p.url || "",
+    };
+  });
+
+  const opts = (id, campo) => {
+    const sel = document.getElementById(id);
+    [...new Set(DATA.filas.map(f => f[campo]))].filter(v => v && v !== "—").sort()
+      .forEach(v => { const o = document.createElement("option"); o.value = v; o.textContent = v; sel.appendChild(o); });
+    sel.onchange = () => { filtro[campo] = sel.value; render(); };
+  };
+  opts("fEstado","estado"); opts("fArea","area");
+
+  document.getElementById("btnMoneda").onclick = e => {
+    USD = !USD;
+    e.target.setAttribute("aria-pressed", USD);
+    e.target.textContent = USD ? "Ver en S/" : "Ver en US$";
+    render();
+  };
+
+  document.querySelectorAll("thead th").forEach(th => th.onclick = () => {
+    const k = th.dataset.k; sortDir = (sortK === k) ? -sortDir : -1; sortK = k; render();
+  });
+
+  const gen = new Date(DATA.generado).toLocaleString("es-PE",
+    {day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
+  document.getElementById("meta").innerHTML =
+    `${DATA.resumen.cargados} proyectos con presupuesto · actualizado ${gen} · TC ${TC}`;
+
+  const rech = DATA.rechazos || [];
+  if(rech.length){
+    document.getElementById("aviso").innerHTML =
+      `<div class="msg"><b>${rech.length} archivo(s) no se pudieron cargar:</b><br>` +
+      rech.map(r => `${r.archivo} — ${r.motivo}`).join("<br>") + `</div>`;
+  }
+
+  document.getElementById("pie").innerHTML =
+    `Fuente: plantillas Excel en Drive, leídas automáticamente cada noche.
+     Montos en soles; la conversión a dólares usa el tipo de cambio declarado en las plantillas (${TC}).
+     Los estados y áreas provienen de Jira.`;
+}
+
+const vista = () => DATA.filas.filter(f =>
+  (!filtro.estado || f.estado === filtro.estado) && (!filtro.area || f.area === filtro.area));
+
+/* ---------- KPIs ---------- */
+function kpis(r){
+  const s = c => r.reduce((a,f) => a + f[c], 0);
+  const bac = s("bac"), total = s("total"), ac = s("ac"), ev = s("ev"), pv = s("pv");
+  const cpi = ac ? ev/ac : 0, spi = pv ? ev/pv : 0;
+  const eac = cpi ? bac/cpi : bac, vac = bac - eac;
+  const enRiesgo = r.filter(f => f.cpi && f.cpi < 0.95).length;
+
+  const col = (v, umbral) => v >= umbral ? "var(--ok)" : "var(--risk)";
+  const k = [
+    ["Presupuesto total", fmt(total), "línea base más reservas", "var(--line2)"],
+    ["Línea base de costos", fmt(bac), "BAC del portafolio", "var(--pv)"],
+    ["Costo real (AC)", fmt(ac), bac ? Math.round(ac/bac*100)+"% del BAC" : "—", "var(--ac)"],
+    ["Valor ganado (EV)", fmt(ev), bac ? Math.round(ev/bac*100)+"% completado" : "—", "var(--ev)"],
+    ["CPI", dec(cpi), cpi>=1?"dentro de costo":"sobrecosto", col(cpi,1)],
+    ["SPI", dec(spi), spi>=1?"en cronograma":"atrasado", col(spi,1)],
+    ["EAC", fmt(eac), "estimado al cierre", "var(--ac)"],
+    ["VAC", (vac<0?"−":"+")+fmt(Math.abs(vac)).replace(/^S\/ |^US\$ /,""),
+      vac<0?"desvío proyectado":"holgura", col(vac,0)],
+    ["Proyectos en riesgo", enRiesgo, "CPI bajo 0.95", enRiesgo?"var(--risk)":"var(--ok)"],
+  ];
+  document.getElementById("kpis").innerHTML = k.map(([l,v,n,c]) =>
+    `<div class="kpi" style="border-left-color:${c}"><div class="kpi-lab">${l}</div>
+     <div class="kpi-val" style="color:${c==='var(--line2)'?'var(--txt)':c}">${v}</div>
+     <div class="kpi-note">${n}</div></div>`).join("");
+}
+
+/* ---------- curva S agregada ---------- */
+function curva(r){
+  const M = 12, sumar = campo => {
+    const acc = new Array(M).fill(0);
+    r.forEach(f => (f.curva[campo] || []).forEach((v,i) => { if(i<M) acc[i] += num(v); }));
+    return acc;
+  };
+  const pv = sumar("curva_pv_acum"), ac = sumar("curva_ac_acum");
+  // EV acumulado = avance real × BAC de cada proyecto
+  const ev = new Array(M).fill(0);
+  r.forEach(f => (f.curva.curva_avance_real || []).forEach((v,i) => {
+    if(i<M) ev[i] += num(v) * f.bac; }));
+
+  const ultimo = ac.reduce((idx,v,i) => v>0 ? i : idx, -1);
+  const max = Math.max(...pv, ...ac, ...ev, 1);
+  const W=580, H=250, P={t:14,r:16,b:30,l:62};
+  const x = i => P.l + (i/(M-1))*(W-P.l-P.r);
+  const y = v => H-P.b - (v/max)*(H-P.t-P.b);
+
+  const linea = (serie, color, cortar) => {
+    const pts = serie.map((v,i) => (cortar && i>ultimo) ? null : [x(i), y(v)]).filter(Boolean);
+    if(pts.length < 2) return "";
+    return `<path d="${pts.map((p,i)=>(i?'L':'M')+p[0]+','+p[1]).join('')}"
+      stroke="${color}" stroke-width="2" fill="none" stroke-linejoin="round"/>`;
+  };
+
+  let g = "";
+  [0,.25,.5,.75,1].forEach(f => { const v = max*f;
+    g += `<line x1="${P.l}" y1="${y(v)}" x2="${W-P.r}" y2="${y(v)}" stroke="var(--line)"/>
+      <text x="${P.l-8}" y="${y(v)+4}" fill="var(--dim)" font-size="9.5"
+      font-family="var(--mono)" text-anchor="end">${fmt(v)}</text>`; });
+  for(let i=0;i<M;i++) g += `<text x="${x(i)}" y="${H-P.b+16}" fill="var(--dim)"
+    font-size="9.5" font-family="var(--mono)" text-anchor="middle">${i+1}</text>`;
+
+  if(ultimo >= 0) g += `<line x1="${x(ultimo)}" y1="${P.t}" x2="${x(ultimo)}" y2="${H-P.b}"
+    stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3"/>
+    <text x="${x(ultimo)+7}" y="${P.t+11}" fill="var(--muted)" font-size="10"
+    font-family="var(--mono)">corte</text>`;
+
+  document.getElementById("curva").innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img"
+    aria-label="Curva S del portafolio: valor planificado, ganado y costo real">
+    ${g}${linea(pv,"var(--pv)",false)}${linea(ev,"var(--ev)",true)}${linea(ac,"var(--ac)",true)}
+    <text x="${(P.l+W-P.r)/2}" y="${H-2}" fill="var(--dim)" font-size="9.5"
+      font-family="var(--sans)" text-anchor="middle">mes del proyecto</text></svg>`;
+}
+
+/* ---------- categorías ---------- */
+function cats(r){
+  const suma = pref => {
+    const m = {};
+    r.forEach(f => Object.entries(f.categorias).forEach(([k,v]) => {
+      if(!k.startsWith(pref) || k.endsWith("sin_categoria")) return;
+      const et = k.replace(pref,"").replace(/_/g," ");
+      m[et] = (m[et]||0) + num(v);
+    }));
+    return m;
+  };
+  const bloque = (titulo, m, color, nota) => {
+    const items = Object.entries(m).filter(([,v]) => v>0).sort((a,b) => b[1]-a[1]);
+    const tot = items.reduce((s,[,v]) => s+v, 0) || 1;
+    if(!items.length) return "";
+    return `<div class="blk-h">${titulo}${nota?` · ${nota}`:""}</div>` + items.map(([k,v]) =>
+      `<div class="bar-row"><div class="bar-top"><span>${k[0].toUpperCase()+k.slice(1)}</span>
+        <span>${fmt(v)} · ${Math.round(v/tot*100)}%</span></div>
+       <div class="track"><i style="width:${v/tot*100}%;background:${color}"></i></div></div>`).join("");
+  };
+  const sinCat = r.reduce((a,f) =>
+    a + num(f.categorias.capex_sin_categoria) + num(f.categorias.opex_sin_categoria), 0);
+
+  document.getElementById("cats").innerHTML =
+    bloque("Inversión inicial (CAPEX)", suma("capex_"), "var(--ac)") +
+    bloque("Costos operativos (OPEX)", suma("opex_"), "var(--pv)", "mensual") +
+    (sinCat > 0 ? `<div class="msg err" style="margin-top:16px">
+      <b>${fmt(sinCat)} sin categoría.</b> Revisa la columna Categoría en las plantillas.</div>` : "");
+}
+
+/* ---------- tabla ---------- */
+function tabla(r){
+  const s = [...r].sort((a,b) => { const x=a[sortK], y=b[sortK];
+    return (typeof x === "number" ? x-y : String(x).localeCompare(String(y))) * sortDir; });
+  const semaforo = f => (!f.cpi || !f.spi) ? "var(--dim)"
+    : (f.cpi>=1 && f.spi>=1) ? "var(--ok)"
+    : (f.cpi<0.9 || f.spi<0.9) ? "var(--risk)" : "var(--ac)";
+
+  document.getElementById("tbody").innerHTML = s.map(f => `<tr>
+    <td class="key">${f.url ? `<a href="${f.url}" target="_blank" rel="noopener">${f.key}</a>` : f.key}</td>
+    <td><span class="name" title="${f.nombre}">${f.nombre}</span></td>
+    <td><span class="pill">${f.estado}</span></td>
+    <td class="n">${full(f.bac)}</td>
+    <td class="n" style="color:var(--muted)">${full(f.reservas)}</td>
+    <td class="n">${full(f.total)}</td>
+    <td class="n" style="color:var(--ac)">${full(f.ac)}</td>
+    <td class="n ${f.cpi>=1?'pos':'neg'}">${dec(f.cpi)}</td>
+    <td class="n ${f.spi>=1?'pos':'neg'}">${dec(f.spi)}</td>
+    <td class="n">${full(f.eac)}</td>
+    <td class="n ${f.vac>=0?'pos':'neg'}">${f.vac<0?"−":"+"}${full(Math.abs(f.vac)).replace(/^S\/ |^US\$ /,"")}</td>
+    <td><span class="dot" style="background:${semaforo(f)}"></span>${f.diagnostico||"—"}</td>
+  </tr>`).join("");
+}
+
+function render(){
+  const r = vista();
+  kpis(r); curva(r); cats(r); tabla(r);
+}
+
+cargar();
+</script>
+</body>
+</html>
