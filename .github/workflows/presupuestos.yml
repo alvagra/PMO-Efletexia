@@ -43,13 +43,36 @@ jobs:
             git push
           fi
 
+      - name: Resumen de la corrida
+        if: always()
+        run: |
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json, pathlib
+          ruta = pathlib.Path("public/data/presupuestos.json")
+          if not ruta.exists():
+              print("## Presupuestos\n\nNo se generó el archivo.")
+              raise SystemExit(0)
+          d = json.loads(ruta.read_text(encoding="utf-8"))
+          r = d["resumen"]
+          print("## Presupuestos\n")
+          print(f"- Archivos leídos: **{r['leidos']}**")
+          print(f"- Cargados: **{r['cargados']}**")
+          print(f"- Rechazados: **{r['rechazados']}**\n")
+          if d.get("proyectos"):
+              print("### Cargados\n\n| Proyecto | Archivo |\n|---|---|")
+              for p in d["proyectos"]:
+                  print(f"| {p['key']} | {p.get('archivo','')} |")
+              print()
+          if d.get("rechazos"):
+              print("### Rechazados\n\n| Archivo | Motivo |\n|---|---|")
+              for x in d["rechazos"]:
+                  print(f"| {x['archivo']} | {x['motivo']} |")
+          PY
+
       - name: Avisar rechazos
         if: always()
-        env:
-          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
         run: |
-          RECHAZOS=$(python -c "import json;d=json.load(open('public/data/presupuestos.json'));print(d['resumen']['rechazados'])" 2>/dev/null || echo 0)
+          RECHAZOS=$(python -c "import json;print(json.load(open('public/data/presupuestos.json'))['resumen']['rechazados'])" 2>/dev/null || echo 0)
           if [ "$RECHAZOS" != "0" ]; then
-            echo "::warning::$RECHAZOS archivos rechazados"
-            python scripts/avisar_rechazos.py
+            echo "::warning::$RECHAZOS archivo(s) rechazado(s) — ver el resumen de la ejecución"
           fi
