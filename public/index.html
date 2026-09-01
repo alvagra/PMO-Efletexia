@@ -543,6 +543,8 @@ a.jlink:hover{text-decoration:underline}
   <div class="tab" data-tab="entregables">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M10 5l3 3-3 3"/><path d="M3 4v8"/></svg>Entregables
   </div>
+  <div class="tab" data-tab="costos">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v12"/><path d="M11 5H6.5a1.75 1.75 0 0 0 0 3.5h3a1.75 1.75 0 0 1 0 3.5H5"/></svg>Costos
   </div>
 </nav>
 
@@ -813,6 +815,72 @@ a.jlink:hover{text-decoration:underline}
   </div>
 </div>
 
+
+<div class="tab-panel" id="panel-costos">
+
+  <div class="cos-head">
+    <div>
+      <div class="cos-title">Costos del portafolio</div>
+      <div class="cos-meta" id="cos-metatxt">Cargando…</div>
+    </div>
+    <div class="cos-ctrl">
+      <select id="cos-f-estado"><option value="">Todos los estados</option></select>
+      <select id="cos-f-area"><option value="">Todas las áreas</option></select>
+      <button class="cos-tg" id="cos-moneda" aria-pressed="false">Ver en US$</button>
+    </div>
+  </div>
+
+  <div id="cos-aviso"></div>
+  <div class="cos-kpis" id="cos-kpis"></div>
+
+  <div class="cos-grid">
+    <div class="cos-card">
+      <div class="cos-eyebrow">Curva S del portafolio</div>
+      <div class="cos-sub">Valor planificado, valor ganado y costo real acumulados mes a mes.
+        La separación entre las líneas es el desvío en plata y en tiempo.</div>
+      <div id="cos-curva"></div>
+      <div class="cos-leg">
+        <span><i style="background:var(--blue)"></i>PV planificado</span>
+        <span><i style="background:var(--green)"></i>EV ganado</span>
+        <span><i style="background:var(--orange)"></i>AC real</span>
+      </div>
+    </div>
+
+    <div class="cos-card">
+      <div class="cos-eyebrow">Estructura de costos</div>
+      <div class="cos-sub">Composición del presupuesto por categoría, agregando todos los proyectos.</div>
+      <div id="cos-cats"></div>
+    </div>
+  </div>
+
+  <div class="cos-tbl">
+    <div class="cos-eyebrow">Detalle por proyecto</div>
+    <div class="cos-sub">Clic en el encabezado para ordenar. El código abre el Excel de origen en Drive.</div>
+    <div class="cos-tbl-wrap">
+      <table>
+        <thead><tr>
+          <th data-k="key">Proyecto</th>
+          <th data-k="nombre">Nombre</th>
+          <th data-k="estado">Estado</th>
+          <th data-k="bac" class="n">Línea base</th>
+          <th data-k="reservas" class="n">Reservas</th>
+          <th data-k="total" class="n">Presup. total</th>
+          <th data-k="ac" class="n">Costo real</th>
+          <th data-k="cpi" class="n">CPI</th>
+          <th data-k="spi" class="n">SPI</th>
+          <th data-k="eac" class="n">EAC</th>
+          <th data-k="vac" class="n">VAC</th>
+          <th data-k="diagnostico">Diagnóstico</th>
+        </tr></thead>
+        <tbody id="cos-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="cos-foot" id="cos-foot"></div>
+</div>
+
+
 <!-- CAPACITY DETAIL DRAWER -->
 <div id="cap-detail-overlay" style="display:none" class="cap-detail-overlay" onclick="closeCapDetail(event)">
   <div class="cap-detail-panel" onclick="event.stopPropagation()">
@@ -879,6 +947,7 @@ a.jlink:hover{text-decoration:underline}
 </div>
 
 <script src="app.js"></script>
+<script src="costos.js"></script>
 
 <!-- DRAWER STAND BY / BACKLOG -->
 <div id="ent-drawer-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:500;justify-content:flex-end" onclick="closeEntDrawer(event)">
