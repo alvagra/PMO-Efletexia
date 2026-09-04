@@ -1,9 +1,16 @@
 {
   "version": 2,
   "routes": [
+    { "src": "/api/auth/login", "dest": "/api/auth/login.js" },
+    { "src": "/api/auth/logout", "dest": "/api/auth/logout.js" },
+    { "src": "/api/auth/me", "dest": "/api/auth/me.js" },
     { "src": "/api/jira", "dest": "/api/jira.js" },
     { "src": "/api/send-report", "dest": "/api/send-report.js" },
+    { "src": "/data/(.*)", "status": 404 },
+    { "src": "/login.html", "dest": "/public/login.html" },
+    { "src": "/sesion.js", "dest": "/public/sesion.js" },
     { "src": "/app.js", "dest": "/public/app.js" },
+    { "src": "/costos.js", "dest": "/public/costos.js" },
     { "src": "/(.*)", "dest": "/public/index.html" }
   ],
   "crons": [
