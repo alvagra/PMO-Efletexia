@@ -119,12 +119,7 @@ function downloadCSV(rows, filename){
       ? '"'+s.replace(/"/g,'""')+'"'
       : s;
   };
-  const csv = rows.map(r => r.map(escape).join(',')).join('\n');
-  const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href=url; a.download=filename; a.click();
-  URL.revokeObjectURL(url);
+  return;
 }
 
 function exportPortafolioCSV(){
@@ -418,7 +413,7 @@ async function cargarBugs(){
   const panel=document.getElementById('bugs-panel');
   panel.innerHTML='<div class="bg-empty">Cargando bugs…</div>';
   try{
-    const r=await fetch('/api/jira',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'bugs'})});
+    const r=await Sesion.pedir('/api/jira',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'bugs'})});
     const j=await r.json();
     if(!r.ok) throw new Error(j.error||'Error de API');
     bugsData=j.bugs||[];
@@ -491,7 +486,6 @@ function renderBugsUI(){
       <label style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:5px;cursor:pointer">
         <input id="bg-sinfecha" type="checkbox"/> Sin fecha</label>
       <button class="btn-limpiar" id="bg-limpiar" type="button" style="margin-left:0">Limpiar</button>
-      <button class="btn-export" id="bg-csv" type="button">CSV</button>
     </div>
     <div id="bg-tabla-wrap"></div>
   </div>`;
@@ -513,7 +507,6 @@ function renderBugsUI(){
     document.querySelectorAll('#bg-est-chips .bg-chip').forEach(c=>c.classList.remove('on'));
     renderBugsTabla();
   });
-  document.getElementById('bg-csv').addEventListener('click',exportBugsCSV);
   renderBugsTabla();
 }
 
@@ -608,7 +601,7 @@ async function verCicloBug(key){
   ov.innerHTML='<div class="bg-ciclo-box"><div class="bg-empty">Cargando ciclo de vida…</div></div>';
   try{
     if(!cicloCache[key]){
-      const r=await fetch('/api/jira',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'bugHistory',key})});
+      const r=await Sesion.pedir('/api/jira',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'bugHistory',key})});
       const j=await r.json();
       if(!r.ok) throw new Error(j.error||'Error');
       cicloCache[key]=j;
@@ -688,10 +681,7 @@ function exportBugsCSV(){
   const csv=[['Clave','Bug','Proyecto','Codigo','Estado','Responsable','Inicio','Vence','Horas estimadas','Horas registradas'].join(',')]
     .concat(rows.map(b=>[b.key,b.resumen,b.proyecto,b.codigo,b.estado,b.responsable,b.inicio||'',b.fin||'',b.est,b.reg].map(q).join(',')))
     .join('\n');
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'}));
-  a.download=`bugs_PTS_${new Date().toISOString().slice(0,10)}.csv`;
-  a.click();
+  return;
 }
 
 document.getElementById('btn-bugs').addEventListener('click',()=>{
@@ -722,7 +712,7 @@ document.querySelectorAll('#panel-portafolio thead th[data-col]').forEach(th=>{
 
 // ── LOAD PORTAFOLIO ────────────────────────────────────────
 async function fetchAllEpics(){
-  const resp = await fetch('/api/jira',{
+  const resp = await Sesion.pedir('/api/jira',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ jql:'project = PTS AND issuetype = Epic ORDER BY created ASC', fields:JIRA_FIELDS })
@@ -787,10 +777,6 @@ async function loadData(manual=false){
   }
 }
 
-loadData();
-
-
-loadData();
 
 document.getElementById('btn-export-rec')?.addEventListener('click', () => {
   const _s=(document.getElementById('rec-search')?.value||'').toLowerCase();
@@ -1135,7 +1121,7 @@ const epicStoriesCache={};
 async function loadEpicStories(epicKey){
   if(epicStoriesCache[epicKey]!==undefined) return epicStoriesCache[epicKey];
   try{
-    const resp=await fetch('/api/jira',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'stories',epicKey})});
+    const resp=await Sesion.pedir('/api/jira',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'stories',epicKey})});
     if(!resp.ok) return null;
     const data=await resp.json();
     epicStoriesCache[epicKey]=data.stories||[];
@@ -1211,7 +1197,7 @@ async function loadRecursos(){
   const info=document.getElementById('rec-table-info');
   if(info) info.textContent='Cargando recursos desde Jira...';
   try{
-    const respRec=await fetch('/api/jira',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'recursos'})});
+    const respRec=await Sesion.pedir('/api/jira',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'recursos'})});
     if(!respRec.ok) throw new Error('Error recursos '+respRec.status);
     const dataRec=await respRec.json();
     recHistoriasCache=dataRec.issues||[];
@@ -1867,7 +1853,7 @@ async function loadCapacity(){
   const wrap = document.getElementById('cap-cal-wrap');
   if(wrap) wrap.innerHTML = '<div class="cap-empty" style="padding:40px;text-align:center;color:var(--text-dim)">Cargando desde Jira…</div>';
   try {
-    const resp = await fetch('/api/jira', {
+    const resp = await Sesion.pedir('/api/jira', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'capacity' })
@@ -2347,7 +2333,7 @@ const specialStoriesCache = {};
 async function fetchSpecialStories(epicKey) {
   if (specialStoriesCache[epicKey] !== undefined) return specialStoriesCache[epicKey];
   try {
-    const resp = await fetch('/api/jira', {
+    const resp = await Sesion.pedir('/api/jira', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'stories', epicKey })
@@ -3078,4 +3064,10 @@ function showEntDetalle(event, key) {
 document.addEventListener('click', e => {
   const tt = document.getElementById('ent-tooltip');
   if (tt && !tt.contains(e.target)) tt.style.display = 'none';
+});
+
+
+// La exportacion de archivos esta deshabilitada: se retiran los botones del DOM.
+['btn-export-port','btn-export-rec','btn-export-cap'].forEach(function(id){
+  document.getElementById(id)?.remove();
 });
