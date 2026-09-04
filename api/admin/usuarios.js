@@ -7,6 +7,7 @@ const {
   listarUsuarios,
   guardarUsuarios,
   requirePermiso,
+  normalizarPerfil,
 } = require('../../lib/auth');
 
 function sinHash(u) {
@@ -28,7 +29,7 @@ module.exports = async function handler(req, res) {
   const admin = requirePermiso(req, res, 'admin.usuarios');
   if (!admin) return;
 
-  const { accion, usuario, nombre, perfil, permisos } = req.body || {};
+  const { accion, usuario, nombre, perfil, permisos, nuevoUsuario } = req.body || {};
 
   try {
     const lista = await listarUsuarios();
@@ -78,6 +79,20 @@ module.exports = async function handler(req, res) {
 
     if (accion === 'actualizar') {
       const reg = lista[idx];
+
+      // Cambio de identificador, si viene uno distinto.
+      if (nuevoUsuario && nuevoUsuario.trim().toLowerCase() !== reg.u) {
+        const destino = nuevoUsuario.trim().toLowerCase();
+        if (destino.length < 3) {
+          return res.status(400).json({ error: 'usuario_corto' });
+        }
+        const choca = lista.some(
+          (x, i) => i !== idx && String(x.u).toLowerCase() === destino
+        );
+        if (choca) return res.status(409).json({ error: 'usuario_existe' });
+        reg.u = destino;
+      }
+
       // Nadie puede quitarse a sí mismo la gestión de usuarios: evita
       // dejar el dashboard sin ningún administrador.
       const esYo = reg.u === admin.sub;
@@ -89,7 +104,13 @@ module.exports = async function handler(req, res) {
       reg.perfil = nuevoPerfil;
       reg.permisos = resolverPermisos(nuevoPerfil, permisos || null);
       await guardarUsuarios(lista);
-      return res.status(200).json({ ok: true, usuario: sinHash(reg) });
+      // Si el administrador se renombró a sí mismo, su token quedó apuntando
+      // al identificador anterior y debe volver a iniciar sesión.
+      return res.status(200).json({
+        ok: true,
+        usuario: sinHash(reg),
+        reloguear: esYo && reg.u !== admin.sub,
+      });
     }
 
     if (accion === 'password') {
