@@ -1,0 +1,10 @@
+{
+  "name": "pmo-efletexia",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Dashboard PMO Efletexia",
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "jsonwebtoken": "^9.0.2"
+  }
+}
