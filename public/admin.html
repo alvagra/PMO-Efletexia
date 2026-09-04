@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Usuarios · Dashboard PMO</title>
+<style>
+  :root{
+    --bg:#0d1117; --card:#131c2b; --linea:#1e2d40;
+    --txt:#e2e8f0; --suave:#94a3b8; --mute:#475569;
+    --azul:#3B82F6; --rojo:#ef4444; --verde:#4ade80;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:13px}
+  header{display:flex;align-items:center;justify-content:space-between;
+    padding:14px 24px;border-bottom:1px solid var(--linea)}
+  .titulo{font-size:15px;font-weight:600}
+  .sub{font-size:11px;color:var(--mute)}
+  main{padding:24px;max-width:1100px}
+  button{font-family:inherit;font-size:12px;cursor:pointer;border-radius:5px;
+    padding:6px 12px;border:1px solid var(--linea);background:transparent;color:var(--suave)}
+  button:hover{border-color:var(--azul);color:var(--txt)}
+  .btn-pri{background:var(--azul);border-color:var(--azul);color:#fff}
+  .btn-pri:hover{background:#2563eb;color:#fff}
+  .btn-del{color:var(--rojo);border-color:transparent}
+  table{width:100%;border-collapse:collapse;background:var(--card);border-radius:8px;overflow:hidden}
+  th{text-align:left;padding:9px 14px;font-size:10px;color:var(--mute);
+    text-transform:uppercase;letter-spacing:.05em;background:var(--bg)}
+  td{padding:10px 14px;border-top:1px solid var(--linea)}
+  .pill{padding:2px 8px;border-radius:4px;font-size:11px;background:#1e2d40;color:var(--suave)}
+  .pill-admin{background:#312e81;color:#c7d2fe}
+  .pill-dir{background:#1e3a5f;color:#93c5fd}
+  .pill-pmo{background:#14432a;color:#86efac}
+  .extra{color:var(--azul);font-size:11px;margin-left:4px}
+  .inactivo{opacity:.45}
+  .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);
+    align-items:center;justify-content:center;padding:20px;z-index:50}
+  .panel{background:var(--card);border-radius:10px;padding:22px;width:100%;max-width:460px;
+    max-height:88vh;overflow-y:auto}
+  label{display:block;font-size:11px;color:var(--suave);margin:0 0 5px}
+  input,select{width:100%;height:34px;padding:0 10px;margin-bottom:14px;font-size:13px;
+    font-family:inherit;color:var(--txt);background:var(--bg);
+    border:1px solid var(--linea);border-radius:5px}
+  .permisos{border:1px solid var(--linea);border-radius:5px;padding:2px 12px;margin-bottom:16px}
+  .permiso{display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid var(--linea)}
+  .permiso:last-child{border-bottom:none}
+  .permiso input{width:14px;height:14px;margin:0;flex:none}
+  .permiso span{flex:1}
+  .bloq{color:var(--mute)}
+  .aviso{background:#14432a;color:#86efac;padding:11px 13px;border-radius:6px;
+    margin-bottom:14px;font-size:12px;line-height:1.6;word-break:break-all}
+  .err{background:#3a1d1d;color:#fca5a5;padding:9px 12px;border-radius:6px;
+    margin-bottom:14px;font-size:12px;display:none}
+  .pie{display:flex;gap:8px;align-items:center;margin-top:4px}
+  .flex1{flex:1}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <div class="titulo">Usuarios</div>
+    <div class="sub" id="conteo">Cargando…</div>
+  </div>
+  <div style="display:flex;gap:8px">
+    <button onclick="location.href='/'">Volver al dashboard</button>
+    <button class="btn-pri" onclick="abrirNuevo()">Nuevo usuario</button>
+  </div>
+</header>
+
+<main>
+  <div class="err" id="err-lista"></div>
+  <table>
+    <thead>
+      <tr><th>Usuario</th><th>Perfil</th><th>Permisos</th><th></th></tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</main>
+
+<div class="overlay" id="overlay">
+  <div class="panel">
+    <div id="panel-aviso"></div>
+    <div class="err" id="err-panel"></div>
+
+    <div style="font-size:14px;font-weight:600;margin-bottom:16px" id="panel-titulo">Nuevo usuario</div>
+
+    <label for="f-usuario">Usuario</label>
+    <input id="f-usuario" type="text" autocomplete="off" />
+
+    <label for="f-nombre">Nombre completo</label>
+    <input id="f-nombre" type="text" autocomplete="off" />
+
+    <label for="f-perfil">Perfil</label>
+    <select id="f-perfil"></select>
+
+    <label>Funcionalidades</label>
+    <div class="permisos" id="f-permisos"></div>
+
+    <div class="pie">
+      <button class="btn-del" id="btn-password" onclick="restablecer()">Restablecer contraseña</button>
+      <div class="flex1"></div>
+      <button onclick="cerrar()">Cancelar</button>
+      <button class="btn-pri" onclick="guardar()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<script src="/sesion.js"></script>
+<script>
+let catalogo = [], perfiles = [], usuarios = [], editando = null;
+
+function el(id){ return document.getElementById(id); }
+function error(id, txt){ const e = el(id); e.textContent = txt; e.style.display = txt ? 'block' : 'none'; }
+
+function claseP(p){
+  return p === 'administrador' ? 'pill pill-admin'
+       : p === 'directivo'     ? 'pill pill-dir'
+       : p === 'pmo'           ? 'pill pill-pmo' : 'pill';
+}
+
+function defPerfil(clave){ return perfiles.find(function(p){ return p.clave === clave; }); }
+
+function extras(u){
+  const def = defPerfil(u.perfil);
+  if (!def) return 0;
+  const base = def.porDefecto;
+  return u.permisos.filter(function(p){ return base.indexOf(p) < 0; }).length;
+}
+
+async function cargar(){
+  error('err-lista','');
+  try{
+    const r = await Sesion.pedir('/api/admin/usuarios', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ accion:'listar' })
+    });
+    const d = await r.json();
+    catalogo = d.catalogo; perfiles = d.perfiles; usuarios = d.usuarios;
+    pintar();
+  }catch(e){
+    error('err-lista', e.message === 'sin_permiso'
+      ? 'No tienes permiso para gestionar usuarios.'
+      : 'No se pudo cargar la lista.');
+  }
+}
+
+function pintar(){
+  el('conteo').textContent = usuarios.length + (usuarios.length === 1 ? ' cuenta' : ' cuentas');
+  el('tbody').innerHTML = usuarios.map(function(u){
+    const n = extras(u);
+    const def = defPerfil(u.perfil);
+    return '<tr class="' + (u.activo ? '' : 'inactivo') + '">'
+      + '<td><div>' + u.u + '</div><div class="sub">' + u.nombre + '</div></td>'
+      + '<td><span class="' + claseP(u.perfil) + '">' + (def ? def.nombre : u.perfil) + '</span>'
+      + (n ? '<span class="extra">+' + n + '</span>' : '') + '</td>'
+      + '<td class="sub">' + u.permisos.length + ' de ' + catalogo.length + '</td>'
+      + '<td style="text-align:right;white-space:nowrap">'
+      + '<button onclick="abrirEditar(\'' + u.u + '\')">Editar</button> '
+      + '<button class="btn-del" onclick="eliminar(\'' + u.u + '\')">Eliminar</button>'
+      + '</td></tr>';
+  }).join('');
+}
+
+function pintarPermisos(perfil, activos){
+  const def = defPerfil(perfil);
+  el('f-permisos').innerHTML = catalogo.map(function(p){
+    const bloq = def && def.bloqueados.indexOf(p.clave) >= 0;
+    const on = !bloq && activos.indexOf(p.clave) >= 0;
+    return '<div class="permiso">'
+      + '<input type="checkbox" value="' + p.clave + '"'
+      + (on ? ' checked' : '') + (bloq ? ' disabled' : '') + '>'
+      + '<span class="' + (bloq ? 'bloq' : '') + '">' + p.etiqueta + '</span>'
+      + (bloq ? '<span class="sub">bloqueado</span>' : '')
+      + '</div>';
+  }).join('');
+}
+
+function marcados(){
+  return Array.prototype.slice
+    .call(el('f-permisos').querySelectorAll('input:checked'))
+    .map(function(i){ return i.value; });
+}
+
+el('f-perfil').addEventListener('change', function(){
+  pintarPermisos(this.value, defPerfil(this.value).porDefecto);
+});
+
+function abrirNuevo(){
+  editando = null;
+  el('panel-titulo').textContent = 'Nuevo usuario';
+  el('panel-aviso').innerHTML = '';
+  error('err-panel','');
+  el('f-usuario').value = ''; el('f-usuario').disabled = false;
+  el('f-nombre').value = '';
+  el('f-perfil').innerHTML = perfiles.map(function(p){
+    return '<option value="' + p.clave + '">' + p.nombre + '</option>';
+  }).join('');
+  el('f-perfil').value = 'desarrollo';
+  pintarPermisos('desarrollo', defPerfil('desarrollo').porDefecto);
+  el('btn-password').style.display = 'none';
+  el('overlay').style.display = 'flex';
+}
+
+function abrirEditar(id){
+  const u = usuarios.find(function(x){ return x.u === id; });
+  if (!u) return;
+  editando = id;
+  el('panel-titulo').textContent = 'Editar ' + u.u;
+  el('panel-aviso').innerHTML = '';
+  error('err-panel','');
+  el('f-usuario').value = u.u; el('f-usuario').disabled = true;
+  el('f-nombre').value = u.nombre;
+  el('f-perfil').innerHTML = perfiles.map(function(p){
+    return '<option value="' + p.clave + '">' + p.nombre + '</option>';
+  }).join('');
+  el('f-perfil').value = u.perfil;
+  pintarPermisos(u.perfil, u.permisos);
+  el('btn-password').style.display = 'inline-block';
+  el('overlay').style.display = 'flex';
+}
+
+function cerrar(){ el('overlay').style.display = 'none'; }
+
+async function llamar(cuerpo){
+  const r = await Sesion.pedir('/api/admin/usuarios', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(cuerpo)
+  });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error || 'error');
+  return d;
+}
+
+const MENSAJES = {
+  usuario_existe: 'Ese usuario ya existe.',
+  perfil_invalido: 'Perfil no válido.',
+  datos_incompletos: 'Completa usuario y perfil.',
+  no_puedes_degradarte: 'No puedes quitarte a ti mismo el perfil de administrador.',
+  no_puedes_eliminarte: 'No puedes eliminar tu propia cuenta.',
+  ultimo_administrador: 'Debe quedar al menos un administrador activo.'
+};
+
+async function guardar(){
+  error('err-panel','');
+  const usuario = el('f-usuario').value.trim();
+  const nombre = el('f-nombre').value.trim();
+  const perfil = el('f-perfil').value;
+  if (!usuario){ error('err-panel','Escribe un usuario.'); return; }
+
+  try{
+    if (editando){
+      await llamar({ accion:'actualizar', usuario:editando, nombre, perfil, permisos:marcados() });
+      cerrar(); cargar();
+    } else {
+      const d = await llamar({ accion:'crear', usuario, nombre, perfil, permisos:marcados() });
+      el('panel-aviso').innerHTML =
+        '<div class="aviso">Usuario creado. Contraseña temporal:<br><b>'
+        + d.password + '</b><br>Cópiala ahora: no se puede volver a ver.</div>';
+      el('f-usuario').disabled = true;
+      cargar();
+    }
+  }catch(e){
+    error('err-panel', MENSAJES[e.message] || 'No se pudo guardar.');
+  }
+}
+
+async function restablecer(){
+  if (!editando) return;
+  if (!confirm('Se generará una contraseña nueva para ' + editando + '. ¿Continuar?')) return;
+  try{
+    const d = await llamar({ accion:'password', usuario:editando });
+    el('panel-aviso').innerHTML =
+      '<div class="aviso">Contraseña nueva:<br><b>' + d.password
+      + '</b><br>Cópiala ahora: no se puede volver a ver.</div>';
+  }catch(e){
+    error('err-panel','No se pudo restablecer.');
+  }
+}
+
+async function eliminar(id){
+  if (!confirm('Eliminar la cuenta ' + id + '. Esta acción no se puede deshacer.')) return;
+  try{
+    await llamar({ accion:'eliminar', usuario:id });
+    cargar();
+  }catch(e){
+    error('err-lista', MENSAJES[e.message] || 'No se pudo eliminar.');
+  }
+}
+
+Sesion.iniciar().then(function(s){
+  if (!s) return;
+  if (s.permisos.indexOf('admin.usuarios') < 0){ location.href = '/'; return; }
+  cargar();
+});
+</script>
+</body>
+</html>
