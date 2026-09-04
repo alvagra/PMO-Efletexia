@@ -31,8 +31,7 @@
   td{padding:10px 14px;border-top:1px solid var(--linea)}
   .pill{padding:2px 8px;border-radius:4px;font-size:11px;background:#1e2d40;color:var(--suave)}
   .pill-admin{background:#312e81;color:#c7d2fe}
-  .pill-dir{background:#1e3a5f;color:#93c5fd}
-  .pill-pmo{background:#14432a;color:#86efac}
+  .pill-lider{background:#1e3a5f;color:#93c5fd}
   .extra{color:var(--azul);font-size:11px;margin-left:4px}
   .inactivo{opacity:.45}
   .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);
@@ -116,8 +115,7 @@ function error(id, txt){ const e = el(id); e.textContent = txt; e.style.display 
 
 function claseP(p){
   return p === 'administrador' ? 'pill pill-admin'
-       : p === 'directivo'     ? 'pill pill-dir'
-       : p === 'pmo'           ? 'pill pill-pmo' : 'pill';
+       : p === 'lider'         ? 'pill pill-lider' : 'pill';
 }
 
 function defPerfil(clave){ return perfiles.find(function(p){ return p.clave === clave; }); }
@@ -197,8 +195,8 @@ function abrirNuevo(){
   el('f-perfil').innerHTML = perfiles.map(function(p){
     return '<option value="' + p.clave + '">' + p.nombre + '</option>';
   }).join('');
-  el('f-perfil').value = 'desarrollo';
-  pintarPermisos('desarrollo', defPerfil('desarrollo').porDefecto);
+  el('f-perfil').value = 'analista';
+  pintarPermisos('analista', defPerfil('analista').porDefecto);
   el('btn-password').style.display = 'none';
   el('overlay').style.display = 'flex';
 }
