@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Acceso · Dashboard PMO</title>
+<style>
+  :root {
+    --fondo: #f5f6f8;
+    --tarjeta: #ffffff;
+    --linea: #e2e5ea;
+    --texto: #1c2128;
+    --suave: #6b7280;
+    --acento: #1d4ed8;
+    --error: #b91c1c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: var(--fondo);
+    color: var(--texto);
+    font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+  }
+  .tarjeta {
+    width: 100%;
+    max-width: 360px;
+    background: var(--tarjeta);
+    border: 1px solid var(--linea);
+    border-radius: 12px;
+    padding: 32px 28px;
+  }
+  .marca { text-align: center; margin-bottom: 28px; }
+  .marca h1 { font-size: 19px; font-weight: 600; margin: 0; }
+  .marca p { font-size: 13px; color: var(--suave); margin: 4px 0 0; }
+  label {
+    display: block;
+    font-size: 13px;
+    color: var(--suave);
+    margin-bottom: 6px;
+  }
+  input {
+    width: 100%;
+    height: 38px;
+    padding: 0 11px;
+    margin-bottom: 16px;
+    font-size: 14px;
+    font-family: inherit;
+    color: var(--texto);
+    background: #fff;
+    border: 1px solid var(--linea);
+    border-radius: 6px;
+  }
+  input:focus {
+    outline: none;
+    border-color: var(--acento);
+    box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.12);
+  }
+  button {
+    width: 100%;
+    height: 38px;
+    font-size: 14px;
+    font-family: inherit;
+    color: #fff;
+    background: var(--acento);
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  button:hover { background: #1a44b8; }
+  button[disabled] { opacity: 0.6; cursor: default; }
+  .error {
+    display: none;
+    font-size: 13px;
+    color: var(--error);
+    background: #fdeaea;
+    border-radius: 6px;
+    padding: 9px 11px;
+    margin-bottom: 14px;
+  }
+  .nota {
+    font-size: 12px;
+    color: var(--suave);
+    text-align: center;
+    line-height: 1.5;
+    margin: 20px 0 0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fondo: #14171c;
+      --tarjeta: #1c2027;
+      --linea: #2e343d;
+      --texto: #e7e9ec;
+      --suave: #9aa2ae;
+    }
+    input { background: #14171c; }
+    .error { background: #3a1d1d; color: #f5a3a3; }
+  }
+</style>
+</head>
+<body>
+  <main class="tarjeta">
+    <div class="marca">
+      <h1>Dashboard PMO</h1>
+      <p>Efletexia · DTGrupo</p>
+    </div>
+
+    <div class="error" id="error" role="alert"></div>
+
+    <label for="usuario">Usuario</label>
+    <input id="usuario" type="text" autocomplete="username" autofocus />
+
+    <label for="password">Contraseña</label>
+    <input id="password" type="password" autocomplete="current-password" />
+
+    <button id="entrar" type="button">Ingresar</button>
+
+    <p class="nota">Acceso restringido. Solicita tu cuenta al administrador del portafolio.</p>
+  </main>
+
+<script>
+  const $usuario = document.getElementById('usuario');
+  const $password = document.getElementById('password');
+  const $boton = document.getElementById('entrar');
+  const $error = document.getElementById('error');
+
+  function mostrarError(texto) {
+    $error.textContent = texto;
+    $error.style.display = 'block';
+  }
+  function limpiarError() { $error.style.display = 'none'; }
+
+  $usuario.addEventListener('input', limpiarError);
+  $password.addEventListener('input', limpiarError);
+
+  async function ingresar() {
+    limpiarError();
+    const usuario = $usuario.value.trim();
+    const password = $password.value;
+
+    if (!usuario) { mostrarError('Escribe tu usuario.'); $usuario.focus(); return; }
+    if (!password) { mostrarError('Escribe tu contraseña.'); $password.focus(); return; }
+
+    $boton.disabled = true;
+    $boton.textContent = 'Verificando…';
+
+    try {
+      const r = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usuario, password })
+      });
+      const data = await r.json();
+
+      if (!r.ok) {
+        mostrarError(data.mensaje || 'No se pudo iniciar sesión. Intenta de nuevo.');
+        $password.value = '';
+        $password.focus();
+        return;
+      }
+
+      const destino = new URLSearchParams(location.search).get('destino');
+      location.href = destino && destino.startsWith('/') ? destino : '/';
+    } catch (e) {
+      mostrarError('No hay conexión con el servidor. Intenta de nuevo.');
+    } finally {
+      $boton.disabled = false;
+      $boton.textContent = 'Ingresar';
+    }
+  }
+
+  $boton.addEventListener('click', ingresar);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Enter') ingresar(); });
+</script>
+</body>
+</html>
