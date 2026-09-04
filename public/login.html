@@ -6,108 +6,66 @@
 <meta name="robots" content="noindex, nofollow" />
 <title>Acceso · Dashboard PMO</title>
 <style>
-  :root {
-    --fondo: #f5f6f8;
-    --tarjeta: #ffffff;
-    --linea: #e2e5ea;
-    --texto: #1c2128;
-    --suave: #6b7280;
-    --acento: #1d4ed8;
-    --error: #b91c1c;
+  *{box-sizing:border-box}
+  body{
+    margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+    padding:24px;
+    background:#0d1117 url('/fondo-login.jpg') center/cover no-repeat fixed;
+    font-family:"Segoe UI",system-ui,-apple-system,Arial,sans-serif;
+    color:#e7e9ec;
   }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-    background: var(--fondo);
-    color: var(--texto);
-    font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+  body::before{
+    content:'';position:fixed;inset:0;
+    background:linear-gradient(90deg,rgba(8,12,20,.88) 0%,rgba(8,12,20,.55) 55%,rgba(8,12,20,.35) 100%);
   }
-  .tarjeta {
-    width: 100%;
-    max-width: 360px;
-    background: var(--tarjeta);
-    border: 1px solid var(--linea);
-    border-radius: 12px;
-    padding: 32px 28px;
+  .tarjeta{
+    position:relative;width:100%;max-width:380px;
+    background:rgba(15,22,34,.82);
+    border:1px solid rgba(255,255,255,.12);
+    border-radius:14px;padding:34px 30px;
+    backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+    box-shadow:0 18px 50px rgba(0,0,0,.5);
   }
-  .marca { text-align: center; margin-bottom: 28px; }
-  .marca h1 { font-size: 19px; font-weight: 600; margin: 0; }
-  .marca p { font-size: 13px; color: var(--suave); margin: 4px 0 0; }
-  label {
-    display: block;
-    font-size: 13px;
-    color: var(--suave);
-    margin-bottom: 6px;
+  .marca{text-align:center;margin-bottom:28px}
+  .marca h1{font-size:20px;font-weight:600;margin:0;color:#fff;letter-spacing:.2px}
+  .marca p{font-size:12px;color:#8b97a8;margin:5px 0 0;letter-spacing:.4px}
+  .raya{width:38px;height:2px;background:#3B82F6;margin:16px auto 0;border-radius:2px}
+  label{display:block;font-size:12px;color:#9aa6b6;margin-bottom:6px}
+  input{
+    width:100%;height:40px;padding:0 12px;margin-bottom:16px;font-size:14px;
+    font-family:inherit;color:#fff;background:rgba(255,255,255,.06);
+    border:1px solid rgba(255,255,255,.14);border-radius:7px;
+    transition:border-color .15s,background .15s;
   }
-  input {
-    width: 100%;
-    height: 38px;
-    padding: 0 11px;
-    margin-bottom: 16px;
-    font-size: 14px;
-    font-family: inherit;
-    color: var(--texto);
-    background: #fff;
-    border: 1px solid var(--linea);
-    border-radius: 6px;
+  input::placeholder{color:#64748b}
+  input:hover{border-color:rgba(255,255,255,.24)}
+  input:focus{
+    outline:none;border-color:#3B82F6;background:rgba(255,255,255,.09);
+    box-shadow:0 0 0 3px rgba(59,130,246,.18);
   }
-  input:focus {
-    outline: none;
-    border-color: var(--acento);
-    box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.12);
+  button{
+    width:100%;height:40px;font-size:14px;font-weight:500;font-family:inherit;
+    color:#fff;background:#2563eb;border:none;border-radius:7px;cursor:pointer;
+    transition:background .15s;
   }
-  button {
-    width: 100%;
-    height: 38px;
-    font-size: 14px;
-    font-family: inherit;
-    color: #fff;
-    background: var(--acento);
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
+  button:hover{background:#1d4ed8}
+  button[disabled]{opacity:.6;cursor:default}
+  .error{
+    display:none;font-size:13px;color:#fca5a5;background:rgba(153,27,27,.35);
+    border:1px solid rgba(239,68,68,.35);border-radius:7px;
+    padding:10px 12px;margin-bottom:16px;line-height:1.45;
   }
-  button:hover { background: #1a44b8; }
-  button[disabled] { opacity: 0.6; cursor: default; }
-  .error {
-    display: none;
-    font-size: 13px;
-    color: var(--error);
-    background: #fdeaea;
-    border-radius: 6px;
-    padding: 9px 11px;
-    margin-bottom: 14px;
-  }
-  .nota {
-    font-size: 12px;
-    color: var(--suave);
-    text-align: center;
-    line-height: 1.5;
-    margin: 20px 0 0;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --fondo: #14171c;
-      --tarjeta: #1c2027;
-      --linea: #2e343d;
-      --texto: #e7e9ec;
-      --suave: #9aa2ae;
-    }
-    input { background: #14171c; }
-    .error { background: #3a1d1d; color: #f5a3a3; }
+  .nota{font-size:11px;color:#7c8899;text-align:center;line-height:1.6;margin:22px 0 0}
+  @media (max-width:640px){
+    body::before{background:rgba(8,12,20,.82)}
   }
 </style>
 </head>
 <body>
   <main class="tarjeta">
     <div class="marca">
-      <h1>Dashboard PMO</h1>
-      <p>Efletexia · DTGrupo</p>
+      <h1>PMO Efletexia</h1>
+      <div class="raya"></div>
     </div>
 
     <div class="error" id="error" role="alert"></div>
@@ -129,35 +87,32 @@
   const $boton = document.getElementById('entrar');
   const $error = document.getElementById('error');
 
-  function mostrarError(texto) {
-    $error.textContent = texto;
-    $error.style.display = 'block';
-  }
-  function limpiarError() { $error.style.display = 'none'; }
+  function mostrarError(texto){ $error.textContent = texto; $error.style.display = 'block'; }
+  function limpiarError(){ $error.style.display = 'none'; }
 
   $usuario.addEventListener('input', limpiarError);
   $password.addEventListener('input', limpiarError);
 
-  async function ingresar() {
+  async function ingresar(){
     limpiarError();
     const usuario = $usuario.value.trim();
     const password = $password.value;
 
-    if (!usuario) { mostrarError('Escribe tu usuario.'); $usuario.focus(); return; }
-    if (!password) { mostrarError('Escribe tu contraseña.'); $password.focus(); return; }
+    if(!usuario){ mostrarError('Escribe tu usuario.'); $usuario.focus(); return; }
+    if(!password){ mostrarError('Escribe tu contraseña.'); $password.focus(); return; }
 
     $boton.disabled = true;
     $boton.textContent = 'Verificando…';
 
-    try {
+    try{
       const r = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ usuario, password })
       });
       const data = await r.json();
 
-      if (!r.ok) {
+      if(!r.ok){
         mostrarError(data.mensaje || 'No se pudo iniciar sesión. Intenta de nuevo.');
         $password.value = '';
         $password.focus();
@@ -166,16 +121,16 @@
 
       const destino = new URLSearchParams(location.search).get('destino');
       location.href = destino && destino.startsWith('/') ? destino : '/';
-    } catch (e) {
+    }catch(e){
       mostrarError('No hay conexión con el servidor. Intenta de nuevo.');
-    } finally {
+    }finally{
       $boton.disabled = false;
       $boton.textContent = 'Ingresar';
     }
   }
 
   $boton.addEventListener('click', ingresar);
-  document.addEventListener('keydown', (e) => { if (e.key === 'Enter') ingresar(); });
+  document.addEventListener('keydown', (e) => { if(e.key === 'Enter') ingresar(); });
 </script>
 </body>
 </html>
