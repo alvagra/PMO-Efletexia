@@ -208,7 +208,7 @@ function abrirEditar(id){
   el('panel-titulo').textContent = 'Editar ' + u.u;
   el('panel-aviso').innerHTML = '';
   error('err-panel','');
-  el('f-usuario').value = u.u; el('f-usuario').disabled = true;
+  el('f-usuario').value = u.u; el('f-usuario').disabled = false;
   el('f-nombre').value = u.nombre;
   el('f-perfil').innerHTML = perfiles.map(function(p){
     return '<option value="' + p.clave + '">' + p.nombre + '</option>';
@@ -237,7 +237,8 @@ const MENSAJES = {
   datos_incompletos: 'Completa usuario y perfil.',
   no_puedes_degradarte: 'No puedes quitarte a ti mismo el perfil de administrador.',
   no_puedes_eliminarte: 'No puedes eliminar tu propia cuenta.',
-  ultimo_administrador: 'Debe quedar al menos un administrador activo.'
+  ultimo_administrador: 'Debe quedar al menos un administrador activo.',
+  usuario_corto: 'El usuario debe tener al menos 3 caracteres.'
 };
 
 async function guardar(){
@@ -249,7 +250,13 @@ async function guardar(){
 
   try{
     if (editando){
-      await llamar({ accion:'actualizar', usuario:editando, nombre, perfil, permisos:marcados() });
+      const d = await llamar({ accion:'actualizar', usuario:editando,
+        nuevoUsuario:usuario, nombre, perfil, permisos:marcados() });
+      if (d.reloguear){
+        alert('Cambiaste tu propio usuario. Vuelve a iniciar sesión con ' + usuario + '.');
+        Sesion.salir();
+        return;
+      }
       cerrar(); cargar();
     } else {
       const d = await llamar({ accion:'crear', usuario, nombre, perfil, permisos:marcados() });
