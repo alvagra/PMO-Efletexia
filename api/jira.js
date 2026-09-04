@@ -1,4 +1,5 @@
 const https = require('https');
+const { requireAuth } = require('../lib/auth');
 
 function jiraGet(auth, cloud, path) {
   return new Promise((resolve, reject) => {
@@ -39,10 +40,12 @@ async function fetchAllPages(auth, cloud, jql, fields) {
 }
 
 module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
+
+  const user = requireAuth(req, res);
+  if (!user) return;
 
   const JIRA_EMAIL = process.env.JIRA_EMAIL;
   const JIRA_TOKEN = process.env.JIRA_TOKEN;
@@ -454,8 +457,8 @@ module.exports = async function handler(req, res) {
 
     } else {
       // Default: fetch Epics
-      const { jql, fields } = req.body || {};
-      const jqlStr = jql || 'project = PTS AND issuetype = Epic ORDER BY created ASC';
+      const jqlStr = 'project = PTS AND issuetype = Epic ORDER BY created ASC';
+      const { fields } = req.body || {};
       const EPIC_FIELDS = fields || [
         'summary','status','assignee','reporter','labels','duedate','description',
         'customfield_10015','customfield_10592','customfield_10659',
