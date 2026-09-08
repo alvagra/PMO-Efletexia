@@ -57,13 +57,13 @@
 </style>
 </head>
 <body>
-<header>
+<header id="cabecera">
   <div>
     <div class="titulo">Usuarios</div>
     <div class="sub" id="conteo">Cargando…</div>
   </div>
   <div style="display:flex;gap:8px">
-    <button onclick="location.href='/'">Volver al dashboard</button>
+    <button id="btn-volver" onclick="location.href='/'">Volver al dashboard</button>
     <button class="btn-pri" onclick="abrirNuevo()">Nuevo usuario</button>
   </div>
 </header>
@@ -294,9 +294,17 @@ async function eliminar(id){
   }
 }
 
+// Dentro del modal del dashboard, el botón de volver sobra: se cierra el modal.
+if (new URLSearchParams(location.search).get('embed') === '1'){
+  var v = el('btn-volver');
+  if (v) v.style.display = 'none';
+  el('cabecera').style.padding = '12px 22px';
+  document.querySelector('main').style.padding = '18px 22px';
+}
+
 Sesion.iniciar().then(function(s){
   if (!s) return;
-  if (s.permisos.indexOf('admin.usuarios') < 0){ location.href = '/'; return; }
+  if (s.permisos.indexOf('admin.usuarios') < 0){ top.location.href = '/'; return; }
   cargar();
 });
 </script>
