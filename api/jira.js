@@ -47,6 +47,31 @@ module.exports = async function handler(req, res) {
   const user = requireAuth(req, res);
   if (!user) return;
 
+  // ── Alcance por perfil ────────────────────────────────────────────────
+  // El analista solo ve lo suyo. El filtro va aquí, en el servidor: si se
+  // hiciera en el navegador, los datos del resto del equipo igual viajarían
+  // al cliente y serían visibles desde las herramientas de desarrollo.
+  const soloPropio = user.perfil === 'analista';
+  const normNom = (s) => String(s || '')
+    .toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[._-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  // Se compara contra el nombre de la sesión y contra la parte local del
+  // usuario (eric.cacho@efletexia.com → "eric cacho").
+  const idsUsuario = [normNom(user.nombre), normNom(String(user.sub || '').split('@')[0])]
+    .filter(Boolean);
+  const esDelUsuario = (persona) => {
+    const dn = normNom(persona?.displayName);
+    if (!dn) return false;
+    return idsUsuario.some((id) => {
+      if (!id) return false;
+      if (id === dn) return true;
+      // "Alexander R." contra "Alexander Romero": mismo nombre y misma inicial.
+      const a = id.split(' '), b = dn.split(' ');
+      return a[0] === b[0] && !!a[1] && !!b[1] &&
+             (a[1].startsWith(b[1].replace('.', '')) || b[1].startsWith(a[1].replace('.', '')));
+    });
+  };
+
   const JIRA_EMAIL = process.env.JIRA_EMAIL;
   const JIRA_TOKEN = process.env.JIRA_TOKEN;
   const JIRA_CLOUD = process.env.JIRA_CLOUD || 'efletexia';
@@ -107,8 +132,9 @@ module.exports = async function handler(req, res) {
       // Subtareas + Errores (bugs). Los Errores cuelgan directo de la Épica,
       // por eso más abajo se resuelve el padre según sea Tarea o Épica.
       const issues = issuesRaw.filter(i =>
-        i.fields?.issuetype?.subtask === true ||
-        i.fields?.issuetype?.name === 'Error'
+        (i.fields?.issuetype?.subtask === true ||
+         i.fields?.issuetype?.name === 'Error') &&
+        (!soloPropio || esDelUsuario(i.fields?.assignee))
       );
 
       // Resolver el segundo nivel: Subtarea→Tarea→Épica
@@ -453,7 +479,18 @@ module.exports = async function handler(req, res) {
         batch.forEach((s, idx) => { s.fields._worklogs = logs[idx]; });
       }
 
-      return res.status(200).json({ issues: subtareas, total: subtareas.length, type: 'capacity' });
+      // El analista solo ve su propio capacity: se descartan los registros de
+      // otras personas y las subtareas que quedan sin ninguno propio.
+      let capIssues = subtareas;
+      if (soloPropio) {
+        capIssues = subtareas.filter(s => {
+          s.fields._worklogs = (s.fields._worklogs || [])
+            .filter(w => esDelUsuario(w.author));
+          return s.fields._worklogs.length > 0;
+        });
+      }
+
+      return res.status(200).json({ issues: capIssues, total: capIssues.length, type: 'capacity' });
 
     } else {
       // Default: fetch Epics
