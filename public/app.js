@@ -1914,12 +1914,21 @@ async function loadCapacity(){
     const selP = document.getElementById('cap-pais');
     if(selP) selP.innerHTML = '<option value="">Todos</option>' + paises.map(p => `<option>${esc(p)}</option>`).join('');
 
-    // Personas desde NOMENCLATURA + las que haya en capRows
+    // Personas desde NOMENCLATURA + las que haya en capRows.
+    // El analista solo se ve a sí mismo: el desplegable se arma únicamente
+    // con lo que traen los datos, que el servidor ya limitó a su persona.
+    const esAnalista = window.Sesion?.usuario?.perfil === 'analista';
     const personasNom = Object.values(NOMENCLATURA).map(n=>n.nombre).filter(Boolean);
     const personasRows = [...new Set(capRows.map(r => r.persona).filter(Boolean))];
-    const personas = [...new Set([...personasNom, ...personasRows])].sort();
+    const personas = esAnalista
+      ? personasRows.sort()
+      : [...new Set([...personasNom, ...personasRows])].sort();
     const sel = document.getElementById('cap-persona');
-    if(sel) sel.innerHTML = '<option value="">Todas</option>' + personas.map(p => `<option>${esc(p)}</option>`).join('');
+    if(sel){
+      sel.innerHTML = (esAnalista ? '' : '<option value="">Todas</option>')
+        + personas.map(p => `<option>${esc(p)}</option>`).join('');
+      if(esAnalista){ sel.value = personas[0] || ''; sel.disabled = true; }
+    }
 
     // Set calendar to month with most data
     if(capRows.length){
@@ -2005,7 +2014,7 @@ function getCapFiltered(){
 document.getElementById('cap-limpiar')?.addEventListener('click', () => {
   const a  = document.getElementById('cap-area');    if(a)  a.value='';
   const pa = document.getElementById('cap-pais');    if(pa) pa.value='';
-  const p  = document.getElementById('cap-persona'); if(p)  p.value='';
+  const p  = document.getElementById('cap-persona'); if(p && !p.disabled) p.value='';
   const o  = document.getElementById('cap-orden');   if(o)  o.value='nombre';
   renderCapacity();
 });
