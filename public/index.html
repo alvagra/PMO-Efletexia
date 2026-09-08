@@ -521,6 +521,12 @@ a.jlink:hover{text-decoration:underline}
   </div>
   <div style="display:flex;align-items:center;gap:10px">
     <div class="header-meta" id="hdr-meta">PMO TI · cargando...</div>
+    <button type="button" id="btn-config" data-permiso="admin.usuarios" onclick="abrirConfig()" title="Configuración de usuarios" aria-label="Configuración de usuarios" style="display:none;background:none;border:none;padding:4px;margin-left:6px;cursor:pointer;color:var(--text-muted);line-height:0">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+      </svg>
+    </button>
     <div id="hdr-usuario" style="display:none;align-items:center;gap:8px;padding-left:10px;border-left:1px solid var(--border)">
       <span style="font-size:11px;color:var(--text-muted)" id="hdr-usuario-nombre"></span>
       <button type="button" onclick="Sesion.salir()" title="Cerrar sesión" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer">Salir</button>
@@ -951,6 +957,33 @@ a.jlink:hover{text-decoration:underline}
   </div>
 </div>
 
+<div id="cfg-overlay" onclick="if(event.target===this)cerrarConfig()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9000;align-items:center;justify-content:center;padding:24px">
+  <div style="background:#0d1117;border:1px solid #1e2d40;border-radius:12px;width:100%;max-width:1000px;height:88vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.6)">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-bottom:1px solid #1e2d40">
+      <div style="font-size:14px;font-weight:600;color:#e2e8f0">Configuración de usuarios</div>
+      <button type="button" onclick="cerrarConfig()" aria-label="Cerrar" style="background:none;border:none;color:#94a3b8;font-size:20px;line-height:1;cursor:pointer;padding:0 4px">&times;</button>
+    </div>
+    <iframe id="cfg-frame" title="Configuración de usuarios" style="flex:1;width:100%;border:none;background:#0d1117"></iframe>
+  </div>
+</div>
+
+<script>
+  function abrirConfig(){
+    var f = document.getElementById('cfg-frame');
+    f.src = '/admin.html?embed=1';
+    document.getElementById('cfg-overlay').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+  }
+  function cerrarConfig(){
+    document.getElementById('cfg-overlay').style.display = 'none';
+    document.getElementById('cfg-frame').src = 'about:blank';
+    document.body.style.overflow = '';
+  }
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape') cerrarConfig();
+  });
+</script>
+
 <script src="/sesion.js"></script>
 <script>
   Sesion.iniciar().then(function (s) {
@@ -958,6 +991,8 @@ a.jlink:hover{text-decoration:underline}
     var h = document.getElementById('hdr-usuario');
     document.getElementById('hdr-usuario-nombre').textContent = s.nombre + ' · ' + s.perfil;
     h.style.display = 'flex';
+    var g = document.getElementById('btn-config');
+    if (g) g.style.display = 'inline-flex';
     loadData();
   });
 </script>
