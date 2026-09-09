@@ -471,11 +471,12 @@ function bgDonut(items, total, k, tipo){
   const etiquetas=segs.map(x=>{
     const der=x.lado==='der', sg=der?1:-1;
     const xa=cx+(R+3)*Math.cos(x.am), ya=cy+(R+3)*Math.sin(x.am);
-    const xb=cx+sg*(R+22);                 // quiebre corto y ya a la altura del texto
+    // El primer tramo sale radial: así la ramita apunta a su porción
+    const xb=cx+(R+24)*Math.cos(x.am), yb=cy+(R+24)*Math.sin(x.am);
     const xc=cx+sg*(R+COD);
     const xt=xc+sg*9;
     return `<g style="cursor:pointer" onclick="toggleBugCat('${esc(k)}','${tipo}','${esc(x.lbl)}')">
-      <path d="M${xa.toFixed(1)} ${ya.toFixed(1)} L${xb.toFixed(1)} ${x.y.toFixed(1)} L${xc.toFixed(1)} ${x.y.toFixed(1)}"
+      <path d="M${xa.toFixed(1)} ${ya.toFixed(1)} L${xb.toFixed(1)} ${yb.toFixed(1)} L${xc.toFixed(1)} ${x.y.toFixed(1)}"
         fill="none" stroke="${x.c}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" opacity=".75"/>
       <circle cx="${xc.toFixed(1)}" cy="${x.y.toFixed(1)}" r="3.2" fill="${x.c}"/>
       <text x="${xt.toFixed(1)}" y="${(x.y-3).toFixed(1)}" text-anchor="${der?'start':'end'}" font-size="15" font-weight="700" fill="${x.c}">${x.n}<tspan font-size="13" font-weight="500" fill="var(--text-primary)"> ${esc(x.lbl)}</tspan></text>
