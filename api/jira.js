@@ -240,6 +240,45 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ stories: storiesFinal, total: storiesFinal.length, type: 'stories' });
 
 
+    } else if (type === 'metricas') {
+      // Desvío de entrega = "Fecha de entrega desarrollo" (customfield_11381) − duedate.
+      // Aplica a historias y a bugs; solo entran los que ya tienen la fecha cargada.
+      const MET_FIELDS = [
+        'summary', 'status', 'assignee', 'parent', 'duedate', 'issuetype',
+        'customfield_11381', // Fecha de entrega desarrollo
+        'customfield_10015', // Fecha inicio
+      ];
+      const items = await fetchAllPages(
+        auth, JIRA_CLOUD,
+        'project = PTS AND cf[11381] IS NOT EMPTY AND duedate IS NOT EMPTY ORDER BY cf[11381] DESC',
+        MET_FIELDS
+      );
+
+      // Épica de cada item, para mostrar código y nombre de proyecto
+      const padres = [...new Set(items.map(i => i.fields.parent?.key).filter(Boolean))];
+      const pMap = {};
+      for (let i = 0; i < padres.length; i += 50) {
+        const chunk = padres.slice(i, i + 50);
+        if (!chunk.length) continue;
+        const eps = await fetchAllPages(auth, JIRA_CLOUD, `key in (${chunk.join(',')})`,
+          ['summary', 'parent', 'customfield_10934', 'issuetype']);
+        eps.forEach(e => { pMap[e.key] = e; });
+      }
+      items.forEach(it => {
+        const pk = it.fields.parent?.key;
+        const padre = pk ? pMap[pk] : null;
+        const esEpica = (padre?.fields?.issuetype?.hierarchyLevel === 1) ||
+                        (padre?.fields?.issuetype?.name === 'Epic');
+        const epKey = esEpica ? padre?.key : padre?.fields?.parent?.key;
+        const epSum = esEpica ? padre?.fields?.summary : padre?.fields?.parent?.fields?.summary;
+        it.fields._epica = epKey
+          ? { key: epKey, summary: epSum || epKey,
+              codigo: (esEpica ? padre?.fields?.customfield_10934 : '') || '' }
+          : null;
+      });
+
+      return res.status(200).json({ items, total: items.length, type: 'metricas' });
+
     } else if (type === 'bugs') {
       // Módulo de gestión de bugs: todos los Errores del proyecto con su épica,
       // fechas, horas estimadas y horas registradas (propias + de sus subtareas).
