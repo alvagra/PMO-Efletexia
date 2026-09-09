@@ -245,7 +245,7 @@ module.exports = async function handler(req, res) {
       // fechas, horas estimadas y horas registradas (propias + de sus subtareas).
       const BUG_FIELDS = [
         'summary', 'status', 'assignee', 'parent', 'duedate', 'created', 'issuetype',
-        'timespent',
+        'timespent', 'priority',
         'customfield_10015', // Fecha inicio
         'customfield_11136', // Horas estimadas
       ];
