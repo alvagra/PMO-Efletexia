@@ -156,6 +156,7 @@ document.querySelectorAll('.tabs .tab').forEach(tab => {
     if(tab.dataset.tab==='recursos' && !recursosLoaded) loadRecursos();
     if(tab.dataset.tab==='capacity' && !capacityLoaded) loadCapacity();
     if(tab.dataset.tab==='entregables') renderEntregables();
+    if(tab.dataset.tab==='metricas' && !metricasLoaded) loadMetricas();
   });
 });
 
@@ -3255,3 +3256,135 @@ document.addEventListener('click', e => {
 ['btn-export-port','btn-export-rec','btn-export-cap'].forEach(function(id){
   document.getElementById(id)?.remove();
 });
+
+
+// ═══════════════════════════════════════════════════════════
+//  MÉTRICAS — desvío de entrega de desarrollo
+//  Desvío = "Fecha de entrega desarrollo" − "Fecha de vencimiento"
+// ═══════════════════════════════════════════════════════════
+let metricasLoaded = false;
+let metRows = [];
+
+function mtDias(a,b){ return Math.round((new Date(a)-new Date(b))/86400000); }
+function mtColor(d){ return d<=0?'#3fb950' : d<=3?'#F5B800' : '#ef4444'; }
+
+async function loadMetricas(){
+  const cont=document.getElementById('mt-contenido');
+  cont.innerHTML='<div class="mt-empty">Cargando métricas…</div>';
+  try{
+    const r=await fetch('/api/jira',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'metricas'})});
+    const j=await r.json();
+    if(!r.ok) throw new Error(j.error||'Error de API');
+    metRows=(j.items||[]).map(it=>{
+      const f=it.fields||{}, ep=f._epica||null;
+      const tipo=(f.issuetype?.name||'').toLowerCase()==='error'?'Bug':'Historia';
+      return {
+        key:it.key, resumen:f.summary||it.key, tipo,
+        proyKey:ep?.key||'', proyecto:ep?.summary||'Sin épica', codigo:ep?.codigo||'',
+        estado:f.status?.name||'—',
+        responsable:f.assignee?.displayName ? (resolveNombreDesdeJira(f.assignee.displayName)?.nombre||f.assignee.displayName) : 'Sin asignar',
+        vence:f.duedate, entrega:f.customfield_11381,
+        desvio:mtDias(f.customfield_11381,f.duedate)
+      };
+    }).sort((a,b)=>b.desvio-a.desvio);
+    metricasLoaded=true;
+    renderMetricas();
+  }catch(e){
+    cont.innerHTML=`<div class="mt-empty">No se pudieron cargar las métricas.<br><span style="font-size:11px">${esc(e.message)}</span></div>`;
+  }
+}
+
+function metFiltradas(){
+  const t=document.getElementById('mt-tipo')?.value||'';
+  const p=document.getElementById('mt-proy')?.value||'';
+  return metRows.filter(r=>(!t||r.tipo===t)&&(!p||r.proyKey===p));
+}
+
+function renderMetricas(){
+  const cont=document.getElementById('mt-contenido');
+  if(!metRows.length){
+    cont.innerHTML='<div class="mt-empty">Ninguna historia o bug tiene cargada la <b>Fecha de entrega desarrollo</b> en Jira.<br>'+
+      '<span style="font-size:11px">La métrica se activa sola en cuanto el campo empiece a llenarse.</span></div>';
+    return;
+  }
+  const proys=[...new Map(metRows.filter(r=>r.proyKey).map(r=>[r.proyKey,r])).values()]
+    .sort((a,b)=>a.proyecto.localeCompare(b.proyecto));
+  cont.innerHTML=`
+    <div class="bg-filtros" style="margin-bottom:14px">
+      <select id="mt-tipo"><option value="">Historias y bugs</option><option>Historia</option><option>Bug</option></select>
+      <select id="mt-proy"><option value="">Todos los proyectos</option>${
+        proys.map(p=>`<option value="${esc(p.proyKey)}">${esc(p.codigo?p.codigo+' · ':'')}${esc(p.proyecto)}</option>`).join('')}</select>
+      <button class="btn-export" id="mt-csv" type="button">CSV</button>
+    </div>
+    <div id="mt-cuerpo"></div>`;
+  ['mt-tipo','mt-proy'].forEach(id=>document.getElementById(id).addEventListener('change',renderMetricasCuerpo));
+  document.getElementById('mt-csv').addEventListener('click',exportMetricasCSV);
+  renderMetricasCuerpo();
+}
+
+function renderMetricasCuerpo(){
+  const rows=metFiltradas();
+  const cuerpo=document.getElementById('mt-cuerpo');
+  if(!rows.length){ cuerpo.innerHTML='<div class="mt-empty">Sin resultados para el filtro.</div>'; return; }
+
+  const ds=rows.map(r=>r.desvio).sort((a,b)=>a-b);
+  const mediana=ds.length%2?ds[(ds.length-1)/2]:Math.round((ds[ds.length/2-1]+ds[ds.length/2])/2);
+  const prom=Math.round(ds.reduce((s,x)=>s+x,0)/ds.length*10)/10;
+  const enFecha=rows.filter(r=>r.desvio<=0).length;
+  const peor=ds[ds.length-1];
+  const kpi=(l,v,c,sub)=>`<div class="mt-kpi"><div class="mt-kpi-lbl">${l}</div>
+    <div class="mt-kpi-val" style="color:${c||'var(--text-primary)'}">${v}</div>
+    ${sub?`<div class="mt-kpi-sub">${sub}</div>`:''}</div>`;
+
+  const maxAbs=Math.max(1,...rows.map(r=>Math.abs(r.desvio)));
+  const barras=rows.slice(0,15).map(r=>`
+    <div class="mt-bar-row">
+      <span class="mt-bar-lbl"><b>${esc(r.codigo||r.key)}</b> <span style="color:var(--text-muted)">${esc(r.proyecto)}</span></span>
+      <div class="mt-bar-track"><div style="height:100%;width:${Math.max(2,Math.abs(r.desvio)/maxAbs*100)}%;background:${mtColor(r.desvio)};border-radius:3px"></div></div>
+      <span style="width:46px;text-align:right;font-size:12px;color:${mtColor(r.desvio)}">${r.desvio>0?'+':''}${r.desvio} d</span>
+    </div>`).join('');
+
+  const filas=rows.map(r=>`<tr>
+    <td><a class="jlink" href="${JIRA_BASE}${r.key}" target="_blank">${r.key}</a></td>
+    <td><span class="bg-est" style="background:${r.tipo==='Bug'?'rgba(239,68,68,.15)':'rgba(88,166,255,.15)'};color:${r.tipo==='Bug'?'#ef4444':'#58a6ff'}">${r.tipo}</span></td>
+    <td style="font-weight:500;white-space:nowrap">${esc(r.codigo||'—')}</td>
+    <td style="color:var(--text-muted);max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.proyecto)}">${esc(r.proyecto)}</td>
+    <td style="max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.resumen)}">${esc(r.resumen)}</td>
+    <td style="color:var(--text-muted);white-space:nowrap">${esc(r.responsable)}</td>
+    <td style="color:var(--text-muted);white-space:nowrap">${fmtD(r.vence)}</td>
+    <td style="color:var(--text-muted);white-space:nowrap">${fmtD(r.entrega)}</td>
+    <td style="text-align:right;font-weight:700;white-space:nowrap;color:${mtColor(r.desvio)}">${r.desvio>0?'+':''}${r.desvio} d</td>
+  </tr>`).join('');
+
+  cuerpo.innerHTML=`
+    <div class="mt-kpis">
+      ${kpi('MEDIANA',(mediana>0?'+':'')+mediana+' d',mtColor(mediana))}
+      ${kpi('PROMEDIO',(prom>0?'+':'')+prom+' d',mtColor(prom))}
+      ${kpi('EN FECHA',enFecha,enFecha?'#3fb950':'var(--text-dim)','de '+rows.length)}
+      ${kpi('PEOR CASO',(peor>0?'+':'')+peor+' d',mtColor(peor))}
+      ${kpi('MEDIDOS',rows.length,'var(--text-primary)','con fecha de entrega')}
+    </div>
+    <div class="mt-card">
+      <div class="mt-card-t">DÍAS DE DESVÍO${rows.length>15?' · 15 mayores':''}</div>
+      ${barras}
+    </div>
+    <div class="mt-card">
+      <div class="mt-card-t">DETALLE</div>
+      <div style="overflow-x:auto"><table class="mt-tabla">
+        <thead><tr><th>CLAVE</th><th>TIPO</th><th>CÓDIGO</th><th>PROYECTO</th><th>ACTIVIDAD</th>
+        <th>RESPONSABLE</th><th>VENCE</th><th>ENTREGA</th><th style="text-align:right">DESVÍO</th></tr></thead>
+        <tbody>${filas}</tbody></table></div>
+    </div>`;
+}
+
+function exportMetricasCSV(){
+  const rows=metFiltradas();
+  const q=v=>`"${String(v??'').replace(/"/g,'""')}"`;
+  const csv=[['Clave','Tipo','Codigo','Proyecto','Actividad','Responsable','Vence','Entrega','Desvio (dias)'].join(',')]
+    .concat(rows.map(r=>[r.key,r.tipo,r.codigo,r.proyecto,r.resumen,r.responsable,r.vence,r.entrega,r.desvio].map(q).join(',')))
+    .join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'}));
+  a.download=`metricas_entrega_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
