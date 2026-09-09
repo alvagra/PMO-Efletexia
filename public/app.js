@@ -3265,7 +3265,24 @@ document.addEventListener('click', e => {
 let metricasLoaded = false;
 let metRows = [];
 
-function mtDias(a,b){ return Math.round((new Date(a)-new Date(b))/86400000); }
+// Desvío en días efectivos: no cuenta domingos ni feriados.
+// Los sábados sí cuentan, según el criterio acordado.
+function mtDias(entrega, vence){
+  if(!entrega||!vence) return 0;
+  const fer=new Set([...(FERIADOS['Peru']||[]), ...(FERIADOS['Colombia']||[]),
+                     ...(FERIADOS['Mexico']||[]), ...(FERIADOS['Guatemala']||[])]);
+  const ini=new Date(vence+'T00:00:00'), fin=new Date(entrega+'T00:00:00');
+  if(ini.getTime()===fin.getTime()) return 0;
+  const signo = fin<ini ? -1 : 1;
+  let d=new Date(signo>0?ini:fin), hasta=new Date(signo>0?fin:ini), n=0;
+  d.setDate(d.getDate()+1);              // no se cuenta el propio día de vencimiento
+  while(d<=hasta){
+    const iso=d.toISOString().slice(0,10);
+    if(d.getDay()!==0 && !fer.has(iso)) n++;
+    d.setDate(d.getDate()+1);
+  }
+  return signo*n;
+}
 function mtColor(d){ return d<=0?'#3fb950' : d<=3?'#F5B800' : '#ef4444'; }
 
 async function loadMetricas(){
@@ -3345,11 +3362,9 @@ function renderMetricasCuerpo(){
     </div>`).join('');
 
   const filas=rows.map(r=>`<tr>
-    <td><a class="jlink" href="${JIRA_BASE}${r.key}" target="_blank">${r.key}</a></td>
     <td><span class="bg-est" style="background:${r.tipo==='Bug'?'rgba(239,68,68,.15)':'rgba(88,166,255,.15)'};color:${r.tipo==='Bug'?'#ef4444':'#58a6ff'}">${r.tipo}</span></td>
-    <td style="font-weight:500;white-space:nowrap">${esc(r.codigo||'—')}</td>
-    <td style="color:var(--text-muted);max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.proyecto)}">${esc(r.proyecto)}</td>
-    <td style="max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.resumen)}">${esc(r.resumen)}</td>
+    <td style="font-weight:500;white-space:nowrap"><a class="jlink" href="${JIRA_BASE}${r.key}" target="_blank">${esc(r.codigo||r.key)}</a></td>
+    <td style="color:var(--text-muted);max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.proyecto)}">${esc(r.proyecto)}</td>
     <td style="color:var(--text-muted);white-space:nowrap">${esc(r.responsable)}</td>
     <td style="color:var(--text-muted);white-space:nowrap">${fmtD(r.vence)}</td>
     <td style="color:var(--text-muted);white-space:nowrap">${fmtD(r.entrega)}</td>
@@ -3371,7 +3386,7 @@ function renderMetricasCuerpo(){
     <div class="mt-card">
       <div class="mt-card-t">DETALLE</div>
       <div style="overflow-x:auto"><table class="mt-tabla">
-        <thead><tr><th>CLAVE</th><th>TIPO</th><th>CÓDIGO</th><th>PROYECTO</th><th>ACTIVIDAD</th>
+        <thead><tr><th>TIPO</th><th>CÓDIGO</th><th>PROYECTO</th>
         <th>RESPONSABLE</th><th>VENCE</th><th>ENTREGA</th><th style="text-align:right">DESVÍO</th></tr></thead>
         <tbody>${filas}</tbody></table></div>
     </div>`;
@@ -3380,8 +3395,8 @@ function renderMetricasCuerpo(){
 function exportMetricasCSV(){
   const rows=metFiltradas();
   const q=v=>`"${String(v??'').replace(/"/g,'""')}"`;
-  const csv=[['Clave','Tipo','Codigo','Proyecto','Actividad','Responsable','Vence','Entrega','Desvio (dias)'].join(',')]
-    .concat(rows.map(r=>[r.key,r.tipo,r.codigo,r.proyecto,r.resumen,r.responsable,r.vence,r.entrega,r.desvio].map(q).join(',')))
+  const csv=[['Tipo','Codigo','Proyecto','Responsable','Vence','Entrega','Desvio (dias efectivos)'].join(',')]
+    .concat(rows.map(r=>[r.tipo,r.codigo,r.proyecto,r.responsable,r.vence,r.entrega,r.desvio].map(q).join(',')))
     .join('\n');
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'}));
