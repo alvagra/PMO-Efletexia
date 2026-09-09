@@ -3265,24 +3265,24 @@ document.addEventListener('click', e => {
 let metricasLoaded = false;
 let metRows = [];
 
-// Desvío en días efectivos: no cuenta domingos ni feriados.
-// Los sábados sí cuentan, según el criterio acordado.
-function mtDias(entrega, vence){
+// Desvío en días efectivos: no cuenta domingos ni los feriados DEL PAÍS
+// del responsable. Sin responsable identificado solo se descuentan domingos.
+function mtDias(entrega, vence, pais){
   if(!entrega||!vence) return 0;
-  const fer=new Set([...(FERIADOS['Peru']||[]), ...(FERIADOS['Colombia']||[]),
-                     ...(FERIADOS['Mexico']||[]), ...(FERIADOS['Guatemala']||[])]);
+  const fer = (pais && FERIADOS[pais]) ? FERIADOS[pais] : new Set();
   const ini=new Date(vence+'T00:00:00'), fin=new Date(entrega+'T00:00:00');
   if(ini.getTime()===fin.getTime()) return 0;
   const signo = fin<ini ? -1 : 1;
-  let d=new Date(signo>0?ini:fin), hasta=new Date(signo>0?fin:ini), n=0;
+  let d=new Date(signo>0?ini:fin); const hasta=new Date(signo>0?fin:ini); let n=0;
   d.setDate(d.getDate()+1);              // no se cuenta el propio día de vencimiento
   while(d<=hasta){
-    const iso=d.toISOString().slice(0,10);
+    const iso=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
     if(d.getDay()!==0 && !fer.has(iso)) n++;
     d.setDate(d.getDate()+1);
   }
   return signo*n;
 }
+
 function mtColor(d){ return d<=0?'#3fb950' : d<=3?'#F5B800' : '#ef4444'; }
 
 async function loadMetricas(){
@@ -3295,13 +3295,16 @@ async function loadMetricas(){
     metRows=(j.items||[]).map(it=>{
       const f=it.fields||{}, ep=f._epica||null;
       const tipo=(f.issuetype?.name||'').toLowerCase()==='error'?'Bug':'Historia';
+      const dn=f.assignee?.displayName||'';
+      const nom=dn?resolveNombreDesdeJira(dn):null;
+      const pais=nom?.pais||null;   // el feriado se descuenta según el país del responsable
       return {
         key:it.key, resumen:f.summary||it.key, tipo,
         proyKey:ep?.key||'', proyecto:ep?.summary||'Sin épica', codigo:ep?.codigo||'',
         estado:f.status?.name||'—',
-        responsable:f.assignee?.displayName ? (resolveNombreDesdeJira(f.assignee.displayName)?.nombre||f.assignee.displayName) : 'Sin asignar',
+        responsable:dn?(nom?.nombre||dn):'Sin asignar', pais,
         vence:f.duedate, entrega:f.customfield_11381,
-        desvio:mtDias(f.customfield_11381,f.duedate)
+        desvio:mtDias(f.customfield_11381,f.duedate,pais)
       };
     }).sort((a,b)=>b.desvio-a.desvio);
     metricasLoaded=true;
@@ -3365,7 +3368,7 @@ function renderMetricasCuerpo(){
     <td><span class="bg-est" style="background:${r.tipo==='Bug'?'rgba(239,68,68,.15)':'rgba(88,166,255,.15)'};color:${r.tipo==='Bug'?'#ef4444':'#58a6ff'}">${r.tipo}</span></td>
     <td style="font-weight:500;white-space:nowrap"><a class="jlink" href="${JIRA_BASE}${r.key}" target="_blank">${esc(r.codigo||r.key)}</a></td>
     <td style="color:var(--text-muted);max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.proyecto)}">${esc(r.proyecto)}</td>
-    <td style="color:var(--text-muted);white-space:nowrap">${esc(r.responsable)}</td>
+    <td style="color:var(--text-muted);white-space:nowrap">${esc(r.responsable)}${r.pais?` <span style="color:var(--text-dim);font-size:10px">${esc(r.pais)}</span>`:''}</td>
     <td style="color:var(--text-muted);white-space:nowrap">${fmtD(r.vence)}</td>
     <td style="color:var(--text-muted);white-space:nowrap">${fmtD(r.entrega)}</td>
     <td style="text-align:right;font-weight:700;white-space:nowrap;color:${mtColor(r.desvio)}">${r.desvio>0?'+':''}${r.desvio} d</td>
@@ -3395,8 +3398,8 @@ function renderMetricasCuerpo(){
 function exportMetricasCSV(){
   const rows=metFiltradas();
   const q=v=>`"${String(v??'').replace(/"/g,'""')}"`;
-  const csv=[['Tipo','Codigo','Proyecto','Responsable','Vence','Entrega','Desvio (dias efectivos)'].join(',')]
-    .concat(rows.map(r=>[r.tipo,r.codigo,r.proyecto,r.responsable,r.vence,r.entrega,r.desvio].map(q).join(',')))
+  const csv=[['Tipo','Codigo','Proyecto','Responsable','Pais','Vence','Entrega','Desvio (dias efectivos)'].join(',')]
+    .concat(rows.map(r=>[r.tipo,r.codigo,r.proyecto,r.responsable,r.pais||'',r.vence,r.entrega,r.desvio].map(q).join(',')))
     .join('\n');
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'}));
