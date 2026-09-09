@@ -437,56 +437,71 @@ function bgColorEstado(nombre, i){
   return BG_EST_COLOR[k] || BG_FALLBACK[i % BG_FALLBACK.length];
 }
 
-// Donut SVG con la cantidad rotulada sobre cada segmento
-function bgDonut(items, total){
-  if(!total) return '';
-  const R=56, r=34, cx=66, cy=66, rl=(R+r)/2;
-  let ang=-Math.PI/2, paths='', labels='';
+// Donut con etiquetas repartidas alrededor y ramita conectora a su porción
+function bgDonut(items, total, k, tipo){
+  if(!total) return '<div style="font-size:12px;color:var(--text-muted);padding:20px">Sin datos</div>';
+  const W=680, H=380, cx=250, cy=190, R=118, r=72;
+  let ang=-Math.PI/2, segs=[], paths='';
   items.forEach(it=>{
-    if(!it.n) return;
     const frac=it.n/total, a2=ang+frac*Math.PI*2, large=(a2-ang)>Math.PI?1:0;
     const x1=cx+R*Math.cos(ang), y1=cy+R*Math.sin(ang);
     const x2=cx+R*Math.cos(a2),  y2=cy+R*Math.sin(a2);
     const x3=cx+r*Math.cos(a2),  y3=cy+r*Math.sin(a2);
     const x4=cx+r*Math.cos(ang), y4=cy+r*Math.sin(ang);
-    paths+=`<path d="M${x1} ${y1} A${R} ${R} 0 ${large} 1 ${x2} ${y2} L${x3} ${y3} A${r} ${r} 0 ${large} 0 ${x4} ${y4} Z" fill="${it.c}" stroke="var(--bg-elevated)" stroke-width="1.5"/>`;
-    if(frac>=0.06){
-      const am=(ang+a2)/2;
-      labels+=`<text x="${cx+rl*Math.cos(am)}" y="${cy+rl*Math.sin(am)+4}" text-anchor="middle" font-size="12" font-weight="700" fill="#0d1117">${it.n}</text>`;
-    }
+    paths+=`<path d="M${x1.toFixed(1)} ${y1.toFixed(1)} A${R} ${R} 0 ${large} 1 ${x2.toFixed(1)} ${y2.toFixed(1)} L${x3.toFixed(1)} ${y3.toFixed(1)} A${r} ${r} 0 ${large} 0 ${x4.toFixed(1)} ${y4.toFixed(1)} Z" fill="${it.c}" stroke="var(--bg-surface)" stroke-width="2"/>`;
+    segs.push({...it, am:(ang+a2)/2});
     ang=a2;
   });
-  return `<svg width="132" height="132" viewBox="0 0 132 132" style="flex-shrink:0">${paths}${labels}
-    <text x="66" y="64" text-anchor="middle" font-size="20" font-weight="700" fill="var(--text-primary)">${total}</text>
-    <text x="66" y="79" text-anchor="middle" font-size="9" fill="var(--text-muted)" letter-spacing="0.5">BUGS</text></svg>`;
+
+  // Reparto de etiquetas: lado según el ángulo, con separación mínima vertical
+  const GAP=54;
+  ['der','izq'].forEach(lado=>{
+    const arr=segs.filter(s2=>(Math.cos(s2.am)>=0)===(lado==='der'))
+                  .map(s2=>{ s2.y=cy+(R+22)*Math.sin(s2.am); return s2; })
+                  .sort((a,b)=>a.y-b.y);
+    for(let i=1;i<arr.length;i++) if(arr[i].y-arr[i-1].y<GAP) arr[i].y=arr[i-1].y+GAP;
+    const exceso=arr.length?arr[arr.length-1].y-(H-40):0;
+    if(exceso>0) arr.forEach(a=>a.y-=exceso);
+    arr.forEach(a=>{ a.lado=lado; });
+  });
+
+  const etiquetas=segs.map(s2=>{
+    const der=s2.lado==='der';
+    const xa=cx+(R+4)*Math.cos(s2.am), ya=cy+(R+4)*Math.sin(s2.am);
+    const xb=cx+(R+20)*Math.cos(s2.am), yb=cy+(R+20)*Math.sin(s2.am);
+    const xc=der?cx+R+56:cx-R-56;
+    const xt=der?xc+8:xc-8;
+    const anchor=der?'start':'end';
+    return `<g style="cursor:pointer" onclick="toggleBugCat('${esc(k)}','${tipo}','${esc(s2.lbl)}')">
+      <polyline points="${xa.toFixed(1)},${ya.toFixed(1)} ${xb.toFixed(1)},${yb.toFixed(1)} ${xc},${s2.y.toFixed(1)}" fill="none" stroke="${s2.c}" stroke-width="1.5"/>
+      <circle cx="${xc}" cy="${s2.y.toFixed(1)}" r="3" fill="${s2.c}"/>
+      <text x="${xt}" y="${(s2.y-4).toFixed(1)}" text-anchor="${anchor}" font-size="14" font-weight="700" fill="${s2.c}">${s2.n}
+        <tspan font-size="12.5" font-weight="500" fill="var(--text-primary)"> ${esc(s2.lbl)}</tspan></text>
+      <text x="${xt}" y="${(s2.y+12).toFixed(1)}" text-anchor="${anchor}" font-size="11" fill="var(--text-muted)">${s2.est}h est · ${Math.round(s2.reg*10)/10}h reg</text>
+    </g>`;
+  }).join('');
+
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px;display:block;margin:0 auto">
+    ${paths}${etiquetas}
+    <text x="${cx}" y="${cy-2}" text-anchor="middle" font-size="30" font-weight="700" fill="var(--text-primary)">${total}</text>
+    <text x="${cx}" y="${cy+18}" text-anchor="middle" font-size="10" fill="var(--text-muted)" letter-spacing="1">BUGS</text>
+  </svg>`;
 }
 
 function bgBloqueDetalle(titulo, items, k, tipo){
   const off=bugOffSet(k,tipo);
   const activos=items.filter(i=>i.n && !off.has(i.lbl));
   const total=activos.reduce((s,i)=>s+i.n,0);
-  const leyenda=items.filter(i=>i.n).map(i=>{
-    const apagado=off.has(i.lbl);
-    return `
-    <div onclick="toggleBugCat('${esc(k)}','${tipo}','${esc(i.lbl)}')" title="Clic para incluir o excluir"
-      style="display:flex;align-items:center;gap:9px;padding:5px 9px;border-radius:6px;cursor:pointer;
-      background:var(--bg-elevated);border-left:3px solid ${apagado?'var(--border)':i.c};opacity:${apagado?'.4':'1'}">
-      <span style="font-size:15px;font-weight:700;color:${apagado?'var(--text-dim)':i.c};min-width:24px;text-align:right">${i.n}</span>
-      <span style="display:flex;flex-direction:column;line-height:1.3;min-width:0">
-        <span style="font-size:12px;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${apagado?'text-decoration:line-through':''}">${esc(i.lbl)}</span>
-        <span style="font-size:10px;color:var(--text-dim);white-space:nowrap">${i.est}h est · ${Math.round(i.reg*10)/10}h reg</span>
-      </span>
-    </div>`;}).join('') || '<div style="font-size:12px;color:var(--text-muted)">Sin datos</div>';
-  const nOff=items.filter(i=>i.n && off.has(i.lbl)).length;
-  return `<div style="flex:1;min-width:270px;background:var(--bg-surface);border:1px solid var(--border);border-radius:9px;padding:14px">
-    <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:12px">
-      <span style="font-size:11px;color:var(--text-muted);letter-spacing:.06em">${titulo}</span>
-      ${nOff?`<button type="button" class="bg-chip bg-chip-sm" onclick="bugOffSet('${esc(k)}','${tipo}').clear();renderBugsTabla()">Ver todo</button>`:''}
-    </div>
-    <div style="display:flex;align-items:center;justify-content:center;gap:16px">
-      ${bgDonut(activos,total)}
-      <div style="display:flex;flex-direction:column;gap:5px;min-width:0">${leyenda}</div>
-    </div>
+  const ocultos=items.filter(i=>i.n && off.has(i.lbl));
+  const chipsOff=ocultos.length?`<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:10px">
+      ${ocultos.map(i=>`<button type="button" class="bg-chip bg-chip-sm" style="color:var(--text-dim);border-style:dashed"
+        onclick="toggleBugCat('${esc(k)}','${tipo}','${esc(i.lbl)}')">${esc(i.lbl)} ${i.n}</button>`).join('')}
+      <button type="button" class="bg-chip bg-chip-sm" onclick="bugOffSet('${esc(k)}','${tipo}').clear();renderBugsTabla()">Ver todo</button>
+    </div>`:'';
+  return `<div style="flex:1;min-width:420px;background:var(--bg-surface);border:1px solid var(--border);border-radius:9px;padding:14px">
+    <div style="font-size:11px;color:var(--text-muted);letter-spacing:.06em;margin-bottom:6px;text-align:center">${titulo}</div>
+    ${bgDonut(activos,total,k,tipo)}
+    ${chipsOff}
   </div>`;
 }
 
