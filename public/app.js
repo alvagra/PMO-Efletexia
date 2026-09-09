@@ -401,6 +401,51 @@ let bugsRows = [];         // normalizado
 let bugsAbierto = false;
 let bugEstadosSel = new Set();   // estados seleccionados en el filtro (multi)
 let bugPrioSel = new Set();      // prioridades seleccionadas en el filtro (multi)
+let bugDetalleAbierto = new Set(); // proyectos con el panel de detalle desplegado
+
+function toggleBugDetalle(k){
+  if(bugDetalleAbierto.has(k)) bugDetalleAbierto.delete(k); else bugDetalleAbierto.add(k);
+  renderBugsTabla();
+}
+
+// Donut SVG + leyenda con cantidad y horas por categoría
+function bgDonut(items, total){
+  if(!total) return '';
+  const R=52, r=30, cx=62, cy=62;
+  let ang=-Math.PI/2, paths='';
+  items.forEach(it=>{
+    if(!it.n) return;
+    const a2=ang+(it.n/total)*Math.PI*2;
+    const large=(a2-ang)>Math.PI?1:0;
+    const x1=cx+R*Math.cos(ang), y1=cy+R*Math.sin(ang);
+    const x2=cx+R*Math.cos(a2),  y2=cy+R*Math.sin(a2);
+    const x3=cx+r*Math.cos(a2),  y3=cy+r*Math.sin(a2);
+    const x4=cx+r*Math.cos(ang), y4=cy+r*Math.sin(ang);
+    paths+=`<path d="M${x1} ${y1} A${R} ${R} 0 ${large} 1 ${x2} ${y2} L${x3} ${y3} A${r} ${r} 0 ${large} 0 ${x4} ${y4} Z" fill="${it.c}"/>`;
+    ang=a2;
+  });
+  return `<svg width="124" height="124" viewBox="0 0 124 124" style="flex-shrink:0">${paths}
+    <text x="62" y="60" text-anchor="middle" font-size="19" font-weight="700" fill="var(--text-primary)">${total}</text>
+    <text x="62" y="75" text-anchor="middle" font-size="9" fill="var(--text-muted)">bugs</text></svg>`;
+}
+
+function bgBloqueDetalle(titulo, items){
+  const total=items.reduce((s,i)=>s+i.n,0);
+  const leyenda=items.filter(i=>i.n).map(i=>`
+    <div style="display:flex;align-items:center;gap:7px;font-size:12px;padding:3px 0">
+      <span style="width:9px;height:9px;border-radius:2px;background:${i.c};flex-shrink:0"></span>
+      <span style="flex:1;color:var(--text-muted)">${esc(i.lbl)}</span>
+      <span style="font-weight:600;min-width:22px;text-align:right">${i.n}</span>
+      <span style="color:var(--text-dim);min-width:104px;text-align:right">${i.est}h est / ${Math.round(i.reg*10)/10}h reg</span>
+    </div>`).join('') || '<div style="font-size:12px;color:var(--text-muted)">Sin datos</div>';
+  return `<div style="flex:1;min-width:290px">
+    <div style="font-size:11px;color:var(--text-muted);letter-spacing:.04em;margin-bottom:8px">${titulo}</div>
+    <div style="display:flex;align-items:center;gap:16px">
+      ${bgDonut(items,total)}
+      <div style="flex:1">${leyenda}</div>
+    </div>
+  </div>`;
+}
 
 // Prioridad de Jira → etiqueta del dashboard
 const BG_PRIO = {
@@ -589,18 +634,40 @@ function renderBugsTabla(){
         <td style="white-space:nowrap;color:${vencido?'#ef4444':(b.fin?'var(--text-muted)':'#F5B800')}">${b.fin?fmtD(b.fin):'sin fecha'}</td>
         <td style="text-align:right;color:${b.est?'var(--text-primary)':'var(--text-dim)'}">${b.est?b.est+'h':'—'}</td>
         <td style="text-align:right;color:${b.reg>b.est&&b.est>0?'#ef4444':'var(--text-primary)'}">${b.reg?b.reg+'h':'—'}</td>
-        <td style="text-align:center"><button class="bg-ciclo-btn" type="button" onclick="verCicloBug('${b.key}')" title="Ciclo de vida">⧗</button></td>
       </tr>`;
     }).join('');
-    return `<tr class="bg-grupo"><td colspan="10">
+    // Panel de detalle: distribución por prioridad y por estado, con horas
+    const abierto=bugDetalleAbierto.has(k);
+    let detalle='';
+    if(abierto){
+      const agrupar=(campo,colorFn)=>{
+        const m={};
+        g.forEach(b=>{
+          const key=b[campo]||'—';
+          if(!m[key]) m[key]={lbl:key,n:0,est:0,reg:0,c:colorFn(key)};
+          m[key].n++; m[key].est+=b.est; m[key].reg+=b.reg;
+        });
+        return Object.values(m).sort((a,b)=>b.n-a.n);
+      };
+      const porPrio=agrupar('prioridad',v=>bgPrio(Object.keys(BG_PRIO).find(x=>BG_PRIO[x].lbl===v)||v).c);
+      const porEst =agrupar('estado',   v=>bgEstadoCls(v).c);
+      detalle=`<tr><td colspan="9" style="background:var(--bg-elevated);padding:16px 18px">
+        <div style="display:flex;gap:28px;flex-wrap:wrap">
+          ${bgBloqueDetalle('POR PRIORIDAD',porPrio)}
+          ${bgBloqueDetalle('POR ESTADO',porEst)}
+        </div>
+      </td></tr>`;
+    }
+    return `<tr class="bg-grupo"><td colspan="9">
       ${esc(p.codigo?p.codigo+' · ':'')}${esc(p.proyecto)}
       <span style="font-weight:400;color:var(--text-muted);margin-left:8px">${g.length} bug${g.length===1?'':'s'} · ${gAb} abierto${gAb===1?'':'s'} · ${gEst}h est. / ${gReg}h reg.</span>
-    </td></tr>${filas}`;
+      <button class="bg-detalle-btn" type="button" onclick="toggleBugDetalle('${esc(k)}')">${abierto?'Ocultar':'Detalle'}</button>
+    </td></tr>${detalle}${filas}`;
   }).join('');
 
   wrap.innerHTML=`<table class="bg-tabla">
     <thead><tr><th>CLAVE</th><th>BUG</th><th>PRIORIDAD</th><th>ESTADO</th><th>RESPONSABLE</th><th>INICIO</th><th>VENCE</th>
-    <th style="text-align:right">HRS EST.</th><th style="text-align:right">HRS REG.</th><th style="text-align:center">CICLO</th></tr></thead>
+    <th style="text-align:right">HRS EST.</th><th style="text-align:right">HRS REG.</th></tr></thead>
     <tbody>${cuerpo}</tbody></table>`;
 }
 
