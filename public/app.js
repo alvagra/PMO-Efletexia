@@ -439,8 +439,9 @@ function bgColorEstado(nombre, i){
 
 // Donut con etiquetas repartidas alrededor y ramita conectora a su porción
 function bgDonut(items, total, k, tipo){
-  if(!total) return '<div style="font-size:12px;color:var(--text-muted);padding:20px">Sin datos</div>';
-  const W=680, H=380, cx=250, cy=190, R=118, r=72;
+  if(!total) return '<div style="font-size:12px;color:var(--text-muted);padding:20px;text-align:center">Sin datos</div>';
+  // Lienzo simétrico: mismo margen a izquierda y derecha para que nada se corte
+  const W=880, H=400, cx=440, cy=196, R=124, r=76, COD=62;
   let ang=-Math.PI/2, segs=[], paths='';
   items.forEach(it=>{
     const frac=it.n/total, a2=ang+frac*Math.PI*2, large=(a2-ang)>Math.PI?1:0;
@@ -448,43 +449,45 @@ function bgDonut(items, total, k, tipo){
     const x2=cx+R*Math.cos(a2),  y2=cy+R*Math.sin(a2);
     const x3=cx+r*Math.cos(a2),  y3=cy+r*Math.sin(a2);
     const x4=cx+r*Math.cos(ang), y4=cy+r*Math.sin(ang);
-    paths+=`<path d="M${x1.toFixed(1)} ${y1.toFixed(1)} A${R} ${R} 0 ${large} 1 ${x2.toFixed(1)} ${y2.toFixed(1)} L${x3.toFixed(1)} ${y3.toFixed(1)} A${r} ${r} 0 ${large} 0 ${x4.toFixed(1)} ${y4.toFixed(1)} Z" fill="${it.c}" stroke="var(--bg-surface)" stroke-width="2"/>`;
+    paths+=`<path d="M${x1.toFixed(1)} ${y1.toFixed(1)} A${R} ${R} 0 ${large} 1 ${x2.toFixed(1)} ${y2.toFixed(1)} L${x3.toFixed(1)} ${y3.toFixed(1)} A${r} ${r} 0 ${large} 0 ${x4.toFixed(1)} ${y4.toFixed(1)} Z" fill="${it.c}" stroke="var(--bg-surface)" stroke-width="2.5"/>`;
     segs.push({...it, am:(ang+a2)/2});
     ang=a2;
   });
 
-  // Reparto de etiquetas: lado según el ángulo, con separación mínima vertical
-  const GAP=54;
+  // Reparto vertical por lado, con separación mínima para que no se pisen
+  const GAP=52, TOP=34, BOT=H-30;
   ['der','izq'].forEach(lado=>{
-    const arr=segs.filter(s2=>(Math.cos(s2.am)>=0)===(lado==='der'))
-                  .map(s2=>{ s2.y=cy+(R+22)*Math.sin(s2.am); return s2; })
+    const arr=segs.filter(x=>(Math.cos(x.am)>=0)===(lado==='der'))
+                  .map(x=>{ x.y=cy+(R+16)*Math.sin(x.am); x.lado=lado; return x; })
                   .sort((a,b)=>a.y-b.y);
     for(let i=1;i<arr.length;i++) if(arr[i].y-arr[i-1].y<GAP) arr[i].y=arr[i-1].y+GAP;
-    const exceso=arr.length?arr[arr.length-1].y-(H-40):0;
-    if(exceso>0) arr.forEach(a=>a.y-=exceso);
-    arr.forEach(a=>{ a.lado=lado; });
+    if(arr.length){
+      const ex=arr[arr.length-1].y-BOT;
+      if(ex>0) arr.forEach(a=>a.y-=ex);
+      if(arr[0].y<TOP){ const d=TOP-arr[0].y; arr.forEach(a=>a.y+=d); }
+    }
   });
 
-  const etiquetas=segs.map(s2=>{
-    const der=s2.lado==='der';
-    const xa=cx+(R+4)*Math.cos(s2.am), ya=cy+(R+4)*Math.sin(s2.am);
-    const xb=cx+(R+20)*Math.cos(s2.am), yb=cy+(R+20)*Math.sin(s2.am);
-    const xc=der?cx+R+56:cx-R-56;
-    const xt=der?xc+8:xc-8;
-    const anchor=der?'start':'end';
-    return `<g style="cursor:pointer" onclick="toggleBugCat('${esc(k)}','${tipo}','${esc(s2.lbl)}')">
-      <polyline points="${xa.toFixed(1)},${ya.toFixed(1)} ${xb.toFixed(1)},${yb.toFixed(1)} ${xc},${s2.y.toFixed(1)}" fill="none" stroke="${s2.c}" stroke-width="1.5"/>
-      <circle cx="${xc}" cy="${s2.y.toFixed(1)}" r="3" fill="${s2.c}"/>
-      <text x="${xt}" y="${(s2.y-4).toFixed(1)}" text-anchor="${anchor}" font-size="14" font-weight="700" fill="${s2.c}">${s2.n}
-        <tspan font-size="12.5" font-weight="500" fill="var(--text-primary)"> ${esc(s2.lbl)}</tspan></text>
-      <text x="${xt}" y="${(s2.y+12).toFixed(1)}" text-anchor="${anchor}" font-size="11" fill="var(--text-muted)">${s2.est}h est · ${Math.round(s2.reg*10)/10}h reg</text>
+  const etiquetas=segs.map(x=>{
+    const der=x.lado==='der', sg=der?1:-1;
+    const xa=cx+(R+3)*Math.cos(x.am), ya=cy+(R+3)*Math.sin(x.am);
+    const xb=cx+sg*(R+22);                 // quiebre corto y ya a la altura del texto
+    const xc=cx+sg*(R+COD);
+    const xt=xc+sg*9;
+    return `<g style="cursor:pointer" onclick="toggleBugCat('${esc(k)}','${tipo}','${esc(x.lbl)}')">
+      <path d="M${xa.toFixed(1)} ${ya.toFixed(1)} L${xb.toFixed(1)} ${x.y.toFixed(1)} L${xc.toFixed(1)} ${x.y.toFixed(1)}"
+        fill="none" stroke="${x.c}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" opacity=".75"/>
+      <circle cx="${xc.toFixed(1)}" cy="${x.y.toFixed(1)}" r="3.2" fill="${x.c}"/>
+      <text x="${xt.toFixed(1)}" y="${(x.y-3).toFixed(1)}" text-anchor="${der?'start':'end'}" font-size="15" font-weight="700" fill="${x.c}">${x.n}<tspan font-size="13" font-weight="500" fill="var(--text-primary)"> ${esc(x.lbl)}</tspan></text>
+      <text x="${xt.toFixed(1)}" y="${(x.y+14).toFixed(1)}" text-anchor="${der?'start':'end'}" font-size="11" fill="var(--text-muted)">${x.est}h est · ${Math.round(x.reg*10)/10}h reg</text>
     </g>`;
   }).join('');
 
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px;display:block;margin:0 auto">
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block">
+    <circle cx="${cx}" cy="${cy}" r="${R+5}" fill="none" stroke="var(--border)" stroke-width="1" opacity=".5"/>
     ${paths}${etiquetas}
-    <text x="${cx}" y="${cy-2}" text-anchor="middle" font-size="30" font-weight="700" fill="var(--text-primary)">${total}</text>
-    <text x="${cx}" y="${cy+18}" text-anchor="middle" font-size="10" fill="var(--text-muted)" letter-spacing="1">BUGS</text>
+    <text x="${cx}" y="${cy+2}" text-anchor="middle" font-size="34" font-weight="700" fill="var(--text-primary)">${total}</text>
+    <text x="${cx}" y="${cy+22}" text-anchor="middle" font-size="10" fill="var(--text-muted)" letter-spacing="1.5">BUGS</text>
   </svg>`;
 }
 
