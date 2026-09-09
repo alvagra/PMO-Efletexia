@@ -72,6 +72,22 @@ select.filter-input option{background:var(--bg-elevated)}
 .bg-chip{background:var(--bg-elevated);border:1px solid var(--border);border-radius:5px;padding:5px 11px;font-size:12px;color:var(--text-muted);cursor:pointer;font-family:var(--font);height:30px}
 .bg-chip:hover{background:var(--bg-hover);color:var(--text-primary)}
 .bg-chip.on{background:var(--blue-bg);border-color:var(--blue);color:#fff}
+.mt-wrap{padding:16px 20px}
+.mt-kpis{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.mt-kpi{background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;padding:12px 18px;min-width:130px}
+.mt-kpi-lbl{font-size:10px;color:var(--text-muted);letter-spacing:.05em;margin-bottom:6px}
+.mt-kpi-val{font-size:24px;font-weight:700;line-height:1}
+.mt-kpi-sub{font-size:11px;color:var(--text-dim);margin-top:5px}
+.mt-card{background:var(--bg-surface);border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-bottom:16px}
+.mt-card-t{font-size:12px;color:var(--text-muted);letter-spacing:.05em;margin-bottom:14px}
+.mt-tabla{width:100%;border-collapse:collapse;font-size:12px}
+.mt-tabla th{text-align:left;font-weight:500;color:var(--text-muted);font-size:10px;letter-spacing:.04em;padding:7px 9px;border-bottom:1px solid var(--border);white-space:nowrap}
+.mt-tabla td{padding:9px;border-bottom:1px solid var(--border)}
+.mt-tabla tr:hover td{background:var(--bg-hover)}
+.mt-bar-row{display:flex;align-items:center;gap:11px;margin-bottom:9px}
+.mt-bar-lbl{width:230px;flex-shrink:0;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mt-bar-track{flex:1;height:14px;background:var(--bg-hover);border-radius:3px;overflow:hidden}
+.mt-empty{padding:40px;text-align:center;color:var(--text-muted);font-size:13px}
 .bg-chip-sm{height:24px;padding:2px 10px;font-size:11px}
 .bg-detalle-btn{background:transparent;border:1px solid var(--border);border-radius:4px;color:var(--blue);cursor:pointer;font-size:11px;line-height:1;padding:3px 10px;margin-left:10px;font-family:var(--font);font-weight:500;letter-spacing:.02em}
 .bg-detalle-btn:hover{background:var(--blue-bg);color:#fff;border-color:var(--blue)}
@@ -556,6 +572,9 @@ a.jlink:hover{text-decoration:underline}
   <div class="tab" data-tab="entregables">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M10 5l3 3-3 3"/><path d="M3 4v8"/></svg>Entregables
   </div>
+  <div class="tab" data-tab="metricas" data-permiso="tab.metricas">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 13h12"/><path d="M4 13V8M8 13V4M12 13v-3"/></svg>Métricas
+  </div>
   <div class="tab" data-tab="costos" data-permiso="tab.costos">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v12"/><path d="M11 5H6.5a1.75 1.75 0 0 0 0 3.5h3a1.75 1.75 0 0 1 0 3.5H5"/></svg>Costos
   </div>
@@ -828,6 +847,10 @@ a.jlink:hover{text-decoration:underline}
   </div>
 </div>
 
+
+<div class="tab-panel" id="panel-metricas" data-permiso="tab.metricas">
+  <div class="mt-wrap" id="mt-contenido"></div>
+</div>
 
 <div class="tab-panel" id="panel-costos" data-permiso="tab.costos">
 
