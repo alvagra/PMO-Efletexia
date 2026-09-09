@@ -403,6 +403,17 @@ let bugEstadosSel = new Set();   // estados seleccionados en el filtro (multi)
 let bugPrioSel = new Set();      // prioridades seleccionadas en el filtro (multi)
 let bugDetalleAbierto = new Set(); // proyectos con el panel de detalle desplegado
 const bugDetalleScope = {};        // alcance propio de cada panel: todos | abiertos | cerrados | vencidos
+const bugDetalleOff = {};          // categorías desactivadas por panel: {proy:{prio:Set,est:Set}}
+
+function bugOffSet(k,tipo){
+  if(!bugDetalleOff[k]) bugDetalleOff[k]={prio:new Set(),est:new Set()};
+  return bugDetalleOff[k][tipo];
+}
+function toggleBugCat(k,tipo,val){
+  const st=bugOffSet(k,tipo);
+  if(st.has(val)) st.delete(val); else st.add(val);
+  renderBugsTabla();
+}
 
 function setBugDetalleScope(k,v){ bugDetalleScope[k]=v; renderBugsTabla(); }
 
@@ -450,20 +461,31 @@ function bgDonut(items, total){
     <text x="66" y="79" text-anchor="middle" font-size="9" fill="var(--text-muted)" letter-spacing="0.5">BUGS</text></svg>`;
 }
 
-function bgBloqueDetalle(titulo, items){
-  const total=items.reduce((s,i)=>s+i.n,0);
-  const leyenda=items.filter(i=>i.n).map(i=>`
-    <div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:4px 8px;border-radius:5px;background:var(--bg-surface)">
-      <span style="width:10px;height:10px;border-radius:3px;background:${i.c};flex-shrink:0"></span>
-      <span style="color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(i.lbl)}</span>
-      <span style="font-weight:700;color:${i.c};margin-left:auto">${i.n}</span>
-      <span style="color:var(--text-dim);font-size:11px;white-space:nowrap">${i.est}h/${Math.round(i.reg*10)/10}h</span>
-    </div>`).join('') || '<div style="font-size:12px;color:var(--text-muted)">Sin datos</div>';
-  return `<div style="flex:1;min-width:250px;background:var(--bg-surface);border:1px solid var(--border);border-radius:9px;padding:14px">
-    <div style="font-size:11px;color:var(--text-muted);letter-spacing:.06em;margin-bottom:10px;text-align:center">${titulo}</div>
-    <div style="display:flex;align-items:center;gap:14px">
-      ${bgDonut(items,total)}
-      <div style="flex:1;display:flex;flex-direction:column;gap:3px;min-width:0">${leyenda}</div>
+function bgBloqueDetalle(titulo, items, k, tipo){
+  const off=bugOffSet(k,tipo);
+  const activos=items.filter(i=>i.n && !off.has(i.lbl));
+  const total=activos.reduce((s,i)=>s+i.n,0);
+  const leyenda=items.filter(i=>i.n).map(i=>{
+    const apagado=off.has(i.lbl);
+    return `
+    <div onclick="toggleBugCat('${esc(k)}','${tipo}','${esc(i.lbl)}')" title="Clic para incluir o excluir"
+      style="display:flex;align-items:center;gap:9px;padding:5px 9px;border-radius:6px;cursor:pointer;
+      background:var(--bg-elevated);border-left:3px solid ${apagado?'var(--border)':i.c};opacity:${apagado?'.4':'1'}">
+      <span style="font-size:15px;font-weight:700;color:${apagado?'var(--text-dim)':i.c};min-width:24px;text-align:right">${i.n}</span>
+      <span style="display:flex;flex-direction:column;line-height:1.3;min-width:0">
+        <span style="font-size:12px;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${apagado?'text-decoration:line-through':''}">${esc(i.lbl)}</span>
+        <span style="font-size:10px;color:var(--text-dim);white-space:nowrap">${i.est}h est · ${Math.round(i.reg*10)/10}h reg</span>
+      </span>
+    </div>`;}).join('') || '<div style="font-size:12px;color:var(--text-muted)">Sin datos</div>';
+  const nOff=items.filter(i=>i.n && off.has(i.lbl)).length;
+  return `<div style="flex:1;min-width:270px;background:var(--bg-surface);border:1px solid var(--border);border-radius:9px;padding:14px">
+    <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:12px">
+      <span style="font-size:11px;color:var(--text-muted);letter-spacing:.06em">${titulo}</span>
+      ${nOff?`<button type="button" class="bg-chip bg-chip-sm" onclick="bugOffSet('${esc(k)}','${tipo}').clear();renderBugsTabla()">Ver todo</button>`:''}
+    </div>
+    <div style="display:flex;align-items:center;justify-content:center;gap:16px">
+      ${bgDonut(activos,total)}
+      <div style="display:flex;flex-direction:column;gap:5px;min-width:0">${leyenda}</div>
     </div>
   </div>`;
 }
@@ -690,8 +712,8 @@ function renderBugsTabla(){
           <span style="margin-left:auto;font-size:11px;color:var(--text-muted)">${gd.length} de ${g.length} bugs</span>
         </div>
         <div style="display:flex;gap:16px;flex-wrap:wrap">
-          ${bgBloqueDetalle('POR PRIORIDAD',porPrio)}
-          ${bgBloqueDetalle('POR ESTADO',porEst)}
+          ${bgBloqueDetalle('POR PRIORIDAD',porPrio,k,'prio')}
+          ${bgBloqueDetalle('POR ESTADO',porEst,k,'est')}
         </div>
       </td></tr>`;
     }
