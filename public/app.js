@@ -3316,8 +3316,7 @@ async function loadMetricas(){
 
 function metFiltradas(){
   const t=document.getElementById('mt-tipo')?.value||'';
-  const p=document.getElementById('mt-proy')?.value||'';
-  return metRows.filter(r=>(!t||r.tipo===t)&&(!p||r.proyKey===p));
+  return metRows.filter(r=>!t||r.tipo===t);
 }
 
 function renderMetricas(){
@@ -3327,17 +3326,13 @@ function renderMetricas(){
       '<span style="font-size:11px">La métrica se activa sola en cuanto el campo empiece a llenarse.</span></div>';
     return;
   }
-  const proys=[...new Map(metRows.filter(r=>r.proyKey).map(r=>[r.proyKey,r])).values()]
-    .sort((a,b)=>a.proyecto.localeCompare(b.proyecto));
   cont.innerHTML=`
     <div class="bg-filtros" style="margin-bottom:14px">
       <select id="mt-tipo"><option value="">Historias y bugs</option><option>Historia</option><option>Bug</option></select>
-      <select id="mt-proy"><option value="">Todos los proyectos</option>${
-        proys.map(p=>`<option value="${esc(p.proyKey)}">${esc(p.codigo?p.codigo+' · ':'')}${esc(p.proyecto)}</option>`).join('')}</select>
       <button class="btn-export" id="mt-csv" type="button">CSV</button>
     </div>
     <div id="mt-cuerpo"></div>`;
-  ['mt-tipo','mt-proy'].forEach(id=>document.getElementById(id).addEventListener('change',renderMetricasCuerpo));
+  document.getElementById('mt-tipo').addEventListener('change',renderMetricasCuerpo);
   document.getElementById('mt-csv').addEventListener('click',exportMetricasCSV);
   renderMetricasCuerpo();
 }
