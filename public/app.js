@@ -402,47 +402,68 @@ let bugsAbierto = false;
 let bugEstadosSel = new Set();   // estados seleccionados en el filtro (multi)
 let bugPrioSel = new Set();      // prioridades seleccionadas en el filtro (multi)
 let bugDetalleAbierto = new Set(); // proyectos con el panel de detalle desplegado
+const bugDetalleScope = {};        // alcance propio de cada panel: todos | abiertos | cerrados | vencidos
+
+function setBugDetalleScope(k,v){ bugDetalleScope[k]=v; renderBugsTabla(); }
 
 function toggleBugDetalle(k){
   if(bugDetalleAbierto.has(k)) bugDetalleAbierto.delete(k); else bugDetalleAbierto.add(k);
   renderBugsTabla();
 }
 
-// Donut SVG + leyenda con cantidad y horas por categoría
+// Paleta propia para el donut: cada estado con color distinto
+const BG_EST_COLOR = {
+  'tareas por hacer':'#8b949e', 'to do':'#8b949e', 'backlog':'#6e7681',
+  'en curso':'#F5B800', 'in progress':'#F5B800',
+  'en revision':'#58a6ff', 'in review':'#58a6ff',
+  'observado':'#bc8cff',
+  'blocked':'#ef4444', 'bloqueado':'#ef4444',
+  'cerrado':'#3fb950', 'closed':'#3fb950', 'finalizada':'#3fb950'
+};
+const BG_FALLBACK = ['#39c5f0','#f0883e','#ff7b72','#56d364','#d29922','#ffa657'];
+function bgColorEstado(nombre, i){
+  const k=(nombre||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+  return BG_EST_COLOR[k] || BG_FALLBACK[i % BG_FALLBACK.length];
+}
+
+// Donut SVG con la cantidad rotulada sobre cada segmento
 function bgDonut(items, total){
   if(!total) return '';
-  const R=52, r=30, cx=62, cy=62;
-  let ang=-Math.PI/2, paths='';
+  const R=56, r=34, cx=66, cy=66, rl=(R+r)/2;
+  let ang=-Math.PI/2, paths='', labels='';
   items.forEach(it=>{
     if(!it.n) return;
-    const a2=ang+(it.n/total)*Math.PI*2;
-    const large=(a2-ang)>Math.PI?1:0;
+    const frac=it.n/total, a2=ang+frac*Math.PI*2, large=(a2-ang)>Math.PI?1:0;
     const x1=cx+R*Math.cos(ang), y1=cy+R*Math.sin(ang);
     const x2=cx+R*Math.cos(a2),  y2=cy+R*Math.sin(a2);
     const x3=cx+r*Math.cos(a2),  y3=cy+r*Math.sin(a2);
     const x4=cx+r*Math.cos(ang), y4=cy+r*Math.sin(ang);
-    paths+=`<path d="M${x1} ${y1} A${R} ${R} 0 ${large} 1 ${x2} ${y2} L${x3} ${y3} A${r} ${r} 0 ${large} 0 ${x4} ${y4} Z" fill="${it.c}"/>`;
+    paths+=`<path d="M${x1} ${y1} A${R} ${R} 0 ${large} 1 ${x2} ${y2} L${x3} ${y3} A${r} ${r} 0 ${large} 0 ${x4} ${y4} Z" fill="${it.c}" stroke="var(--bg-elevated)" stroke-width="1.5"/>`;
+    if(frac>=0.06){
+      const am=(ang+a2)/2;
+      labels+=`<text x="${cx+rl*Math.cos(am)}" y="${cy+rl*Math.sin(am)+4}" text-anchor="middle" font-size="12" font-weight="700" fill="#0d1117">${it.n}</text>`;
+    }
     ang=a2;
   });
-  return `<svg width="124" height="124" viewBox="0 0 124 124" style="flex-shrink:0">${paths}
-    <text x="62" y="60" text-anchor="middle" font-size="19" font-weight="700" fill="var(--text-primary)">${total}</text>
-    <text x="62" y="75" text-anchor="middle" font-size="9" fill="var(--text-muted)">bugs</text></svg>`;
+  return `<svg width="132" height="132" viewBox="0 0 132 132" style="flex-shrink:0">${paths}${labels}
+    <text x="66" y="64" text-anchor="middle" font-size="20" font-weight="700" fill="var(--text-primary)">${total}</text>
+    <text x="66" y="79" text-anchor="middle" font-size="9" fill="var(--text-muted)" letter-spacing="0.5">BUGS</text></svg>`;
 }
 
 function bgBloqueDetalle(titulo, items){
   const total=items.reduce((s,i)=>s+i.n,0);
   const leyenda=items.filter(i=>i.n).map(i=>`
-    <div style="display:flex;align-items:center;gap:7px;font-size:12px;padding:3px 0">
-      <span style="width:9px;height:9px;border-radius:2px;background:${i.c};flex-shrink:0"></span>
-      <span style="flex:1;color:var(--text-muted)">${esc(i.lbl)}</span>
-      <span style="font-weight:600;min-width:22px;text-align:right">${i.n}</span>
-      <span style="color:var(--text-dim);min-width:104px;text-align:right">${i.est}h est / ${Math.round(i.reg*10)/10}h reg</span>
+    <div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:4px 8px;border-radius:5px;background:var(--bg-surface)">
+      <span style="width:10px;height:10px;border-radius:3px;background:${i.c};flex-shrink:0"></span>
+      <span style="color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(i.lbl)}</span>
+      <span style="font-weight:700;color:${i.c};margin-left:auto">${i.n}</span>
+      <span style="color:var(--text-dim);font-size:11px;white-space:nowrap">${i.est}h/${Math.round(i.reg*10)/10}h</span>
     </div>`).join('') || '<div style="font-size:12px;color:var(--text-muted)">Sin datos</div>';
-  return `<div style="flex:1;min-width:290px">
-    <div style="font-size:11px;color:var(--text-muted);letter-spacing:.04em;margin-bottom:8px">${titulo}</div>
-    <div style="display:flex;align-items:center;gap:16px">
+  return `<div style="flex:1;min-width:250px;background:var(--bg-surface);border:1px solid var(--border);border-radius:9px;padding:14px">
+    <div style="font-size:11px;color:var(--text-muted);letter-spacing:.06em;margin-bottom:10px;text-align:center">${titulo}</div>
+    <div style="display:flex;align-items:center;gap:14px">
       ${bgDonut(items,total)}
-      <div style="flex:1">${leyenda}</div>
+      <div style="flex:1;display:flex;flex-direction:column;gap:3px;min-width:0">${leyenda}</div>
     </div>
   </div>`;
 }
@@ -640,19 +661,35 @@ function renderBugsTabla(){
     const abierto=bugDetalleAbierto.has(k);
     let detalle='';
     if(abierto){
+      const sc=bugDetalleScope[k]||'todos';
+      const gd=g.filter(b=>{
+        if(sc==='abiertos') return b.grupo!=='Cerrado';
+        if(sc==='cerrados') return b.grupo==='Cerrado';
+        if(sc==='vencidos') return b.fin && b.fin<hoy && b.grupo!=='Cerrado';
+        if(sc==='sinfecha') return !b.fin;
+        return true;
+      });
       const agrupar=(campo,colorFn)=>{
-        const m={};
-        g.forEach(b=>{
+        const m={}; let i=0;
+        gd.forEach(b=>{
           const key=b[campo]||'—';
-          if(!m[key]) m[key]={lbl:key,n:0,est:0,reg:0,c:colorFn(key)};
+          if(!m[key]) m[key]={lbl:key,n:0,est:0,reg:0,c:colorFn(key,i++)};
           m[key].n++; m[key].est+=b.est; m[key].reg+=b.reg;
         });
         return Object.values(m).sort((a,b)=>b.n-a.n);
       };
       const porPrio=agrupar('prioridad',v=>bgPrio(Object.keys(BG_PRIO).find(x=>BG_PRIO[x].lbl===v)||v).c);
-      const porEst =agrupar('estado',   v=>bgEstadoCls(v).c);
+      const porEst =agrupar('estado',   (v,i)=>bgColorEstado(v,i));
+      const opts=[['todos','Todos'],['abiertos','Abiertos'],['cerrados','Cerrados'],['vencidos','Vencidos'],['sinfecha','Sin fecha']];
+      const chipsScope=opts.map(([v,l])=>
+        `<button type="button" class="bg-chip bg-chip-sm${sc===v?' on':''}" onclick="setBugDetalleScope('${esc(k)}','${v}')">${l}</button>`).join('');
       detalle=`<tr><td colspan="9" style="background:var(--bg-elevated);padding:16px 18px">
-        <div style="display:flex;gap:28px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:13px">
+          <span style="font-size:11px;color:var(--text-muted);letter-spacing:.04em">FILTRAR ESTE PANEL</span>
+          <span class="bg-chips">${chipsScope}</span>
+          <span style="margin-left:auto;font-size:11px;color:var(--text-muted)">${gd.length} de ${g.length} bugs</span>
+        </div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap">
           ${bgBloqueDetalle('POR PRIORIDAD',porPrio)}
           ${bgBloqueDetalle('POR ESTADO',porEst)}
         </div>
