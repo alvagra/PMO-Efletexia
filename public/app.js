@@ -400,6 +400,19 @@ let bugsData = null;      // crudo de la API
 let bugsRows = [];         // normalizado
 let bugsAbierto = false;
 let bugEstadosSel = new Set();   // estados seleccionados en el filtro (multi)
+let bugPrioSel = new Set();      // prioridades seleccionadas en el filtro (multi)
+
+// Prioridad de Jira → etiqueta del dashboard
+const BG_PRIO = {
+  'highest': {lbl:'Crítico', c:'#ef4444', bg:'rgba(239,68,68,.15)', ord:1},
+  'high':    {lbl:'Alto',    c:'#f0883e', bg:'rgba(240,136,62,.15)', ord:2},
+  'low':     {lbl:'Medio',   c:'#F5B800', bg:'rgba(245,184,0,.15)',  ord:3},
+  'lowest':  {lbl:'Bajo',    c:'#3fb950', bg:'rgba(63,185,80,.15)',  ord:4}
+};
+function bgPrio(nombre){
+  const k=(nombre||'').toLowerCase().trim();
+  return BG_PRIO[k] || {lbl:nombre||'—', c:'var(--text-muted)', bg:'rgba(139,148,158,.15)', ord:5};
+}
 
 function bgEstadoCls(status){
   const s=(status||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
@@ -424,6 +437,7 @@ async function cargarBugs(){
       return {
         key:b.key,
         resumen:f.summary||b.key,
+        prioridad:bgPrio(f.priority?.name).lbl,
         estado:f.status?.name||'—',
         grupo:bgEstadoCls(f.status?.name).g,
         responsable:f.assignee?.displayName ? (resolveNombreDesdeJira(f.assignee.displayName)?.nombre||f.assignee.displayName) : '—',
@@ -448,6 +462,7 @@ function bugsFiltrados(){
   const q=(document.getElementById('bg-q')?.value||'').toLowerCase();
   const proy=document.getElementById('bg-proy')?.value||'';
   const est=bugEstadosSel;
+  const pri=bugPrioSel;
   const resp=document.getElementById('bg-resp')?.value||'';
   const desde=document.getElementById('bg-desde')?.value||'';
   const hasta=document.getElementById('bg-hasta')?.value||'';
@@ -456,6 +471,7 @@ function bugsFiltrados(){
     if(q && !(b.resumen.toLowerCase().includes(q)||b.key.toLowerCase().includes(q))) return false;
     if(proy && b.proyKey!==proy) return false;
     if(est.size && !est.has(b.estado)) return false;
+    if(pri.size && !pri.has(b.prioridad)) return false;
     if(resp && b.responsable!==resp) return false;
     if(sf && b.fin) return false;
     // El rango se aplica sobre la fecha de vencimiento
@@ -470,6 +486,8 @@ function renderBugsUI(){
   const proys=[...new Map(bugsRows.map(b=>[b.proyKey,b])).values()]
     .sort((a,b)=>a.proyecto.localeCompare(b.proyecto));
   const estados=[...new Set(bugsRows.map(b=>b.estado))].sort();
+  const prios=[...new Set(bugsRows.map(b=>b.prioridad))]
+    .sort((a,b)=>(Object.values(BG_PRIO).find(x=>x.lbl===a)?.ord||5)-(Object.values(BG_PRIO).find(x=>x.lbl===b)?.ord||5));
   const resps=[...new Set(bugsRows.map(b=>b.responsable))].sort();
   panel.innerHTML=`<div class="bg-wrap">
     <div class="bg-kpis" id="bg-kpis"></div>
@@ -479,6 +497,9 @@ function renderBugsUI(){
         proys.map(p=>`<option value="${esc(p.proyKey)}">${esc(p.codigo?p.codigo+' · ':'')}${esc(p.proyecto)}</option>`).join('')}</select>
       <span id="bg-est-chips" class="bg-chips">${
         estados.map(e=>`<button type="button" class="bg-chip" data-est="${esc(e)}">${esc(e)}</button>`).join('')}</span>
+      <span id="bg-prio-chips" class="bg-chips">${
+        prios.map(pr=>{const c=bgPrio(Object.keys(BG_PRIO).find(k=>BG_PRIO[k].lbl===pr)||pr);
+          return `<button type="button" class="bg-chip" data-prio="${esc(pr)}" style="color:${c.c}">${esc(pr)}</button>`;}).join('')}</span>
       <select id="bg-resp"><option value="">Todos los responsables</option>${
         resps.map(r=>`<option>${esc(r)}</option>`).join('')}</select>
       <span style="font-size:11px;color:var(--text-muted)">Vence</span>
@@ -493,6 +514,13 @@ function renderBugsUI(){
     const el=document.getElementById(id);
     if(el) el.addEventListener(el.tagName==='INPUT'&&el.type!=='date'&&el.type!=='checkbox'?'input':'change',renderBugsTabla);
   });
+  document.getElementById('bg-prio-chips').addEventListener('click',ev=>{
+    const b=ev.target.closest('.bg-chip'); if(!b) return;
+    const p=b.dataset.prio;
+    if(bugPrioSel.has(p)) bugPrioSel.delete(p); else bugPrioSel.add(p);
+    b.classList.toggle('on',bugPrioSel.has(p));
+    renderBugsTabla();
+  });
   document.getElementById('bg-est-chips').addEventListener('click',ev=>{
     const b=ev.target.closest('.bg-chip'); if(!b) return;
     const e=b.dataset.est;
@@ -503,8 +531,8 @@ function renderBugsUI(){
   document.getElementById('bg-limpiar').addEventListener('click',()=>{
     ['bg-q','bg-proy','bg-resp','bg-desde','bg-hasta'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
     const cb=document.getElementById('bg-sinfecha'); if(cb) cb.checked=false;
-    bugEstadosSel.clear();
-    document.querySelectorAll('#bg-est-chips .bg-chip').forEach(c=>c.classList.remove('on'));
+    bugEstadosSel.clear(); bugPrioSel.clear();
+    document.querySelectorAll('#bg-est-chips .bg-chip, #bg-prio-chips .bg-chip').forEach(c=>c.classList.remove('on'));
     renderBugsTabla();
   });
   renderBugsTabla();
@@ -549,10 +577,12 @@ function renderBugsTabla(){
     const gAb=g.filter(x=>x.grupo!=='Cerrado').length;
     const filas=g.map(b=>{
       const c=bgEstadoCls(b.estado);
+      const pr=bgPrio(Object.keys(BG_PRIO).find(k=>BG_PRIO[k].lbl===b.prioridad)||b.prioridad);
       const vencido=b.fin && b.fin<hoy && b.grupo!=='Cerrado';
       return `<tr>
         <td><a class="jlink" href="${JIRA_BASE}${b.key}" target="_blank">${b.key}</a></td>
         <td><div style="max-width:340px;overflow-wrap:anywhere">${esc(b.resumen)}${b.nSub?`<span style="color:var(--text-dim);font-size:10px"> · ${b.nSub} subt.</span>`:''}</div></td>
+        <td><span class="bg-est" style="background:${pr.bg};color:${pr.c}">${esc(b.prioridad)}</span></td>
         <td><span class="bg-est" style="background:${c.bg};color:${c.c}">${esc(b.estado)}</span></td>
         <td style="color:var(--text-muted);white-space:nowrap">${esc(b.responsable)}</td>
         <td style="color:var(--text-muted);white-space:nowrap">${b.inicio?fmtD(b.inicio):'—'}</td>
@@ -562,14 +592,14 @@ function renderBugsTabla(){
         <td style="text-align:center"><button class="bg-ciclo-btn" type="button" onclick="verCicloBug('${b.key}')" title="Ciclo de vida">⧗</button></td>
       </tr>`;
     }).join('');
-    return `<tr class="bg-grupo"><td colspan="9">
+    return `<tr class="bg-grupo"><td colspan="10">
       ${esc(p.codigo?p.codigo+' · ':'')}${esc(p.proyecto)}
       <span style="font-weight:400;color:var(--text-muted);margin-left:8px">${g.length} bug${g.length===1?'':'s'} · ${gAb} abierto${gAb===1?'':'s'} · ${gEst}h est. / ${gReg}h reg.</span>
     </td></tr>${filas}`;
   }).join('');
 
   wrap.innerHTML=`<table class="bg-tabla">
-    <thead><tr><th>CLAVE</th><th>BUG</th><th>ESTADO</th><th>RESPONSABLE</th><th>INICIO</th><th>VENCE</th>
+    <thead><tr><th>CLAVE</th><th>BUG</th><th>PRIORIDAD</th><th>ESTADO</th><th>RESPONSABLE</th><th>INICIO</th><th>VENCE</th>
     <th style="text-align:right">HRS EST.</th><th style="text-align:right">HRS REG.</th><th style="text-align:center">CICLO</th></tr></thead>
     <tbody>${cuerpo}</tbody></table>`;
 }
@@ -678,8 +708,8 @@ function renderCiclo(d){
 function exportBugsCSV(){
   const rows=bugsFiltrados();
   const q=v=>`"${String(v??'').replace(/"/g,'""')}"`;
-  const csv=[['Clave','Bug','Proyecto','Codigo','Estado','Responsable','Inicio','Vence','Horas estimadas','Horas registradas'].join(',')]
-    .concat(rows.map(b=>[b.key,b.resumen,b.proyecto,b.codigo,b.estado,b.responsable,b.inicio||'',b.fin||'',b.est,b.reg].map(q).join(',')))
+  const csv=[['Clave','Bug','Proyecto','Codigo','Prioridad','Estado','Responsable','Inicio','Vence','Horas estimadas','Horas registradas'].join(',')]
+    .concat(rows.map(b=>[b.key,b.resumen,b.proyecto,b.codigo,b.prioridad,b.estado,b.responsable,b.inicio||'',b.fin||'',b.est,b.reg].map(q).join(',')))
     .join('\n');
   return;
 }
