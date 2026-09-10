@@ -3379,14 +3379,16 @@ function mtSeccion(titulo, rows){
 
   const barras=rows.slice(0,15).map(x=>`
     <div class="mt-bar-row">
-      <span class="mt-bar-lbl"><b>${esc(x.codigo||x.key)}</b> <span style="color:var(--text-muted)">${esc(x.proyecto)}</span></span>
+      <span class="mt-bar-lbl"><b>${esc(x.codigo||x.key)}</b> <span style="color:var(--text-muted)">${esc(x.proyecto)}</span>${
+        esBug?` <span style="color:var(--text-primary)">· ${esc(x.resumen)}</span>`:''}</span>
       <div class="mt-bar-track"><div style="height:100%;width:${Math.max(2,Math.abs(x.desvio)/maxAbs*100)}%;background:${mtColor(x.desvio)};border-radius:3px"></div></div>
       <span style="width:46px;text-align:right;font-size:12px;color:${mtColor(x.desvio)}">${x.desvio>0?'+':''}${x.desvio} d</span>
     </div>`).join('');
 
   const filas=rows.map(x=>`<tr>
     <td style="font-weight:500;white-space:nowrap"><a class="jlink" href="${JIRA_BASE}${x.key}" target="_blank">${esc(x.codigo||x.key)}</a></td>
-    <td style="color:var(--text-muted);max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(x.proyecto)}">${esc(x.proyecto)}</td>
+    <td style="color:var(--text-muted);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(x.proyecto)}">${esc(x.proyecto)}</td>
+    ${esBug?`<td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(x.resumen)}">${esc(x.resumen)}</td>`:''}
     <td style="color:var(--text-muted);white-space:nowrap">${esc(x.responsable)}${x.pais?` <span style="color:var(--text-dim);font-size:10px">${esc(x.pais)}</span>`:''}</td>
     <td style="color:var(--text-muted);white-space:nowrap">${fmtD(x.vence)}</td>
     <td style="color:var(--text-muted);white-space:nowrap">${fmtD(x.entrega)}</td>
@@ -3405,7 +3407,7 @@ function mtSeccion(titulo, rows){
   <div class="mt-card">
     <div class="mt-card-t">DETALLE DE ${titulo}</div>
     <div style="overflow-x:auto"><table class="mt-tabla">
-      <thead><tr><th>CÓDIGO</th><th>PROYECTO</th><th>RESPONSABLE</th><th>VENCE</th><th>ENTREGA</th>
+      <thead><tr><th>CÓDIGO</th><th>PROYECTO</th>${esBug?'<th>BUG</th>':''}<th>RESPONSABLE</th><th>VENCE</th><th>ENTREGA</th>
       <th style="text-align:right">DESVÍO</th></tr></thead>
       <tbody>${filas}</tbody></table></div>
   </div>`;
@@ -3414,8 +3416,8 @@ function mtSeccion(titulo, rows){
 function exportMetricasCSV(){
   const rows=metFiltradas();
   const q=v=>`"${String(v??'').replace(/"/g,'""')}"`;
-  const csv=[['Tipo','Codigo','Proyecto','Responsable','Pais','Vence','Entrega','Desvio (dias efectivos)'].join(',')]
-    .concat(rows.map(r=>[r.tipo,r.codigo,r.proyecto,r.responsable,r.pais||'',r.vence,r.entrega,r.desvio].map(q).join(',')))
+  const csv=[['Tipo','Codigo','Proyecto','Detalle','Responsable','Pais','Vence','Entrega','Desvio (dias efectivos)'].join(',')]
+    .concat(rows.map(r=>[r.tipo,r.codigo,r.proyecto,r.resumen,r.responsable,r.pais||'',r.vence,r.entrega,r.desvio].map(q).join(',')))
     .join('\n');
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'}));
