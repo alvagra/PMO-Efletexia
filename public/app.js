@@ -3342,52 +3342,73 @@ function renderMetricasCuerpo(){
   const cuerpo=document.getElementById('mt-cuerpo');
   if(!rows.length){ cuerpo.innerHTML='<div class="mt-empty">Sin resultados para el filtro.</div>'; return; }
 
+  // KPIs globales sobre el total filtrado
+  cuerpo.innerHTML = mtKpis(rows)
+    + mtSeccion('HISTORIAS', rows.filter(r=>r.tipo==='Historia'))
+    + mtSeccion('BUGS',      rows.filter(r=>r.tipo==='Bug'));
+}
+
+function mtResumen(rows){
   const ds=rows.map(r=>r.desvio).sort((a,b)=>a-b);
   const mediana=ds.length%2?ds[(ds.length-1)/2]:Math.round((ds[ds.length/2-1]+ds[ds.length/2])/2);
   const prom=Math.round(ds.reduce((s,x)=>s+x,0)/ds.length*10)/10;
-  const enFecha=rows.filter(r=>r.desvio<=0).length;
-  const peor=ds[ds.length-1];
+  return {mediana, prom, enFecha:rows.filter(r=>r.desvio<=0).length, peor:ds[ds.length-1], n:rows.length};
+}
+
+function mtKpis(rows){
+  const r=mtResumen(rows);
   const kpi=(l,v,c,sub)=>`<div class="mt-kpi"><div class="mt-kpi-lbl">${l}</div>
     <div class="mt-kpi-val" style="color:${c||'var(--text-primary)'}">${v}</div>
     ${sub?`<div class="mt-kpi-sub">${sub}</div>`:''}</div>`;
+  return `<div class="mt-kpis">
+    ${kpi('MEDIANA',(r.mediana>0?'+':'')+r.mediana+' d',mtColor(r.mediana))}
+    ${kpi('PROMEDIO',(r.prom>0?'+':'')+r.prom+' d',mtColor(r.prom))}
+    ${kpi('EN FECHA',r.enFecha,r.enFecha?'#3fb950':'var(--text-dim)','de '+r.n)}
+    ${kpi('PEOR CASO',(r.peor>0?'+':'')+r.peor+' d',mtColor(r.peor))}
+    ${kpi('MEDIDOS',r.n,'var(--text-primary)','con fecha de entrega')}
+  </div>`;
+}
 
-  const maxAbs=Math.max(1,...rows.map(r=>Math.abs(r.desvio)));
-  const barras=rows.slice(0,15).map(r=>`
+// Bloque completo (desvíos + detalle) para un tipo: Historias o Bugs
+function mtSeccion(titulo, rows){
+  if(!rows.length) return '';
+  const r=mtResumen(rows);
+  const esBug=titulo==='BUGS';
+  const col=esBug?'#ef4444':'#58a6ff';
+  const maxAbs=Math.max(1,...rows.map(x=>Math.abs(x.desvio)));
+
+  const barras=rows.slice(0,15).map(x=>`
     <div class="mt-bar-row">
-      <span class="mt-bar-lbl"><b>${esc(r.codigo||r.key)}</b> <span style="color:var(--text-muted)">${esc(r.proyecto)}</span></span>
-      <div class="mt-bar-track"><div style="height:100%;width:${Math.max(2,Math.abs(r.desvio)/maxAbs*100)}%;background:${mtColor(r.desvio)};border-radius:3px"></div></div>
-      <span style="width:46px;text-align:right;font-size:12px;color:${mtColor(r.desvio)}">${r.desvio>0?'+':''}${r.desvio} d</span>
+      <span class="mt-bar-lbl"><b>${esc(x.codigo||x.key)}</b> <span style="color:var(--text-muted)">${esc(x.proyecto)}</span></span>
+      <div class="mt-bar-track"><div style="height:100%;width:${Math.max(2,Math.abs(x.desvio)/maxAbs*100)}%;background:${mtColor(x.desvio)};border-radius:3px"></div></div>
+      <span style="width:46px;text-align:right;font-size:12px;color:${mtColor(x.desvio)}">${x.desvio>0?'+':''}${x.desvio} d</span>
     </div>`).join('');
 
-  const filas=rows.map(r=>`<tr>
-    <td><span class="bg-est" style="background:${r.tipo==='Bug'?'rgba(239,68,68,.15)':'rgba(88,166,255,.15)'};color:${r.tipo==='Bug'?'#ef4444':'#58a6ff'}">${r.tipo}</span></td>
-    <td style="font-weight:500;white-space:nowrap"><a class="jlink" href="${JIRA_BASE}${r.key}" target="_blank">${esc(r.codigo||r.key)}</a></td>
-    <td style="color:var(--text-muted);max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.proyecto)}">${esc(r.proyecto)}</td>
-    <td style="color:var(--text-muted);white-space:nowrap">${esc(r.responsable)}${r.pais?` <span style="color:var(--text-dim);font-size:10px">${esc(r.pais)}</span>`:''}</td>
-    <td style="color:var(--text-muted);white-space:nowrap">${fmtD(r.vence)}</td>
-    <td style="color:var(--text-muted);white-space:nowrap">${fmtD(r.entrega)}</td>
-    <td style="text-align:right;font-weight:700;white-space:nowrap;color:${mtColor(r.desvio)}">${r.desvio>0?'+':''}${r.desvio} d</td>
+  const filas=rows.map(x=>`<tr>
+    <td style="font-weight:500;white-space:nowrap"><a class="jlink" href="${JIRA_BASE}${x.key}" target="_blank">${esc(x.codigo||x.key)}</a></td>
+    <td style="color:var(--text-muted);max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(x.proyecto)}">${esc(x.proyecto)}</td>
+    <td style="color:var(--text-muted);white-space:nowrap">${esc(x.responsable)}${x.pais?` <span style="color:var(--text-dim);font-size:10px">${esc(x.pais)}</span>`:''}</td>
+    <td style="color:var(--text-muted);white-space:nowrap">${fmtD(x.vence)}</td>
+    <td style="color:var(--text-muted);white-space:nowrap">${fmtD(x.entrega)}</td>
+    <td style="text-align:right;font-weight:700;white-space:nowrap;color:${mtColor(x.desvio)}">${x.desvio>0?'+':''}${x.desvio} d</td>
   </tr>`).join('');
 
-  cuerpo.innerHTML=`
-    <div class="mt-kpis">
-      ${kpi('MEDIANA',(mediana>0?'+':'')+mediana+' d',mtColor(mediana))}
-      ${kpi('PROMEDIO',(prom>0?'+':'')+prom+' d',mtColor(prom))}
-      ${kpi('EN FECHA',enFecha,enFecha?'#3fb950':'var(--text-dim)','de '+rows.length)}
-      ${kpi('PEOR CASO',(peor>0?'+':'')+peor+' d',mtColor(peor))}
-      ${kpi('MEDIDOS',rows.length,'var(--text-primary)','con fecha de entrega')}
-    </div>
-    <div class="mt-card">
-      <div class="mt-card-t">DÍAS DE DESVÍO${rows.length>15?' · 15 mayores':''}</div>
-      ${barras}
-    </div>
-    <div class="mt-card">
-      <div class="mt-card-t">DETALLE</div>
-      <div style="overflow-x:auto"><table class="mt-tabla">
-        <thead><tr><th>TIPO</th><th>CÓDIGO</th><th>PROYECTO</th>
-        <th>RESPONSABLE</th><th>VENCE</th><th>ENTREGA</th><th style="text-align:right">DESVÍO</th></tr></thead>
-        <tbody>${filas}</tbody></table></div>
-    </div>`;
+  return `
+  <div style="display:flex;align-items:center;gap:10px;margin:22px 0 12px">
+    <span style="font-size:13px;font-weight:700;letter-spacing:.05em;color:${col}">${titulo}</span>
+    <span style="font-size:11px;color:var(--text-muted)">${r.n} ${esBug?'bug':'historia'}${r.n===1?'':'s'} · mediana ${r.mediana>0?'+':''}${r.mediana} d · ${r.enFecha} en fecha</span>
+  </div>
+  <div class="mt-card">
+    <div class="mt-card-t">DÍAS DE DESVÍO${rows.length>15?' · 15 mayores':''}</div>
+    ${barras}
+  </div>
+  <div class="mt-card">
+    <div class="mt-card-t">DETALLE DE ${titulo}</div>
+    <div style="overflow-x:auto"><table class="mt-tabla">
+      <thead><tr><th>CÓDIGO</th><th>PROYECTO</th><th>RESPONSABLE</th><th>VENCE</th><th>ENTREGA</th>
+      <th style="text-align:right">DESVÍO</th></tr></thead>
+      <tbody>${filas}</tbody></table></div>
+  </div>`;
 }
 
 function exportMetricasCSV(){
