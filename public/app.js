@@ -3375,16 +3375,6 @@ function mtSeccion(titulo, rows){
   const r=mtResumen(rows);
   const esBug=titulo==='BUGS';
   const col=esBug?'#ef4444':'#58a6ff';
-  const maxAbs=Math.max(1,...rows.map(x=>Math.abs(x.desvio)));
-
-  const barras=rows.slice(0,15).map(x=>`
-    <div class="mt-bar-row">
-      <span class="mt-bar-lbl"><b>${esc(x.codigo||x.key)}</b> <span style="color:var(--text-muted)">${esc(x.proyecto)}</span>${
-        esBug?` <span style="color:var(--text-primary)">· ${esc(x.resumen)}</span>`:''}</span>
-      <div class="mt-bar-track"><div style="height:100%;width:${Math.max(2,Math.abs(x.desvio)/maxAbs*100)}%;background:${mtColor(x.desvio)};border-radius:3px"></div></div>
-      <span style="width:46px;text-align:right;font-size:12px;color:${mtColor(x.desvio)}">${x.desvio>0?'+':''}${x.desvio} d</span>
-    </div>`).join('');
-
   const filas=rows.map(x=>`<tr>
     <td style="font-weight:500;white-space:nowrap"><a class="jlink" href="${JIRA_BASE}${x.key}" target="_blank">${esc(x.codigo||x.key)}</a></td>
     <td style="color:var(--text-muted);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(x.proyecto)}">${esc(x.proyecto)}</td>
@@ -3399,10 +3389,6 @@ function mtSeccion(titulo, rows){
   <div style="display:flex;align-items:center;gap:10px;margin:22px 0 12px">
     <span style="font-size:13px;font-weight:700;letter-spacing:.05em;color:${col}">${titulo}</span>
     <span style="font-size:11px;color:var(--text-muted)">${r.n} ${esBug?'bug':'historia'}${r.n===1?'':'s'} · mediana ${r.mediana>0?'+':''}${r.mediana} d · ${r.enFecha} en fecha</span>
-  </div>
-  <div class="mt-card">
-    <div class="mt-card-t">DÍAS DE DESVÍO${rows.length>15?' · 15 mayores':''}</div>
-    ${barras}
   </div>
   <div class="mt-card">
     <div class="mt-card-t">DETALLE DE ${titulo}</div>
