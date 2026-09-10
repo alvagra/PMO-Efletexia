@@ -261,7 +261,7 @@ module.exports = async function handler(req, res) {
         const chunk = padres.slice(i, i + 50);
         if (!chunk.length) continue;
         const eps = await fetchAllPages(auth, JIRA_CLOUD, `key in (${chunk.join(',')})`,
-          ['summary', 'parent', 'customfield_10934', 'issuetype']);
+          ['summary', 'parent', 'customfield_10934', 'customfield_11203', 'issuetype']);
         eps.forEach(e => { pMap[e.key] = e; });
       }
       items.forEach(it => {
@@ -271,9 +271,11 @@ module.exports = async function handler(req, res) {
                         (padre?.fields?.issuetype?.name === 'Epic');
         const epKey = esEpica ? padre?.key : padre?.fields?.parent?.key;
         const epSum = esEpica ? padre?.fields?.summary : padre?.fields?.parent?.fields?.summary;
+        const ep = esEpica ? padre : (padre?.fields?.parent?.key ? pMap[padre.fields.parent.key] : null);
         it.fields._epica = epKey
           ? { key: epKey, summary: epSum || epKey,
-              codigo: (esEpica ? padre?.fields?.customfield_10934 : '') || '' }
+              codigo: (esEpica ? padre?.fields?.customfield_10934 : ep?.fields?.customfield_10934) || '',
+              aplicacion: (ep?.fields?.customfield_11203?.value) || null }
           : null;
       });
 
