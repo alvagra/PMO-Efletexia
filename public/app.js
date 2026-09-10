@@ -3301,6 +3301,7 @@ async function loadMetricas(){
       return {
         key:it.key, resumen:f.summary||it.key, tipo,
         proyKey:ep?.key||'', proyecto:ep?.summary||'Sin épica', codigo:ep?.codigo||'',
+        aplicacion:ep?.aplicacion||'Sin aplicación',
         estado:f.status?.name||'—',
         responsable:dn?(nom?.nombre||dn):'Sin asignar', pais,
         vence:f.duedate, entrega:f.customfield_11381,
@@ -3344,6 +3345,7 @@ function renderMetricasCuerpo(){
 
   // KPIs globales sobre el total filtrado
   cuerpo.innerHTML = mtKpis(rows)
+    + mtPorAplicacion(rows)
     + mtSeccion('HISTORIAS', rows.filter(r=>r.tipo==='Historia'))
     + mtSeccion('BUGS',      rows.filter(r=>r.tipo==='Bug'));
 }
@@ -3409,4 +3411,40 @@ function exportMetricasCSV(){
   a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'}));
   a.download=`metricas_entrega_${new Date().toISOString().slice(0,10)}.csv`;
   a.click();
+}
+
+// Desvío por aplicación: qué producto acumula más atraso
+function mtPorAplicacion(rows){
+  const m={};
+  rows.forEach(r=>{
+    const k=r.aplicacion||'Sin aplicación';
+    if(!m[k]) m[k]={app:k,n:0,suma:0,peor:-1e9,enFecha:0,ds:[]};
+    m[k].n++; m[k].suma+=r.desvio; m[k].ds.push(r.desvio);
+    if(r.desvio>m[k].peor) m[k].peor=r.desvio;
+    if(r.desvio<=0) m[k].enFecha++;
+  });
+  const apps=Object.values(m).map(a=>{
+    const s=a.ds.slice().sort((x,y)=>x-y);
+    a.mediana = s.length%2 ? s[(s.length-1)/2] : Math.round((s[s.length/2-1]+s[s.length/2])/2);
+    a.prom = Math.round(a.suma/a.n*10)/10;
+    return a;
+  }).sort((a,b)=>b.peor-a.peor || b.mediana-a.mediana);
+  if(!apps.length) return '';
+  const maxPeor=Math.max(1,...apps.map(a=>Math.abs(a.peor)));
+
+  const filas=apps.map(a=>`
+    <div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-top:1px solid var(--border)">
+      <span style="width:150px;flex-shrink:0;font-size:13px;font-weight:600">${esc(a.app)}</span>
+      <div style="flex:1;height:15px;background:var(--bg-hover);border-radius:3px;overflow:hidden">
+        <div style="height:100%;width:${Math.max(2,Math.abs(a.peor)/maxPeor*100)}%;background:${mtColor(a.peor)};border-radius:3px"></div>
+      </div>
+      <span style="width:70px;text-align:right;font-size:14px;font-weight:700;color:${mtColor(a.peor)}">${a.peor>0?'+':''}${a.peor} d</span>
+      <span style="width:180px;text-align:right;font-size:11px;color:var(--text-muted)">
+        mediana ${a.mediana>0?'+':''}${a.mediana} d · ${a.n} ítem${a.n===1?'':'s'} · ${a.enFecha} en fecha</span>
+    </div>`).join('');
+
+  return `<div class="mt-card">
+    <div class="mt-card-t">MAYOR DESVÍO POR APLICACIÓN</div>
+    ${filas}
+  </div>`;
 }
