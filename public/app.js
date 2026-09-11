@@ -157,6 +157,7 @@ document.querySelectorAll('.tabs .tab').forEach(tab => {
     if(tab.dataset.tab==='capacity' && !capacityLoaded) loadCapacity();
     if(tab.dataset.tab==='entregables') renderEntregables();
     if(tab.dataset.tab==='metricas' && !metricasLoaded) loadMetricas();
+    if(tab.dataset.tab==='informe') renderInforme();
   });
 });
 
@@ -3447,4 +3448,160 @@ function mtPorAplicacion(rows){
     <div class="mt-card-t">MAYOR DESVÍO POR APLICACIÓN</div>
     ${filas}
   </div>`;
+}
+
+
+// ═══════════════════════════════════════════════════════════
+//  INFORME EJECUTIVO — estado de proyectos para dirección TI
+//  Gestión por excepción: solo lo que exige decisión.
+// ═══════════════════════════════════════════════════════════
+const INF_ESTADOS_ACTIVOS = ['desarrollo','pruebas'];
+
+async function renderInforme(){
+  const cont=document.getElementById('inf-contenido');
+  if(!epics||!epics.length){ cont.innerHTML='<div class="mt-empty">Aún no se cargó el portafolio.</div>'; return; }
+  cont.innerHTML='<div class="mt-empty">Generando informe…</div>';
+
+  // Bugs: se reutiliza lo ya cargado; si no hay, se pide una vez
+  if(!bugsData){ try{ await cargarBugsSilencioso(); }catch(e){} }
+
+  const hoy=new Date(); hoy.setHours(0,0,0,0);
+  const dias=f=>f?Math.round((new Date(f+'T00:00:00')-hoy)/86400000):null;
+
+  const act=epics.filter(e=>INF_ESTADOS_ACTIVOS.includes((e.status||'').toLowerCase())
+                         && !SPECIAL_EPIC_KEYS.includes(e.key));
+  const enPruebas=act.filter(e=>(e.status||'').toLowerCase()==='pruebas').length;
+  const enDes=act.length-enPruebas;
+  const sinFecha=act.filter(e=>!e.duedate);
+  const conFecha=act.filter(e=>e.duedate).map(e=>({...e,d:dias(e.duedate)}));
+  const vencidos=conFecha.filter(e=>e.d<0).sort((a,b)=>a.d-b.d);
+  const semana=conFecha.filter(e=>e.d>=0&&e.d<=8).sort((a,b)=>a.d-b.d);
+
+  // Excepción: vencido, o vence en ≤7 días con avance < 60%
+  const excep=[...vencidos, ...semana.filter(e=>e.d<=7&&(e.realPct||0)<0.6)]
+    .filter((v,i,a)=>a.findIndex(x=>x.key===v.key)===i);
+
+  const bugs=bugsRows||[];
+  const bugsAb=bugs.filter(b=>b.grupo!=='Cerrado');
+  const bugsSinF=bugsAb.filter(b=>!b.fin);
+  const porProy={}; bugsAb.forEach(b=>{porProy[b.proyecto]=(porProy[b.proyecto]||0)+1;});
+  const topProy=Object.entries(porProy).sort((a,b)=>b[1]-a[1])[0];
+
+  const actD=act.map(e=>({...e,d:dias(e.duedate)}));
+  const conEstado=actD.filter(e=>e.estadoProyecto)
+    .sort((a,b)=>(a.d==null?1:b.d==null?-1:a.d-b.d));
+  const sinEstado=actD.filter(e=>!e.estadoProyecto);
+  const pct=v=>v==null?'—':Math.round(v*100)+'%';
+  const kpi=(l,v,c,sub)=>`<div class="mt-kpi"><div class="mt-kpi-lbl">${l}</div>
+    <div class="mt-kpi-val" style="color:${c||'var(--text-primary)'}">${v}</div>
+    ${sub?`<div class="mt-kpi-sub">${sub}</div>`:''}</div>`;
+
+  const titular = excep.length
+    ? `${act.length} proyectos activos y ${semana.length} vencen esta semana`
+    : `${act.length} proyectos activos, sin excepciones críticas`;
+  const bajada = excep.length
+    ? `${excep.length} requiere${excep.length===1?'':'n'} decisión: ${excep.slice(0,3).map(e=>esc(e.codigo||e.key)).join(', ')}${excep.length>3?'…':''}.`
+    : 'Todos los proyectos activos avanzan dentro de su fecha comprometida.';
+
+  const filaProy=e=>`<tr>
+    <td style="padding:8px 9px;font-weight:500;white-space:nowrap"><a class="jlink" href="${JIRA_BASE}${e.key}" target="_blank">${esc(e.codigo||e.key)}</a></td>
+    <td style="padding:8px 9px;color:var(--text-muted);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(e.summary)}">${esc(e.summary)}</td>
+    <td style="padding:8px 9px;color:var(--text-muted)">${esc(e.status)}</td>
+    <td style="padding:8px 9px;text-align:right;color:${(e.realPct||0)<0.6?'#ef4444':'var(--text-primary)'}">${pct(e.realPct)}</td>
+    <td style="padding:8px 9px;text-align:right;white-space:nowrap;color:${e.d<0?'#ef4444':e.d<=1?'#F5B800':'var(--text-muted)'}">${
+      e.d<0?`vencido ${Math.abs(e.d)} d`:e.d===0?'hoy':e.d===1?'mañana':fmtD(e.duedate)}</td>
+  </tr>`;
+
+  const excepHtml=excep.slice(0,6).map(e=>{
+    const rojo=e.d<0||(e.realPct||0)<0.4;
+    return `<div class="inf-exc">
+      <span style="color:${rojo?'#ef4444':'#F5B800'};font-size:17px;line-height:1">▲</span>
+      <div>
+        <div class="inf-exc-t">${esc(e.codigo||e.key)} · ${esc(e.summary)}</div>
+        <div class="inf-exc-d">${pct(e.realPct)} de avance · ${
+          e.d<0?`vencido hace ${Math.abs(e.d)} días`:`vence en ${e.d} día${e.d===1?'':'s'}`} · estado ${esc(e.status)}</div>
+        ${e.estadoProyecto?`<div class="inf-estado"><span class="inf-estado-l">ESTADO DEL PROYECTO</span>${esc(e.estadoProyecto)}</div>`:
+          '<div class="inf-estado inf-estado-vacio">Sin estado de proyecto registrado en Jira</div>'}
+        ${e.replanificacion?`<div class="inf-estado"><span class="inf-estado-l">REPLANIFICACIÓN</span>${esc(e.replanificacion)}</div>`:''}
+        ${e.proximosPasos?`<div class="inf-estado"><span class="inf-estado-l">PRÓXIMOS PASOS</span>${esc(e.proximosPasos)}</div>`:''}
+      </div>
+    </div>`;}).join('') || '<div style="font-size:12px;color:var(--text-muted)">Sin excepciones.</div>';
+
+  cont.innerHTML=`
+    <div style="border-bottom:1px solid var(--border);padding-bottom:14px;margin-bottom:16px">
+      <div style="font-size:10px;color:var(--text-muted);letter-spacing:.06em">INFORME DE ESTADO · PMO TI EFLETEXIA · ${fmtD(hoy.toISOString().slice(0,10))}</div>
+      <div class="inf-h1">${titular}</div>
+      <div class="inf-sub">${bajada}</div>
+    </div>
+
+    <div class="mt-kpis">
+      ${kpi('ACTIVOS',act.length,null,`${enPruebas} pruebas · ${enDes} desarrollo`)}
+      ${kpi('VENCEN ≤8 DÍAS',semana.length,semana.length?'#F5B800':'var(--text-dim)')}
+      ${kpi('VENCIDOS',vencidos.length,vencidos.length?'#ef4444':'#3fb950')}
+      ${kpi('SIN FECHA FIN',sinFecha.length,sinFecha.length?'#F5B800':'var(--text-dim)')}
+      ${kpi('BUGS ABIERTOS',bugsAb.length,bugsAb.length?'#ef4444':'#3fb950',`de ${bugs.length} registrados`)}
+    </div>
+
+    <div class="mt-card">
+      <div class="mt-card-t">EXCEPCIONES QUE REQUIEREN ATENCIÓN</div>
+      ${excepHtml}
+    </div>
+
+    <div class="mt-card">
+      <div class="mt-card-t">VENCIMIENTOS PRÓXIMOS · ${semana.length + vencidos.length} proyecto(s)</div>
+      <div style="overflow-x:auto"><table class="mt-tabla">
+        <thead><tr><th>CÓDIGO</th><th>PROYECTO</th><th>ESTADO</th>
+        <th style="text-align:right">AVANCE</th><th style="text-align:right">VENCE</th></tr></thead>
+        <tbody>${[...vencidos,...semana].map(filaProy).join('')||'<tr><td colspan="5" style="padding:14px;color:var(--text-muted)">Sin vencimientos próximos.</td></tr>'}</tbody>
+      </table></div>
+    </div>
+
+    <div class="mt-card">
+      <div class="mt-card-t">ESTADO DE LOS PROYECTOS ACTIVOS · ${conEstado.length} de ${act.length}</div>
+      ${conEstado.map(e=>`
+        <div class="inf-est-item">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap">
+            <span style="font-size:13px;font-weight:600"><a class="jlink" href="${JIRA_BASE}${e.key}" target="_blank">${esc(e.codigo||e.key)}</a>
+              <span style="font-weight:400;color:var(--text-muted)">${esc(e.summary)}</span></span>
+            <span style="font-size:11px;color:var(--text-muted);white-space:nowrap">${pct(e.realPct)} · ${esc(e.status)} · ${
+              e.duedate?(e.d<0?`vencido ${Math.abs(e.d)} d`:e.d===0?'vence hoy':`vence ${fmtD(e.duedate)}`):'sin fecha'}</span>
+          </div>
+          <div class="inf-estado">${esc(e.estadoProyecto)}</div>
+          ${e.proximosPasos?`<div class="inf-estado"><span class="inf-estado-l">PRÓXIMOS PASOS</span>${esc(e.proximosPasos)}</div>`:''}
+        </div>`).join('') || '<div style="font-size:12px;color:var(--text-muted)">Ningún proyecto activo tiene estado registrado.</div>'}
+      ${sinEstado.length?`<div style="font-size:11px;color:var(--text-dim);margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">
+        Sin estado registrado: ${sinEstado.map(e=>esc(e.codigo||e.key)).join(', ')}</div>`:''}
+    </div>
+
+    <div style="display:flex;gap:14px;flex-wrap:wrap">
+      <div class="mt-card" style="flex:1;min-width:270px">
+        <div class="mt-card-t">CALIDAD</div>
+        <div class="inf-lista"><span style="color:var(--text-muted)">Bugs registrados</span><span>${bugs.length}</span></div>
+        <div class="inf-lista"><span style="color:var(--text-muted)">Abiertos</span><span style="color:#ef4444">${bugsAb.length}</span></div>
+        <div class="inf-lista"><span style="color:var(--text-muted)">Sin fecha de vencimiento</span><span style="color:#F5B800">${bugsSinF.length}</span></div>
+        ${topProy?`<div class="inf-lista"><span style="color:var(--text-muted)">Mayor concentración</span><span>${esc(topProy[0])} · ${topProy[1]}</span></div>`:''}
+      </div>
+      <div class="mt-card" style="flex:1;min-width:270px">
+        <div class="mt-card-t">CALIDAD DEL DATO</div>
+        <div class="inf-lista"><span style="color:var(--text-muted)">Proyectos sin fecha fin</span><span style="color:${sinFecha.length?'#F5B800':'var(--text-primary)'}">${sinFecha.length}</span></div>
+        <div class="inf-lista"><span style="color:var(--text-muted)">Sin Plan% o Real%</span><span style="color:#F5B800">${act.filter(e=>e.planPct==null||e.realPct==null).length}</span></div>
+        <div class="inf-lista"><span style="color:var(--text-muted)">Bugs abiertos sin fecha</span><span style="color:${bugsSinF.length?'#F5B800':'var(--text-primary)'}">${bugsSinF.length}</span></div>
+        <div class="inf-lista"><span style="color:var(--text-muted)">Sin estado de proyecto</span><span style="color:${sinEstado.length?'#F5B800':'var(--text-primary)'}">${sinEstado.length} de ${act.length}</span></div>
+      </div>
+    </div>`;
+}
+
+// Carga de bugs sin tocar el panel del módulo de gestión
+async function cargarBugsSilencioso(){
+  const r=await fetch('/api/jira',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'bugs'})});
+  const j=await r.json();
+  if(!r.ok) throw new Error(j.error||'Error');
+  bugsData=j.bugs||[];
+  bugsRows=bugsData.filter(b=>b.fields?.assignee?.displayName).map(b=>{
+    const f=b.fields||{}, ep=f._epica||null;
+    return { key:b.key, resumen:f.summary||b.key, estado:f.status?.name||'—',
+      grupo:bgEstadoCls(f.status?.name).g,
+      proyecto:ep?.summary||'Sin épica', codigo:ep?.codigo||'',
+      fin:f.duedate||null, est:f._estTotal||0, reg:+(((f._segTotal||0)/3600).toFixed(1)) };
+  });
 }
