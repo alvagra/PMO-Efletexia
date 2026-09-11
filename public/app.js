@@ -3489,7 +3489,7 @@ async function renderInforme(){
 
   const actD=act.map(e=>({...e,d:dias(e.duedate)}));
   const conEstado=actD.filter(e=>e.estadoProyecto)
-    .sort((a,b)=>(a.d==null?1:b.d==null?-1:a.d-b.d));
+    .sort((a,b)=>(b.fechaInicio||'').localeCompare(a.fechaInicio||''));
   const sinEstado=actD.filter(e=>!e.estadoProyecto);
   const pct=v=>v==null?'—':Math.round(v*100)+'%';
   const kpi=(l,v,c,sub)=>`<div class="mt-kpi"><div class="mt-kpi-lbl">${l}</div>
@@ -3538,16 +3538,22 @@ async function renderInforme(){
         <tbody>${conEstado.map(e=>{
           const dv = (e.planPct!=null&&e.realPct!=null&&e.planPct>0)
             ? Math.round((e.realPct-e.planPct)/e.planPct*100) : null;
+          const adv = dv==null?null:Math.abs(dv);
+          const cDv = adv==null ? 'var(--text-dim)'
+            : adv<=5  ? '#3fb950'      // 0–5 %   verde
+            : adv<=10 ? '#F5B800'      // >5–10 % amarillo
+            : adv<=20 ? '#f0883e'      // >10–20% anaranjado
+            :           '#ef4444';     // >20 %   rojo
           return `<tr>
             <td style="font-weight:600;white-space:nowrap"><a class="jlink" href="${JIRA_BASE}${e.key}" target="_blank">${esc(e.codigo||e.key)}</a></td>
-            <td style="min-width:180px">${esc(e.summary)}</td>
-            <td style="white-space:nowrap;color:var(--text-muted)">${e.fechaInicio?fmtD(e.fechaInicio):'—'}</td>
-            <td style="white-space:nowrap;color:${e.d!=null&&e.d<0?'#ef4444':'var(--text-muted)'}">${e.duedate?fmtD(e.duedate):'—'}</td>
+            <td class="inf-td-proy" title="${esc(e.summary)}">${esc(e.summary)}</td>
+            <td style="white-space:nowrap">${e.fechaInicio?fmtD(e.fechaInicio):'—'}</td>
+            <td style="white-space:nowrap;color:${e.d!=null&&e.d<0?'#ef4444':'var(--text-primary)'}">${e.duedate?fmtD(e.duedate):'—'}</td>
             <td style="text-align:right">${pct(e.planPct)}</td>
-            <td style="text-align:right;color:${(e.realPct||0)<0.6?'#ef4444':'var(--text-primary)'}">${pct(e.realPct)}</td>
-            <td style="text-align:right;color:${dv==null?'var(--text-dim)':dv<=-17?'#ef4444':dv<=-5?'#F5B800':'#3fb950'}">${dv==null?'—':dv+'%'}</td>
-            <td style="white-space:nowrap;color:var(--text-muted)">${esc(e.status)}</td>
-            <td style="white-space:nowrap;color:var(--text-muted)">${esc(e.sponsor||'—')}</td>
+            <td style="text-align:right">${pct(e.realPct)}</td>
+            <td style="text-align:right;font-weight:600;color:${cDv}">${dv==null?'—':dv+'%'}</td>
+            <td style="white-space:nowrap">${esc(e.status)}</td>
+            <td style="white-space:nowrap">${esc(e.sponsor||'—')}</td>
             <td class="inf-td-txt">${esc(e.estadoProyecto)}</td>
             <td class="inf-td-txt">${esc(e.proximosPasos||'—')}</td>
           </tr>`;}).join('')}</tbody>
