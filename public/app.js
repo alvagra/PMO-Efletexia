@@ -3558,17 +3558,29 @@ async function renderInforme(){
 
     <div class="mt-card">
       <div class="mt-card-t">ESTADO DE LOS PROYECTOS ACTIVOS · ${conEstado.length} de ${act.length}</div>
-      ${conEstado.map(e=>`
-        <div class="inf-est-item">
-          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap">
-            <span style="font-size:13px;font-weight:600"><a class="jlink" href="${JIRA_BASE}${e.key}" target="_blank">${esc(e.codigo||e.key)}</a>
-              <span style="font-weight:400;color:var(--text-muted)">${esc(e.summary)}</span></span>
-            <span style="font-size:11px;color:var(--text-muted);white-space:nowrap">${pct(e.realPct)} · ${esc(e.status)} · ${
-              e.duedate?(e.d<0?`vencido ${Math.abs(e.d)} d`:e.d===0?'vence hoy':`vence ${fmtD(e.duedate)}`):'sin fecha'}</span>
-          </div>
-          <div class="inf-estado">${esc(e.estadoProyecto)}</div>
-          ${e.proximosPasos?`<div class="inf-estado"><span class="inf-estado-l">PRÓXIMOS PASOS</span>${esc(e.proximosPasos)}</div>`:''}
-        </div>`).join('') || '<div style="font-size:12px;color:var(--text-muted)">Ningún proyecto activo tiene estado registrado.</div>'}
+      <div style="overflow-x:auto"><table class="inf-tabla">
+        <thead><tr>
+          <th>CÓDIGO</th><th>PROYECTO</th><th>INICIO</th><th>FIN</th>
+          <th style="text-align:right">PLAN</th><th style="text-align:right">REAL</th><th style="text-align:right">DESVÍO</th>
+          <th>ESTADO</th><th>SPONSOR</th><th>STATUS</th><th>PRÓXIMOS PASOS</th>
+        </tr></thead>
+        <tbody>${conEstado.map(e=>{
+          const dv = (e.planPct!=null&&e.realPct!=null&&e.planPct>0)
+            ? Math.round((e.realPct-e.planPct)/e.planPct*100) : null;
+          return `<tr>
+            <td style="font-weight:600;white-space:nowrap"><a class="jlink" href="${JIRA_BASE}${e.key}" target="_blank">${esc(e.codigo||e.key)}</a></td>
+            <td style="min-width:180px">${esc(e.summary)}</td>
+            <td style="white-space:nowrap;color:var(--text-muted)">${e.fechaInicio?fmtD(e.fechaInicio):'—'}</td>
+            <td style="white-space:nowrap;color:${e.d!=null&&e.d<0?'#ef4444':'var(--text-muted)'}">${e.duedate?fmtD(e.duedate):'—'}</td>
+            <td style="text-align:right">${pct(e.planPct)}</td>
+            <td style="text-align:right;color:${(e.realPct||0)<0.6?'#ef4444':'var(--text-primary)'}">${pct(e.realPct)}</td>
+            <td style="text-align:right;color:${dv==null?'var(--text-dim)':dv<=-17?'#ef4444':dv<=-5?'#F5B800':'#3fb950'}">${dv==null?'—':dv+'%'}</td>
+            <td style="white-space:nowrap;color:var(--text-muted)">${esc(e.status)}</td>
+            <td style="white-space:nowrap;color:var(--text-muted)">${esc(e.sponsor||'—')}</td>
+            <td class="inf-td-txt">${esc(e.estadoProyecto)}</td>
+            <td class="inf-td-txt">${esc(e.proximosPasos||'—')}</td>
+          </tr>`;}).join('')}</tbody>
+      </table></div>
       ${sinEstado.length?`<div style="font-size:11px;color:var(--text-dim);margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">
         Sin estado registrado: ${sinEstado.map(e=>esc(e.codigo||e.key)).join(', ')}</div>`:''}
     </div>
