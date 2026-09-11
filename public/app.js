@@ -3501,27 +3501,9 @@ async function renderInforme(){
     <div class="mt-kpi-val" style="color:${c||'var(--text-primary)'}">${v}</div>
     ${sub?`<div class="mt-kpi-sub">${sub}</div>`:''}</div>`;
 
-  const titular = excep.length
-    ? `${act.length} proyectos activos y ${semana.length} vencen esta semana`
-    : `${act.length} proyectos activos, sin excepciones críticas`;
-  const bajada = excep.length
-    ? `${excep.length} requiere${excep.length===1?'':'n'} decisión: ${excep.slice(0,3).map(e=>esc(e.codigo||e.key)).join(', ')}${excep.length>3?'…':''}.`
-    : 'Todos los proyectos activos avanzan dentro de su fecha comprometida.';
-
-  const filaProy=e=>`<tr>
-    <td style="padding:8px 9px;font-weight:500;white-space:nowrap"><a class="jlink" href="${JIRA_BASE}${e.key}" target="_blank">${esc(e.codigo||e.key)}</a></td>
-    <td style="padding:8px 9px;color:var(--text-muted);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(e.summary)}">${esc(e.summary)}</td>
-    <td style="padding:8px 9px;color:var(--text-muted)">${esc(e.status)}</td>
-    <td style="padding:8px 9px;text-align:right;color:${(e.realPct||0)<0.6?'#ef4444':'var(--text-primary)'}">${pct(e.realPct)}</td>
-    <td style="padding:8px 9px;text-align:right;white-space:nowrap;color:${e.d<0?'#ef4444':e.d<=1?'#F5B800':'var(--text-muted)'}">${
-      e.d<0?`vencido ${Math.abs(e.d)} d`:e.d===0?'hoy':e.d===1?'mañana':fmtD(e.duedate)}</td>
-  </tr>`;
-
   cont.innerHTML=`
     <div style="border-bottom:1px solid var(--border);padding-bottom:14px;margin-bottom:16px">
       <div style="font-size:10px;color:var(--text-muted);letter-spacing:.06em">INFORME DE ESTADO · PMO TI EFLETEXIA · ${fmtD(hoy.toISOString().slice(0,10))}</div>
-      <div class="inf-h1">${titular}</div>
-      <div class="inf-sub">${bajada}</div>
     </div>
 
     <div class="mt-kpis">
