@@ -3541,8 +3541,9 @@ async function renderInforme(){
           <th>ESTADO</th><th>SPONSOR</th><th>STATUS</th><th>PRÓXIMOS PASOS</th>
         </tr></thead>
         <tbody>${conEstado.map(e=>{
-          const dv = (e.planPct!=null&&e.realPct!=null&&e.planPct>0)
-            ? Math.round((e.realPct-e.planPct)/e.planPct*100) : null;
+          // Desvío en puntos porcentuales: Real % − Plan %
+          const dv = (e.planPct!=null&&e.realPct!=null)
+            ? Math.round(e.realPct*100) - Math.round(e.planPct*100) : null;
           const adv = dv==null?null:Math.abs(dv);
           const cDv = adv==null ? 'var(--text-dim)'
             : adv<=5  ? '#3fb950'      // 0–5 %   verde
