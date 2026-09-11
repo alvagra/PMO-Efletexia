@@ -3512,21 +3512,6 @@ async function renderInforme(){
       e.d<0?`vencido ${Math.abs(e.d)} d`:e.d===0?'hoy':e.d===1?'mañana':fmtD(e.duedate)}</td>
   </tr>`;
 
-  const excepHtml=excep.slice(0,6).map(e=>{
-    const rojo=e.d<0||(e.realPct||0)<0.4;
-    return `<div class="inf-exc">
-      <span style="color:${rojo?'#ef4444':'#F5B800'};font-size:17px;line-height:1">▲</span>
-      <div>
-        <div class="inf-exc-t">${esc(e.codigo||e.key)} · ${esc(e.summary)}</div>
-        <div class="inf-exc-d">${pct(e.realPct)} de avance · ${
-          e.d<0?`vencido hace ${Math.abs(e.d)} días`:`vence en ${e.d} día${e.d===1?'':'s'}`} · estado ${esc(e.status)}</div>
-        ${e.estadoProyecto?`<div class="inf-estado"><span class="inf-estado-l">ESTADO DEL PROYECTO</span>${esc(e.estadoProyecto)}</div>`:
-          '<div class="inf-estado inf-estado-vacio">Sin estado de proyecto registrado en Jira</div>'}
-        ${e.replanificacion?`<div class="inf-estado"><span class="inf-estado-l">REPLANIFICACIÓN</span>${esc(e.replanificacion)}</div>`:''}
-        ${e.proximosPasos?`<div class="inf-estado"><span class="inf-estado-l">PRÓXIMOS PASOS</span>${esc(e.proximosPasos)}</div>`:''}
-      </div>
-    </div>`;}).join('') || '<div style="font-size:12px;color:var(--text-muted)">Sin excepciones.</div>';
-
   cont.innerHTML=`
     <div style="border-bottom:1px solid var(--border);padding-bottom:14px;margin-bottom:16px">
       <div style="font-size:10px;color:var(--text-muted);letter-spacing:.06em">INFORME DE ESTADO · PMO TI EFLETEXIA · ${fmtD(hoy.toISOString().slice(0,10))}</div>
@@ -3540,20 +3525,6 @@ async function renderInforme(){
       ${kpi('VENCIDOS',vencidos.length,vencidos.length?'#ef4444':'#3fb950')}
       ${kpi('SIN FECHA FIN',sinFecha.length,sinFecha.length?'#F5B800':'var(--text-dim)')}
       ${kpi('BUGS ABIERTOS',bugsAb.length,bugsAb.length?'#ef4444':'#3fb950',`de ${bugs.length} registrados`)}
-    </div>
-
-    <div class="mt-card">
-      <div class="mt-card-t">EXCEPCIONES QUE REQUIEREN ATENCIÓN</div>
-      ${excepHtml}
-    </div>
-
-    <div class="mt-card">
-      <div class="mt-card-t">VENCIMIENTOS PRÓXIMOS · ${semana.length + vencidos.length} proyecto(s)</div>
-      <div style="overflow-x:auto"><table class="mt-tabla">
-        <thead><tr><th>CÓDIGO</th><th>PROYECTO</th><th>ESTADO</th>
-        <th style="text-align:right">AVANCE</th><th style="text-align:right">VENCE</th></tr></thead>
-        <tbody>${[...vencidos,...semana].map(filaProy).join('')||'<tr><td colspan="5" style="padding:14px;color:var(--text-muted)">Sin vencimientos próximos.</td></tr>'}</tbody>
-      </table></div>
     </div>
 
     <div class="mt-card">
