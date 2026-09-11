@@ -3489,7 +3489,12 @@ async function renderInforme(){
 
   const actD=act.map(e=>({...e,d:dias(e.duedate)}));
   const conEstado=actD.filter(e=>e.estadoProyecto)
-    .sort((a,b)=>(b.fechaInicio||'').localeCompare(a.fechaInicio||''));
+    // Del inicio más antiguo al más reciente; sin fecha de inicio, al final
+    .sort((a,b)=>{
+      if(!a.fechaInicio) return 1;
+      if(!b.fechaInicio) return -1;
+      return a.fechaInicio.localeCompare(b.fechaInicio);
+    });
   const sinEstado=actD.filter(e=>!e.estadoProyecto);
   const pct=v=>v==null?'—':Math.round(v*100)+'%';
   const kpi=(l,v,c,sub)=>`<div class="mt-kpi"><div class="mt-kpi-lbl">${l}</div>
