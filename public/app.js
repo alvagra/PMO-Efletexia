@@ -3546,26 +3546,10 @@ async function renderInforme(){
             <td class="inf-td-txt">${esc(e.proximosPasos||'—')}</td>
           </tr>`;}).join('')}</tbody>
       </table></div>
-      ${sinEstado.length?`<div style="font-size:11px;color:var(--text-dim);margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">
-        Sin estado registrado: ${sinEstado.map(e=>esc(e.codigo||e.key)).join(', ')}</div>`:''}
+
     </div>
 
-    <div style="display:flex;gap:14px;flex-wrap:wrap">
-      <div class="mt-card" style="flex:1;min-width:270px">
-        <div class="mt-card-t">CALIDAD</div>
-        <div class="inf-lista"><span style="color:var(--text-muted)">Bugs registrados</span><span>${bugs.length}</span></div>
-        <div class="inf-lista"><span style="color:var(--text-muted)">Abiertos</span><span style="color:#ef4444">${bugsAb.length}</span></div>
-        <div class="inf-lista"><span style="color:var(--text-muted)">Sin fecha de vencimiento</span><span style="color:#F5B800">${bugsSinF.length}</span></div>
-        ${topProy?`<div class="inf-lista"><span style="color:var(--text-muted)">Mayor concentración</span><span>${esc(topProy[0])} · ${topProy[1]}</span></div>`:''}
-      </div>
-      <div class="mt-card" style="flex:1;min-width:270px">
-        <div class="mt-card-t">CALIDAD DEL DATO</div>
-        <div class="inf-lista"><span style="color:var(--text-muted)">Proyectos sin fecha fin</span><span style="color:${sinFecha.length?'#F5B800':'var(--text-primary)'}">${sinFecha.length}</span></div>
-        <div class="inf-lista"><span style="color:var(--text-muted)">Sin Plan% o Real%</span><span style="color:#F5B800">${act.filter(e=>e.planPct==null||e.realPct==null).length}</span></div>
-        <div class="inf-lista"><span style="color:var(--text-muted)">Bugs abiertos sin fecha</span><span style="color:${bugsSinF.length?'#F5B800':'var(--text-primary)'}">${bugsSinF.length}</span></div>
-        <div class="inf-lista"><span style="color:var(--text-muted)">Sin estado de proyecto</span><span style="color:${sinEstado.length?'#F5B800':'var(--text-primary)'}">${sinEstado.length} de ${act.length}</span></div>
-      </div>
-    </div>`;
+`;
 }
 
 // Carga de bugs sin tocar el panel del módulo de gestión
