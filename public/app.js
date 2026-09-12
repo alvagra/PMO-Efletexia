@@ -3517,8 +3517,6 @@ async function renderInforme(){
       ${kpi('ACTIVOS',lista.length,null,`${lPruebas} pruebas · ${lDes} desarrollo`)}
       ${kpi('VENCEN ≤8 DÍAS',lSemana,lSemana?'#F5B800':'var(--text-dim)')}
       ${kpi('VENCIDOS',lVencidos,lVencidos?'#ef4444':'#3fb950')}
-      ${kpi('SIN FECHA FIN',lSinFecha,lSinFecha?'#F5B800':'var(--text-dim)')}
-      ${kpi('BUGS ABIERTOS',bugsAb.length,bugsAb.length?'#ef4444':'#3fb950',`de ${bugs.length} registrados`)}
     </div>
 
     <div class="mt-card">
