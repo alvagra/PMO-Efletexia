@@ -3496,6 +3496,13 @@ async function renderInforme(){
       return a.fechaInicio.localeCompare(b.fechaInicio);
     });
   const sinEstado=actD.filter(e=>!e.estadoProyecto);
+  // Los indicadores se calculan solo sobre los proyectos listados en la tabla
+  const lista=conEstado;
+  const lPruebas=lista.filter(e=>(e.status||'').toLowerCase()==='pruebas').length;
+  const lDes=lista.length-lPruebas;
+  const lSinFecha=lista.filter(e=>!e.duedate).length;
+  const lVencidos=lista.filter(e=>e.d!=null&&e.d<0).length;
+  const lSemana=lista.filter(e=>e.d!=null&&e.d>=0&&e.d<=8).length;
   const pct=v=>v==null?'—':Math.round(v*100)+'%';
   const kpi=(l,v,c,sub)=>`<div class="mt-kpi"><div class="mt-kpi-lbl">${l}</div>
     <div class="mt-kpi-val" style="color:${c||'var(--text-primary)'}">${v}</div>
@@ -3507,15 +3514,15 @@ async function renderInforme(){
     </div>
 
     <div class="mt-kpis">
-      ${kpi('ACTIVOS',act.length,null,`${enPruebas} pruebas · ${enDes} desarrollo`)}
-      ${kpi('VENCEN ≤8 DÍAS',semana.length,semana.length?'#F5B800':'var(--text-dim)')}
-      ${kpi('VENCIDOS',vencidos.length,vencidos.length?'#ef4444':'#3fb950')}
-      ${kpi('SIN FECHA FIN',sinFecha.length,sinFecha.length?'#F5B800':'var(--text-dim)')}
+      ${kpi('ACTIVOS',lista.length,null,`${lPruebas} pruebas · ${lDes} desarrollo`)}
+      ${kpi('VENCEN ≤8 DÍAS',lSemana,lSemana?'#F5B800':'var(--text-dim)')}
+      ${kpi('VENCIDOS',lVencidos,lVencidos?'#ef4444':'#3fb950')}
+      ${kpi('SIN FECHA FIN',lSinFecha,lSinFecha?'#F5B800':'var(--text-dim)')}
       ${kpi('BUGS ABIERTOS',bugsAb.length,bugsAb.length?'#ef4444':'#3fb950',`de ${bugs.length} registrados`)}
     </div>
 
     <div class="mt-card">
-      <div class="mt-card-t">ESTADO DE LOS PROYECTOS ACTIVOS · ${conEstado.length} de ${act.length}</div>
+      <div class="mt-card-t">ESTADO DE LOS PROYECTOS ACTIVOS · ${conEstado.length}</div>
       <div style="overflow-x:auto"><table class="inf-tabla">
         <thead><tr>
           <th>CÓDIGO</th><th>PROYECTO</th><th>INICIO</th><th>FIN</th>
