@@ -3445,7 +3445,7 @@ function mtSeccion(titulo, rows){
   <div class="mt-card">
     <div class="mt-card-t">DETALLE DE ${titulo}</div>
     <div style="overflow-x:auto"><table class="mt-tabla">
-      <thead><tr><th>CÓDIGO</th><th>PROYECTO</th><th>${esBug?'BUG':'HISTORIA'}</th><th>RESPONSABLE</th><th>VENCE</th><th>ENTREGA</th>
+      <thead><tr><th>CÓDIGO</th><th>PROYECTO</th><th>${esBug?'BUG':'ENTREGABLE'}</th><th>RESPONSABLE</th><th>VENCE</th><th>ENTREGA</th>
       <th style="text-align:right">PLAN</th><th style="text-align:right">DESVÍO</th>
       <th style="text-align:right">DESV. %</th></tr></thead>
       <tbody>${filas}</tbody></table></div>
