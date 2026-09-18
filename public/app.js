@@ -3425,11 +3425,11 @@ function mtSeccion(titulo, rows){
   const col=esBug?'#ef4444':'#58a6ff';
   const filas=rows.map(x=>`<tr>
     <td style="font-weight:500;white-space:nowrap"><a class="jlink" href="${JIRA_BASE}${x.key}" target="_blank">${esc(x.codigo||x.key)}</a></td>
-    <td style="color:var(--text-muted);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(x.proyecto)}">${esc(x.proyecto)}</td>
+    <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(x.proyecto)}">${esc(x.proyecto)}</td>
     <td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(x.resumen)}">${esc(x.resumen)}</td>
-    <td style="color:var(--text-muted);white-space:nowrap">${esc(x.responsable)}${x.pais?` <span style="color:var(--text-dim);font-size:10px">${esc(x.pais)}</span>`:''}</td>
-    <td style="color:var(--text-muted);white-space:nowrap">${fmtD(x.vence)}</td>
-    <td style="color:var(--text-muted);white-space:nowrap">${fmtD(x.entrega)}</td>
+    <td style="white-space:nowrap">${esc(x.responsable)}${x.pais?` <span style="color:var(--text-dim);font-size:10px">${esc(x.pais)}</span>`:''}</td>
+    <td style="white-space:nowrap">${fmtD(x.vence)}</td>
+    <td style="white-space:nowrap">${fmtD(x.entrega)}</td>
     <td style="color:var(--text-muted);white-space:nowrap;text-align:right">${x.plan>0?x.plan+' d':'—'}</td>
     <td style="text-align:right;font-weight:700;white-space:nowrap;color:${mtColor(x.desvio)}">${x.desvio>0?'+':''}${x.desvio} d</td>
     <td style="text-align:right;font-weight:700;white-space:nowrap;color:${x.pct===null?'var(--text-dim)':mtColor(x.pct)}"
