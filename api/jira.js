@@ -323,7 +323,7 @@ module.exports = async function handler(req, res) {
         if (!chunk.length) continue;
         const eps = await fetchAllPages(auth, JIRA_CLOUD,
           `key in (${chunk.join(',')})`,
-          ['summary', 'parent', 'customfield_10934', 'issuetype']);
+          ['summary', 'parent', 'customfield_10934', 'customfield_11203', 'issuetype']);
         eps.forEach(e => { epMap[e.key] = e; });
       }
 
@@ -335,8 +335,11 @@ module.exports = async function handler(req, res) {
         // Si el bug cuelga de una historia, se sube un nivel hasta la épica.
         const epKey = esEpica ? padre?.key : padre?.fields?.parent?.key;
         const epSum = esEpica ? padre?.fields?.summary : padre?.fields?.parent?.fields?.summary;
+        const epica = esEpica ? padre : (epKey ? epMap[epKey] : null);
         b.fields._epica = epKey
-          ? { key: epKey, summary: epSum || epKey, codigo: (esEpica ? padre?.fields?.customfield_10934 : '') || '' }
+          ? { key: epKey, summary: epSum || epKey,
+              codigo: (esEpica ? padre?.fields?.customfield_10934 : '') || '',
+              aplicacion: (epica?.fields?.customfield_11203?.value) || null }
           : null;
         const extra = subHoras[b.key] || { seg: 0, est: 0, n: 0 };
         b.fields._segTotal   = (b.fields.timespent || 0) + extra.seg;
