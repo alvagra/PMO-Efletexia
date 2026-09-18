@@ -3333,8 +3333,11 @@ async function loadMetricas(){
         aplicacion:ep?.aplicacion||'Sin aplicación',
         estado:f.status?.name||'—',
         responsable:dn?(nom?.nombre||dn):'Sin asignar', pais,
-        vence:f.duedate, entrega:f.customfield_11381,
-        desvio:mtDias(f.customfield_11381,f.duedate,pais)
+        vence:f.duedate, entrega:f.customfield_11381, inicio:f.customfield_10015||null,
+        desvio:mtDias(f.customfield_11381,f.duedate,pais),
+        // Plan = vencimiento − inicio. El % de desviación es real/plan.
+        plan:mtDias(f.duedate,f.customfield_10015,pais),
+        get pct(){ return this.plan>0 ? Math.round(this.desvio/this.plan*1000)/10 : null; }
       };
     }).sort((a,b)=>b.desvio-a.desvio);
     metricasLoaded=true;
@@ -3381,11 +3384,16 @@ function renderMetricasCuerpo(){
     + mtSeccion('BUGS',      rows.filter(r=>r.tipo==='Bug'));
 }
 
+function mtPct(v){ return (Math.round(v*10)/10).toString().replace('.',',')+'%'; }
+
 function mtResumen(rows){
   const ds=rows.map(r=>r.desvio).sort((a,b)=>a-b);
   const mediana=ds.length%2?ds[(ds.length-1)/2]:Math.round((ds[ds.length/2-1]+ds[ds.length/2])/2);
   const prom=Math.round(ds.reduce((s,x)=>s+x,0)/ds.length*10)/10;
-  return {mediana, prom, enFecha:rows.filter(r=>r.desvio<=0).length, peor:ds[ds.length-1], n:rows.length};
+  const ps=rows.map(r=>r.pct).filter(p=>p!==null).sort((a,b)=>a-b);
+  const medPct = ps.length ? (ps.length%2?ps[(ps.length-1)/2]:Math.round((ps[ps.length/2-1]+ps[ps.length/2])/2*10)/10) : null;
+  return {mediana, prom, enFecha:rows.filter(r=>r.desvio<=0).length, peor:ds[ds.length-1],
+          n:rows.length, medPct, nPct:ps.length};
 }
 
 function mtKpis(rows){
@@ -3398,6 +3406,9 @@ function mtKpis(rows){
     ${kpi('PROMEDIO',(r.prom>0?'+':'')+r.prom+' d',mtColor(r.prom))}
     ${kpi('EN FECHA',r.enFecha,r.enFecha?'#3fb950':'var(--text-dim)','de '+r.n)}
     ${kpi('PEOR CASO',(r.peor>0?'+':'')+r.peor+' d',mtColor(r.peor))}
+    ${kpi('DESVIACIÓN', r.medPct===null?'—':(r.medPct>0?'+':'')+mtPct(r.medPct),
+        r.medPct===null?'var(--text-dim)':mtColor(r.medPct),
+        r.medPct===null?'sin fecha de inicio':`mediana de ${r.nPct}`)}
     ${kpi('MEDIDOS',r.n,'var(--text-primary)','con fecha de entrega')}
   </div>`;
 }
@@ -3415,7 +3426,11 @@ function mtSeccion(titulo, rows){
     <td style="color:var(--text-muted);white-space:nowrap">${esc(x.responsable)}${x.pais?` <span style="color:var(--text-dim);font-size:10px">${esc(x.pais)}</span>`:''}</td>
     <td style="color:var(--text-muted);white-space:nowrap">${fmtD(x.vence)}</td>
     <td style="color:var(--text-muted);white-space:nowrap">${fmtD(x.entrega)}</td>
+    <td style="color:var(--text-muted);white-space:nowrap;text-align:right">${x.plan>0?x.plan+' d':'—'}</td>
     <td style="text-align:right;font-weight:700;white-space:nowrap;color:${mtColor(x.desvio)}">${x.desvio>0?'+':''}${x.desvio} d</td>
+    <td style="text-align:right;font-weight:700;white-space:nowrap;color:${x.pct===null?'var(--text-dim)':mtColor(x.pct)}"
+      title="${x.pct===null?'Sin fecha de inicio: no se puede calcular el plan':''}">${
+        x.pct===null?'—':(x.pct>0?'+':'')+mtPct(x.pct)}</td>
   </tr>`).join('');
 
   return `
@@ -3427,7 +3442,8 @@ function mtSeccion(titulo, rows){
     <div class="mt-card-t">DETALLE DE ${titulo}</div>
     <div style="overflow-x:auto"><table class="mt-tabla">
       <thead><tr><th>CÓDIGO</th><th>PROYECTO</th>${esBug?'<th>BUG</th>':''}<th>RESPONSABLE</th><th>VENCE</th><th>ENTREGA</th>
-      <th style="text-align:right">DESVÍO</th></tr></thead>
+      <th style="text-align:right">PLAN</th><th style="text-align:right">DESVÍO</th>
+      <th style="text-align:right">DESV. %</th></tr></thead>
       <tbody>${filas}</tbody></table></div>
   </div>`;
 }
