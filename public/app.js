@@ -3334,6 +3334,7 @@ async function loadMetricas(){
         aplicacion:ep?.aplicacion||'Sin aplicación',
         estado:f.status?.name||'—',
         responsable:dn?(nom?.nombre||dn):'Sin asignar', pais,
+        entregable:f._entregable,   // null = el campo no existe en esta instancia
         vence:f.duedate, entrega:f.customfield_11381, inicio:f.customfield_10015||null,
         desvio:mtDias(f.customfield_11381,f.duedate),
         // Plan = vencimiento − inicio. El % de desviación es real/plan.
@@ -3373,7 +3374,9 @@ function renderMetricas(){
 }
 
 function renderMetricasCuerpo(){
-  const rows=metFiltradas();
+  // Solo entran las historias marcadas como Entregable = Sí en Jira.
+  // entregable===null significa que el campo no existe: en ese caso no se filtra.
+  const rows=metFiltradas().filter(r=>r.tipo!=='Historia'||r.entregable!==false);
   const cuerpo=document.getElementById('mt-cuerpo');
   if(!rows.length){ cuerpo.innerHTML='<div class="mt-empty">Sin resultados para el filtro.</div>'; return; }
 
@@ -3423,7 +3426,7 @@ function mtSeccion(titulo, rows){
   const filas=rows.map(x=>`<tr>
     <td style="font-weight:500;white-space:nowrap"><a class="jlink" href="${JIRA_BASE}${x.key}" target="_blank">${esc(x.codigo||x.key)}</a></td>
     <td style="color:var(--text-muted);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(x.proyecto)}">${esc(x.proyecto)}</td>
-    ${esBug?`<td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(x.resumen)}">${esc(x.resumen)}</td>`:''}
+    <td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(x.resumen)}">${esc(x.resumen)}</td>
     <td style="color:var(--text-muted);white-space:nowrap">${esc(x.responsable)}${x.pais?` <span style="color:var(--text-dim);font-size:10px">${esc(x.pais)}</span>`:''}</td>
     <td style="color:var(--text-muted);white-space:nowrap">${fmtD(x.vence)}</td>
     <td style="color:var(--text-muted);white-space:nowrap">${fmtD(x.entrega)}</td>
@@ -3442,7 +3445,7 @@ function mtSeccion(titulo, rows){
   <div class="mt-card">
     <div class="mt-card-t">DETALLE DE ${titulo}</div>
     <div style="overflow-x:auto"><table class="mt-tabla">
-      <thead><tr><th>CÓDIGO</th><th>PROYECTO</th>${esBug?'<th>BUG</th>':''}<th>RESPONSABLE</th><th>VENCE</th><th>ENTREGA</th>
+      <thead><tr><th>CÓDIGO</th><th>PROYECTO</th><th>${esBug?'BUG':'HISTORIA'}</th><th>RESPONSABLE</th><th>VENCE</th><th>ENTREGA</th>
       <th style="text-align:right">PLAN</th><th style="text-align:right">DESVÍO</th>
       <th style="text-align:right">DESV. %</th></tr></thead>
       <tbody>${filas}</tbody></table></div>
