@@ -3430,7 +3430,6 @@ function mtSeccion(titulo, rows){
     <td style="white-space:nowrap">${esc(x.responsable)}${x.pais?` <span style="color:var(--text-dim);font-size:10px">${esc(x.pais)}</span>`:''}</td>
     <td style="white-space:nowrap">${fmtD(x.vence)}</td>
     <td style="white-space:nowrap">${fmtD(x.entrega)}</td>
-    <td style="color:var(--text-muted);white-space:nowrap;text-align:right">${x.plan>0?x.plan+' d':'—'}</td>
     <td style="text-align:right;font-weight:700;white-space:nowrap;color:${mtColor(x.desvio)}">${x.desvio>0?'+':''}${x.desvio} d</td>
     <td style="text-align:right;font-weight:700;white-space:nowrap;color:${x.pct===null?'var(--text-dim)':mtColor(x.pct)}"
       title="${x.pct===null?'Sin fecha de inicio: no se puede calcular el plan':''}">${
@@ -3446,7 +3445,7 @@ function mtSeccion(titulo, rows){
     <div class="mt-card-t">DETALLE DE ${titulo}</div>
     <div style="overflow-x:auto"><table class="mt-tabla">
       <thead><tr><th>CÓDIGO</th><th>PROYECTO</th><th>${esBug?'BUG':'ENTREGABLE'}</th><th>RESPONSABLE</th><th>VENCE</th><th>ENTREGA</th>
-      <th style="text-align:right">PLAN</th><th style="text-align:right">DESVÍO</th>
+      <th style="text-align:right">DESVÍO</th>
       <th style="text-align:right">DESV. %</th></tr></thead>
       <tbody>${filas}</tbody></table></div>
   </div>`;
