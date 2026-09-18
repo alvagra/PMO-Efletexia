@@ -22,6 +22,26 @@ function jiraGet(auth, cloud, path) {
   });
 }
 
+// Id del campo "Entregable". No está fijo en el código porque puede variar
+// entre instancias; se resuelve por nombre una vez y queda cacheado.
+let _cfEntregable;
+async function idCampoEntregable(auth, cloud) {
+  if (_cfEntregable !== undefined) return _cfEntregable;
+  try {
+    const campos = await jiraGet(auth, cloud, '/rest/api/3/field');
+    const c = (campos || []).find(f => (f.name || '').trim().toLowerCase() === 'entregable');
+    _cfEntregable = c ? c.id : null;
+  } catch (e) { _cfEntregable = null; }
+  return _cfEntregable;
+}
+
+// "Sí" en cualquiera de las formas en que Jira devuelve el campo
+function esEntregable(v) {
+  if (v === true) return true;
+  const t = (typeof v === 'object' && v !== null ? (v.value ?? v.name) : v);
+  return ['si', 'sí', 'yes', 'true'].includes(String(t || '').trim().toLowerCase());
+}
+
 async function fetchAllPages(auth, cloud, jql, fields) {
   const fieldsStr = Array.isArray(fields) ? fields.join(',') : fields;
   let allIssues = [];
@@ -248,6 +268,9 @@ module.exports = async function handler(req, res) {
         'customfield_11381', // Fecha de entrega desarrollo
         'customfield_10015', // Fecha inicio
       ];
+      // Campo "Entregable": solo las historias marcadas con Sí entran a la métrica
+      const CF_ENT = await idCampoEntregable(auth, JIRA_CLOUD);
+      if (CF_ENT) MET_FIELDS.push(CF_ENT);
       const items = await fetchAllPages(
         auth, JIRA_CLOUD,
         'project = PTS AND cf[11381] IS NOT EMPTY AND duedate IS NOT EMPTY ORDER BY cf[11381] DESC',
@@ -279,7 +302,11 @@ module.exports = async function handler(req, res) {
           : null;
       });
 
-      return res.status(200).json({ items, total: items.length, type: 'metricas' });
+      items.forEach(it => {
+        it.fields._entregable = CF_ENT ? esEntregable(it.fields[CF_ENT]) : null;
+      });
+      return res.status(200).json({ items, total: items.length, type: 'metricas',
+        campoEntregable: CF_ENT || null });
 
     } else if (type === 'bugs') {
       // Módulo de gestión de bugs: todos los Errores del proyecto con su épica,
