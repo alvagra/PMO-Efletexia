@@ -3269,17 +3269,18 @@ let metBugsMes = [];   // universo completo de bugs para el gráfico mensual
 
 // Desvío en días efectivos: no cuenta domingos ni los feriados DEL PAÍS
 // del responsable. Sin responsable identificado solo se descuentan domingos.
-function mtDias(entrega, vence, pais){
+// Días entre dos fechas, saltando domingos. Los feriados SÍ se cuentan:
+// por decisión de PMO la métrica no los descuenta, así que un tramo con
+// feriado mide lo mismo que cualquier otra semana.
+function mtDias(entrega, vence){
   if(!entrega||!vence) return 0;
-  const fer = (pais && FERIADOS[pais]) ? FERIADOS[pais] : new Set();
   const ini=new Date(vence+'T00:00:00'), fin=new Date(entrega+'T00:00:00');
   if(ini.getTime()===fin.getTime()) return 0;
   const signo = fin<ini ? -1 : 1;
   let d=new Date(signo>0?ini:fin); const hasta=new Date(signo>0?fin:ini); let n=0;
   d.setDate(d.getDate()+1);              // no se cuenta el propio día de vencimiento
   while(d<=hasta){
-    const iso=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-    if(d.getDay()!==0 && !fer.has(iso)) n++;
+    if(d.getDay()!==0) n++;
     d.setDate(d.getDate()+1);
   }
   return signo*n;
@@ -3326,7 +3327,7 @@ async function loadMetricas(){
       const tipo=(f.issuetype?.name||'').toLowerCase()==='error'?'Bug':'Historia';
       const dn=f.assignee?.displayName||'';
       const nom=dn?resolveNombreDesdeJira(dn):null;
-      const pais=nom?.pais||null;   // el feriado se descuenta según el país del responsable
+      const pais=nom?.pais||null;   // solo para mostrar junto al responsable
       return {
         key:it.key, resumen:f.summary||it.key, tipo,
         proyKey:ep?.key||'', proyecto:ep?.summary||'Sin épica', codigo:ep?.codigo||'',
@@ -3334,9 +3335,9 @@ async function loadMetricas(){
         estado:f.status?.name||'—',
         responsable:dn?(nom?.nombre||dn):'Sin asignar', pais,
         vence:f.duedate, entrega:f.customfield_11381, inicio:f.customfield_10015||null,
-        desvio:mtDias(f.customfield_11381,f.duedate,pais),
+        desvio:mtDias(f.customfield_11381,f.duedate),
         // Plan = vencimiento − inicio. El % de desviación es real/plan.
-        plan:mtDias(f.duedate,f.customfield_10015,pais),
+        plan:mtDias(f.duedate,f.customfield_10015),
         get pct(){ return this.plan>0 ? Math.round(this.desvio/this.plan*1000)/10 : null; }
       };
     }).sort((a,b)=>b.desvio-a.desvio);
