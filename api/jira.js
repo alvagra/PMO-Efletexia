@@ -267,6 +267,7 @@ module.exports = async function handler(req, res) {
         'summary', 'status', 'assignee', 'parent', 'duedate', 'issuetype',
         'customfield_11381', // Fecha de entrega desarrollo
         'customfield_10015', // Fecha inicio
+        'customfield_10934', // Código
       ];
       // Campo "Entregable": solo las historias marcadas con Sí entran a la métrica
       const CF_ENT = await idCampoEntregable(auth, JIRA_CLOUD);
@@ -288,6 +289,13 @@ module.exports = async function handler(req, res) {
         eps.forEach(e => { pMap[e.key] = e; });
       }
       items.forEach(it => {
+        // Una épica no tiene padre: se describe a sí misma
+        const tipoIt = it.fields.issuetype || {};
+        if (tipoIt.hierarchyLevel === 1 || tipoIt.name === 'Epic') {
+          it.fields._epica = { key: it.key, summary: it.fields.summary || it.key,
+            codigo: it.fields.customfield_10934 || '', aplicacion: null };
+          return;
+        }
         const pk = it.fields.parent?.key;
         const padre = pk ? pMap[pk] : null;
         const esEpica = (padre?.fields?.issuetype?.hierarchyLevel === 1) ||
