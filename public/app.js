@@ -3312,6 +3312,8 @@ async function loadMetricas(){
           key:b.key,
           resumen:f.summary||b.key,
           aplicacion:f._epica?.aplicacion||'Sin aplicación',
+          responsable:(()=>{ const dn=f.assignee?.displayName; if(!dn) return 'Sin asignar';
+            return resolveNombreDesdeJira(dn)?.nombre||dn; })(),
           mes:(usaDue?due:created).slice(0,7),
           estimado:!usaDue
         };
@@ -3349,7 +3351,8 @@ function metFiltradas(){
 function renderMetricas(){
   const cont=document.getElementById('mt-contenido');
   if(!metRows.length){
-    cont.innerHTML=mtBugsPorMes()+
+    cont.innerHTML=mtBugsPorMes('aplicacion','BUGS POR MES Y APLICACIÓN')+
+      mtBugsPorMes('responsable','BUGS POR MES Y RESPONSABLE')+
       '<div class="mt-empty">Ninguna historia o bug tiene cargada la <b>Fecha de entrega desarrollo</b> en Jira.<br>'+
       '<span style="font-size:11px">La métrica de desvío se activa sola en cuanto el campo empiece a llenarse.</span></div>';
     return;
@@ -3373,7 +3376,8 @@ function renderMetricasCuerpo(){
   // KPIs globales sobre el total filtrado
   const soloHistorias=(document.getElementById('mt-tipo')?.value||'')==='Historia';
   cuerpo.innerHTML = mtKpis(rows)
-    + (soloHistorias?'':mtBugsPorMes())
+    + (soloHistorias?'':mtBugsPorMes('aplicacion','BUGS POR MES Y APLICACIÓN'))
+    + (soloHistorias?'':mtBugsPorMes('responsable','BUGS POR MES Y RESPONSABLE'))
     + mtPorAplicacion(rows)
     + mtSeccion('HISTORIAS', rows.filter(r=>r.tipo==='Historia'))
     + mtSeccion('BUGS',      rows.filter(r=>r.tipo==='Bug'));
@@ -3454,9 +3458,10 @@ function mtMesCorto(m){
   return `${MT_MESES[+ms-1]} ${a.slice(2)}`;
 }
 
-function mtBugsPorMes(){
+function mtBugsPorMes(dim,titulo){
   const datos=metBugsMes;
   if(!datos.length) return '';
+  const vacio = dim==='responsable' ? 'Sin asignar' : 'Sin aplicación';
 
   // Eje X: todos los meses entre el primero y el último, sin huecos
   const todos=[...new Set(datos.map(d=>d.mes))].sort();
@@ -3470,14 +3475,15 @@ function mtBugsPorMes(){
 
   // Series: top 7 aplicaciones por volumen, el resto agrupado
   const totApp={};
-  datos.forEach(d=>{ totApp[d.aplicacion]=(totApp[d.aplicacion]||0)+1; });
+  datos.forEach(d=>{ const k=d[dim]||vacio; totApp[k]=(totApp[k]||0)+1; });
   const orden=Object.keys(totApp).sort((a,b)=>totApp[b]-totApp[a]);
   const top=new Set(orden.slice(0,7));
-  const nombreSerie=a=>top.has(a)?a:'Otras';
+  const restoLbl = dim==='responsable' ? 'Otros' : 'Otras';
+  const nombreSerie=a=>top.has(a)?a:restoLbl;
 
   const series={};
   datos.forEach(d=>{
-    const s=nombreSerie(d.aplicacion);
+    const s=nombreSerie(d[dim]||vacio);
     if(!series[s]) series[s]={app:s,n:0,est:0,mes:{}};
     series[s].n++;
     if(d.estimado) series[s].est++;
@@ -3534,10 +3540,10 @@ function mtBugsPorMes(){
     : `Los ${datos.length} bugs tienen fecha de vencimiento cargada.`;
 
   return `<div class="mt-card">
-    <div class="mt-card-t">BUGS POR MES Y APLICACIÓN</div>
+    <div class="mt-card-t">${titulo}</div>
     <div style="font-size:11px;color:var(--text-muted);margin:-4px 0 10px">${nota}</div>
     <svg viewBox="0 0 ${W} ${H}" role="img" style="width:100%;height:auto;display:block;overflow:visible"
-      aria-label="Bugs por mes y aplicación">
+      aria-label="${titulo}">
       ${grilla}${ejeX}${trazos}
     </svg>
     <div class="mt-leg">${leyenda}</div>
