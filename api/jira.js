@@ -25,14 +25,26 @@ function jiraGet(auth, cloud, path) {
 // Id del campo "Entregable". No está fijo en el código porque puede variar
 // entre instancias; se resuelve por nombre una vez y queda cacheado.
 let _cfEntregable;
-async function idCampoEntregable(auth, cloud) {
-  if (_cfEntregable !== undefined) return _cfEntregable;
+async function idCampoEntregable(auth, cloud, keyMuestra) {
+  if (_cfEntregable) return _cfEntregable;            // solo se cachea el acierto
+  const buscar = obj => {
+    const pares = Array.isArray(obj)
+      ? obj.map(f => [f.id, f.name])                  // /rest/api/3/field
+      : Object.entries(obj || {}).map(([id, n]) => [id, n]);  // expand=names
+    const hit = pares.find(([, n]) => (n || '').trim().toLowerCase() === 'entregable');
+    return hit ? hit[0] : null;
+  };
   try {
-    const campos = await jiraGet(auth, cloud, '/rest/api/3/field');
-    const c = (campos || []).find(f => (f.name || '').trim().toLowerCase() === 'entregable');
-    _cfEntregable = c ? c.id : null;
-  } catch (e) { _cfEntregable = null; }
-  return _cfEntregable;
+    _cfEntregable = buscar(await jiraGet(auth, cloud, '/rest/api/3/field'));
+  } catch (e) { /* sin permiso para listar campos: se intenta por la incidencia */ }
+  if (!_cfEntregable && keyMuestra) {
+    try {
+      const iss = await jiraGet(auth, cloud,
+        `/rest/api/3/issue/${encodeURIComponent(keyMuestra)}?expand=names&fields=summary`);
+      _cfEntregable = buscar(iss?.names);
+    } catch (e) { /* queda sin resolver: el frontend lo avisa */ }
+  }
+  return _cfEntregable || null;
 }
 
 // "Sí" en cualquiera de las formas en que Jira devuelve el campo
@@ -270,13 +282,10 @@ module.exports = async function handler(req, res) {
         'customfield_10934', // Código
       ];
       // Campo "Entregable": solo las historias marcadas con Sí entran a la métrica
-      const CF_ENT = await idCampoEntregable(auth, JIRA_CLOUD);
+      let CF_ENT = await idCampoEntregable(auth, JIRA_CLOUD);
       if (CF_ENT) MET_FIELDS.push(CF_ENT);
-      const items = await fetchAllPages(
-        auth, JIRA_CLOUD,
-        'project = PTS AND cf[11381] IS NOT EMPTY AND duedate IS NOT EMPTY ORDER BY cf[11381] DESC',
-        MET_FIELDS
-      );
+      const MET_JQL = 'project = PTS AND cf[11381] IS NOT EMPTY AND duedate IS NOT EMPTY ORDER BY cf[11381] DESC';
+      let items = await fetchAllPages(auth, JIRA_CLOUD, MET_JQL, MET_FIELDS);
 
       // Épica de cada item, para mostrar código y nombre de proyecto
       const padres = [...new Set(items.map(i => i.fields.parent?.key).filter(Boolean))];
@@ -310,6 +319,14 @@ module.exports = async function handler(req, res) {
           : null;
       });
 
+      // Si no se pudo resolver por el catálogo, se reintenta con una incidencia real
+      if (!CF_ENT && items.length) {
+        CF_ENT = await idCampoEntregable(auth, JIRA_CLOUD, items[0].key);
+        if (CF_ENT) {
+          MET_FIELDS.push(CF_ENT);
+          items = await fetchAllPages(auth, JIRA_CLOUD, MET_JQL, MET_FIELDS);
+        }
+      }
       items.forEach(it => {
         it.fields._entregable = CF_ENT ? esEntregable(it.fields[CF_ENT]) : null;
       });
