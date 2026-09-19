@@ -538,6 +538,10 @@ async function cargarBugs(){
     const r=await Sesion.pedir('/api/jira',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'bugs'})});
     const j=await r.json();
     if(!r.ok) throw new Error(j.error||'Error de API');
+    // Si el campo "Entregable" no se resolvió, el filtro de historias queda inactivo
+    if(!j.campoEntregable) console.warn('[Métricas] No se encontró el campo "Entregable" en Jira: '+
+      'se listan todas las historias sin filtrar.');
+    else console.info('[Métricas] Campo Entregable = '+j.campoEntregable);
     bugsData=j.bugs||[];
     // Solo bugs con Persona asignada en Jira
     bugsRows=bugsData.filter(b=>b.fields?.assignee?.displayName).map(b=>{
@@ -3325,11 +3329,12 @@ async function loadMetricas(){
     metRows=(j.items||[]).map(it=>{
       const f=it.fields||{}, ep=f._epica||null;
       const tipo=(f.issuetype?.name||'').toLowerCase()==='error'?'Bug':'Historia';
+      const esEpica=f.issuetype?.hierarchyLevel===1||f.issuetype?.name==='Epic';
       const dn=f.assignee?.displayName||'';
       const nom=dn?resolveNombreDesdeJira(dn):null;
       const pais=nom?.pais||null;   // solo para mostrar junto al responsable
       return {
-        key:it.key, resumen:f.summary||it.key, tipo,
+        key:it.key, resumen:f.summary||it.key, tipo, esEpica,
         proyKey:ep?.key||'', proyecto:ep?.summary||'Sin épica', codigo:ep?.codigo||'',
         aplicacion:ep?.aplicacion||'Sin aplicación',
         estado:f.status?.name||'—',
@@ -3374,9 +3379,8 @@ function renderMetricas(){
 }
 
 function renderMetricasCuerpo(){
-  // Solo entran las historias marcadas como Entregable = Sí en Jira.
-  // entregable===null significa que el campo no existe: en ese caso no se filtra.
-  const rows=metFiltradas().filter(r=>r.tipo!=='Historia'||r.entregable!==false);
+  // Las épicas no se miden. De las historias, solo las marcadas Entregable = Sí.
+  const rows=metFiltradas().filter(r=>!r.esEpica && (r.tipo!=='Historia'||r.entregable===true));
   const cuerpo=document.getElementById('mt-cuerpo');
   if(!rows.length){ cuerpo.innerHTML='<div class="mt-empty">Sin resultados para el filtro.</div>'; return; }
 
