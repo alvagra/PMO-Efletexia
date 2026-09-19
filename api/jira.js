@@ -31,17 +31,20 @@ async function idCampoEntregable(auth, cloud, keyMuestra) {
     const pares = Array.isArray(obj)
       ? obj.map(f => [f.id, f.name])                  // /rest/api/3/field
       : Object.entries(obj || {}).map(([id, n]) => [id, n]);  // expand=names
-    const hit = pares.find(([, n]) => (n || '').trim().toLowerCase() === 'entregable');
+    const norm = t => (t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, ' ').trim().toLowerCase();
+    const hit = pares.find(([, n]) => norm(n) === 'entregable');
     return hit ? hit[0] : null;
   };
   try {
-    _cfEntregable = buscar(await jiraGet(auth, cloud, '/rest/api/3/field'));
+    const r = await jiraGet(auth, cloud, '/rest/api/3/field');
+    if (r.status === 200) _cfEntregable = buscar(r.body);
   } catch (e) { /* sin permiso para listar campos: se intenta por la incidencia */ }
   if (!_cfEntregable && keyMuestra) {
     try {
-      const iss = await jiraGet(auth, cloud,
+      const r = await jiraGet(auth, cloud,
         `/rest/api/3/issue/${encodeURIComponent(keyMuestra)}?expand=names&fields=summary`);
-      _cfEntregable = buscar(iss?.names);
+      if (r.status === 200) _cfEntregable = buscar(r.body?.names);
     } catch (e) { /* queda sin resolver: el frontend lo avisa */ }
   }
   return _cfEntregable || null;
