@@ -3750,13 +3750,13 @@ function renderSeguimiento(rows){
   const cab=`<div class="sg-head">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
       <div><div class="sg-title">Seguimiento y control de entregables</div>
-      <div class="sg-sub">Historias marcadas como Entregable · excluye Finalizada</div></div>
+      <div class="sg-sub">Historias marcadas como Entregable · en estado En curso</div></div>
       <button class="sg-x" type="button" onclick="document.getElementById('sg-ov').style.display='none'">✕</button>
     </div>`;
 
   if(!rows.length){
     const aviso = rows._campo
-      ? 'Ninguna historia abierta está marcada como Entregable en Jira.'
+      ? 'Ninguna historia En curso está marcada como Entregable en Jira.'
       : 'No se encontró el campo <b>Entregable</b> en esta instancia de Jira.';
     return `<div class="sg-box">${cab}<div class="sg-empty">${aviso}</div></div>`;
   }
