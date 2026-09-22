@@ -344,10 +344,9 @@ module.exports = async function handler(req, res) {
       const CAMPOS = ['summary', 'status', 'assignee', 'parent', 'duedate',
                       'customfield_10015', 'issuetype', 'customfield_11381'];
       if (CF) CAMPOS.push(CF);
-      // Filtro positivo: solo historias En curso. Se prefiere a excluir
-      // "Finalizada" porque el != por nombre no filtra de forma fiable aquí.
-      const JQL = 'project = PTS AND issuetype not in subTaskIssueTypes() ' +
-                  'AND status = "En curso" ORDER BY duedate ASC';
+      // El estado se filtra en código con un mapa de equivalencias, no en la JQL:
+      // así no depende de que el nombre exacto exista en la instancia.
+      const JQL = 'project = PTS AND issuetype not in subTaskIssueTypes() ORDER BY duedate ASC';
       let items = await fetchAllPages(auth, JIRA_CLOUD, JQL, CAMPOS);
 
       if (!CF && items.length) {
@@ -355,11 +354,26 @@ module.exports = async function handler(req, res) {
         if (CF) { CAMPOS.push(CF); items = await fetchAllPages(auth, JIRA_CLOUD, JQL, CAMPOS); }
       }
       // Solo las historias marcadas como entregable
-      const norm = x => String(x || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+      // Se quitan tildes, puntos y espacios extra: el estado real es "REVIEW."
+      const norm = x => String(x || '').toLowerCase().normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '').replace(/[.\u00B7]/g, '')
+        .replace(/\s+/g, ' ').trim();
+      // Equivalencias de estado para el seguimiento
+      const EQUIV = {
+        'tareas por hacer': 'Pendiente',
+        'to do':            'Pendiente',
+        'en curso':         'En desarrollo',
+        'in progress':      'En desarrollo',
+        'en revision':      'En desarrollo',
+        'review':           'En desarrollo',
+        'in review':        'En desarrollo'
+      };
       items = items.filter(it => {
         const t = it.fields.issuetype || {};
         if (t.hierarchyLevel === 1 || t.name === 'Epic') return false;
-        if (norm(it.fields.status?.name) !== 'en curso') return false;
+        const eq = EQUIV[norm(it.fields.status?.name)];
+        if (!eq) return false;
+        it.fields._estadoSg = eq;
         return CF ? esEntregable(it.fields[CF]) === true : false;
       });
 
