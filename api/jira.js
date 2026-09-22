@@ -344,8 +344,10 @@ module.exports = async function handler(req, res) {
       const CAMPOS = ['summary', 'status', 'assignee', 'parent', 'duedate',
                       'customfield_10015', 'issuetype', 'customfield_11381'];
       if (CF) CAMPOS.push(CF);
+      // Filtro positivo: solo historias En curso. Se prefiere a excluir
+      // "Finalizada" porque el != por nombre no filtra de forma fiable aquí.
       const JQL = 'project = PTS AND issuetype not in subTaskIssueTypes() ' +
-                  'AND status != "Finalizada" ORDER BY duedate ASC';
+                  'AND status = "En curso" ORDER BY duedate ASC';
       let items = await fetchAllPages(auth, JIRA_CLOUD, JQL, CAMPOS);
 
       if (!CF && items.length) {
@@ -353,9 +355,11 @@ module.exports = async function handler(req, res) {
         if (CF) { CAMPOS.push(CF); items = await fetchAllPages(auth, JIRA_CLOUD, JQL, CAMPOS); }
       }
       // Solo las historias marcadas como entregable
+      const norm = x => String(x || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
       items = items.filter(it => {
         const t = it.fields.issuetype || {};
         if (t.hierarchyLevel === 1 || t.name === 'Epic') return false;
+        if (norm(it.fields.status?.name) !== 'en curso') return false;
         return CF ? esEntregable(it.fields[CF]) === true : false;
       });
 
