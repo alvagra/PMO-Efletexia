@@ -336,6 +336,56 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ items, total: items.length, type: 'metricas',
         campoEntregable: CF_ENT || null });
 
+    } else if (type === 'seguimiento') {
+      // Seguimiento de entregables: historias marcadas como Entregable en Jira
+      // que NO están Finalizada. El filtro va por nombre de estado, no por
+      // categoría, porque "Blocked" está clasificado como Listo en esta instancia.
+      let CF = await idCampoEntregable(auth, JIRA_CLOUD);
+      const CAMPOS = ['summary', 'status', 'assignee', 'parent', 'duedate',
+                      'customfield_10015', 'issuetype', 'customfield_11381'];
+      if (CF) CAMPOS.push(CF);
+      const JQL = 'project = PTS AND issuetype not in subTaskIssueTypes() ' +
+                  'AND status != "Finalizada" ORDER BY duedate ASC';
+      let items = await fetchAllPages(auth, JIRA_CLOUD, JQL, CAMPOS);
+
+      if (!CF && items.length) {
+        CF = await idCampoEntregable(auth, JIRA_CLOUD, items[0].key);
+        if (CF) { CAMPOS.push(CF); items = await fetchAllPages(auth, JIRA_CLOUD, JQL, CAMPOS); }
+      }
+      // Solo las historias marcadas como entregable
+      items = items.filter(it => {
+        const t = it.fields.issuetype || {};
+        if (t.hierarchyLevel === 1 || t.name === 'Epic') return false;
+        return CF ? esEntregable(it.fields[CF]) === true : false;
+      });
+
+      // Épica de cada historia, para código y nombre de proyecto
+      const padres = [...new Set(items.map(i => i.fields.parent?.key).filter(Boolean))];
+      const pMap = {};
+      for (let i = 0; i < padres.length; i += 50) {
+        const chunk = padres.slice(i, i + 50);
+        if (!chunk.length) continue;
+        const eps = await fetchAllPages(auth, JIRA_CLOUD, `key in (${chunk.join(',')})`,
+          ['summary', 'parent', 'customfield_10934', 'issuetype']);
+        eps.forEach(e => { pMap[e.key] = e; });
+      }
+      items.forEach(it => {
+        const pk = it.fields.parent?.key;
+        const padre = pk ? pMap[pk] : null;
+        const esEp = (padre?.fields?.issuetype?.hierarchyLevel === 1) ||
+                     (padre?.fields?.issuetype?.name === 'Epic');
+        const epKey = esEp ? padre?.key : padre?.fields?.parent?.key;
+        const ep = esEp ? padre : (padre?.fields?.parent?.key ? pMap[padre.fields.parent.key] : null);
+        it.fields._epica = epKey
+          ? { key: epKey,
+              summary: (esEp ? padre?.fields?.summary : padre?.fields?.parent?.fields?.summary) || epKey,
+              codigo: (esEp ? padre?.fields?.customfield_10934 : ep?.fields?.customfield_10934) || '' }
+          : null;
+      });
+
+      return res.status(200).json({ items, total: items.length,
+        campoEntregable: CF || null, type: 'seguimiento' });
+
     } else if (type === 'bugs') {
       // Módulo de gestión de bugs: todos los Errores del proyecto con su épica,
       // fechas, horas estimadas y horas registradas (propias + de sus subtareas).
