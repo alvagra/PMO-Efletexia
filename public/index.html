@@ -506,6 +506,28 @@ a.jlink:hover{text-decoration:underline}
 .ent-dot{display:inline-block;width:10px;height:10px;border-radius:50%}
 #ent-gantt-wrap{padding:12px 20px}
 /* Layout superior: resumen + kpi lado a lado */
+.sg-bar{display:flex;justify-content:flex-end;padding:12px 20px 0}
+.sg-btn{display:flex;align-items:center;gap:7px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:6px;padding:7px 14px;font-size:12px;font-weight:500;color:var(--text-primary);cursor:pointer;font-family:var(--font)}
+.sg-btn:hover{border-color:var(--blue);color:var(--blue)}
+.sg-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:950;align-items:flex-start;justify-content:center;padding:34px 16px;overflow-y:auto}
+.sg-box{background:var(--bg-surface);border:1px solid var(--border);border-radius:12px;max-width:1280px;width:100%;box-shadow:0 16px 48px rgba(0,0,0,.55)}
+.sg-head{display:flex;align-items:center;gap:10px;padding:15px 20px;border-bottom:1px solid var(--border)}
+.sg-title{font-size:15px;font-weight:600}
+.sg-sub{font-size:11px;color:var(--text-muted)}
+.sg-x{margin-left:auto;background:transparent;border:none;color:var(--text-muted);font-size:17px;cursor:pointer;line-height:1}
+.sg-x:hover{color:var(--text-primary)}
+.sg-body{padding:16px 20px}
+.sg-kpis{display:flex;gap:11px;flex-wrap:wrap;margin-bottom:16px}
+.sg-kpi{background:var(--bg-elevated);border:1px solid var(--border);border-radius:9px;padding:11px 17px;min-width:118px}
+.sg-kpi-l{font-size:10px;color:var(--text-muted);letter-spacing:.05em;margin-bottom:6px}
+.sg-kpi-v{font-size:23px;font-weight:700;line-height:1}
+.sg-kpi-s{font-size:10px;color:var(--text-dim);margin-top:5px}
+.sg-tabla{width:100%;border-collapse:collapse;font-size:12px}
+.sg-tabla th{text-align:left;font-weight:500;color:var(--text-muted);font-size:9px;letter-spacing:.05em;padding:8px 9px;border-bottom:1px solid var(--border);white-space:nowrap;background:var(--bg-elevated)}
+.sg-tabla td{padding:10px 9px;border-bottom:1px solid var(--border);vertical-align:top;color:var(--text-primary)}
+.sg-tabla tr:hover td{background:var(--bg-hover)}
+.sg-el{max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sg-empty{padding:40px;text-align:center;color:var(--text-muted);font-size:13px}
 .ent-top-row{display:flex;gap:12px;padding:14px 20px 4px;align-items:flex-start}
 .ent-resumen-col{flex:7;min-width:0}
 .ent-kpi-col{flex:3;min-width:220px}
@@ -833,6 +855,12 @@ a.jlink:hover{text-decoration:underline}
 </div>
 
 <div class="tab-panel" id="panel-entregables">
+  <div class="sg-bar">
+    <button class="sg-btn" id="btn-seguimiento" type="button" title="Seguimiento y control de entregables">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+      Seguimiento
+    </button>
+  </div>
   <div class="ent-top-row">
     <div class="ent-resumen-col" id="ent-resumen-wrap"></div>
     <div class="ent-kpi-col" id="ent-kpi-wrap"></div>
