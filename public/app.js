@@ -3686,3 +3686,116 @@ async function cargarBugsSilencioso(){
       fin:f.duedate||null, est:f._estTotal||0, reg:+(((f._segTotal||0)/3600).toFixed(1)) };
   });
 }
+
+
+// ═══════════════════════════════════════════════════════════
+//  SEGUIMIENTO Y CONTROL DE ENTREGABLES  (ventana en Entregables)
+//  Historias marcadas como Entregable en Jira que no están Finalizada.
+// ═══════════════════════════════════════════════════════════
+let sgData = null;
+
+function sgDias(f){
+  if(!f) return null;
+  const hoy=new Date(); hoy.setHours(0,0,0,0);
+  return Math.round((new Date(f+'T00:00:00')-hoy)/86400000);
+}
+function sgAlerta(d,estado){
+  const e=(estado||'').toLowerCase();
+  if(e.includes('blocked')||e.includes('bloque')) return {t:'Bloqueado',c:'#ef4444'};
+  if(d===null) return {t:'Sin fecha',c:'#F5B800'};
+  if(d<0)  return {t:d+' d',c:'#ef4444'};
+  if(d<=5) return {t:d+' d',c:'#F5B800'};
+  return {t:d+' d',c:'var(--text-muted)'};
+}
+
+async function abrirSeguimiento(){
+  let ov=document.getElementById('sg-ov');
+  if(!ov){
+    ov=document.createElement('div'); ov.id='sg-ov'; ov.className='sg-ov';
+    ov.addEventListener('click',ev=>{ if(ev.target===ov) ov.style.display='none'; });
+    document.body.appendChild(ov);
+  }
+  ov.style.display='flex';
+  ov.innerHTML='<div class="sg-box"><div class="sg-empty">Cargando entregables…</div></div>';
+  try{
+    if(!sgData){
+      const r=await fetch('/api/jira',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({type:'seguimiento'})});
+      const j=await r.json();
+      if(!r.ok) throw new Error(j.error||'Error de API');
+      sgData=(j.items||[]).map(it=>{
+        const f=it.fields||{}, ep=f._epica||null;
+        const dn=f.assignee?.displayName||'';
+        return {
+          key:it.key,
+          codigo:ep?.codigo||ep?.key||'—',
+          epicaKey:ep?.key||it.key,
+          proyecto:ep?.summary||'Sin épica',
+          entregable:f.summary||it.key,
+          responsable:dn?(resolveNombreDesdeJira(dn)?.nombre||dn):'Sin asignar',
+          estado:f.status?.name||'—',
+          vence:f.duedate||null
+        };
+      }).sort((a,b)=>(a.vence||'9999').localeCompare(b.vence||'9999'));
+      sgData._campo=j.campoEntregable;
+    }
+    ov.innerHTML=renderSeguimiento(sgData);
+  }catch(e){
+    ov.innerHTML=`<div class="sg-box"><div class="sg-empty">No se pudieron cargar los entregables.<br>
+      <span style="font-size:11px">${esc(e.message)}</span></div></div>`;
+  }
+}
+
+function renderSeguimiento(rows){
+  const cab=`<div class="sg-head">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+      <div><div class="sg-title">Seguimiento y control de entregables</div>
+      <div class="sg-sub">Historias marcadas como Entregable · excluye Finalizada</div></div>
+      <button class="sg-x" type="button" onclick="document.getElementById('sg-ov').style.display='none'">✕</button>
+    </div>`;
+
+  if(!rows.length){
+    const aviso = rows._campo
+      ? 'Ninguna historia abierta está marcada como Entregable en Jira.'
+      : 'No se encontró el campo <b>Entregable</b> en esta instancia de Jira.';
+    return `<div class="sg-box">${cab}<div class="sg-empty">${aviso}</div></div>`;
+  }
+
+  const ds=rows.map(r=>sgDias(r.vence));
+  const bloq=rows.filter(r=>/blocked|bloque/i.test(r.estado)).length;
+  const venc=rows.filter((r,i)=>ds[i]!==null&&ds[i]<0).length;
+  const prox=rows.filter((r,i)=>ds[i]!==null&&ds[i]>=0&&ds[i]<=5).length;
+  const sinF=rows.filter(r=>!r.vence).length;
+  const kpi=(l,v,c,s)=>`<div class="sg-kpi"><div class="sg-kpi-l">${l}</div>
+    <div class="sg-kpi-v" style="color:${c||'var(--text-primary)'}">${v}</div>
+    ${s?`<div class="sg-kpi-s">${s}</div>`:''}</div>`;
+
+  const filas=rows.map((r,i)=>{
+    const a=sgAlerta(ds[i],r.estado);
+    const rojo=ds[i]!==null&&ds[i]<0;
+    return `<tr${rojo?' style="background:rgba(239,68,68,.07)"':''}>
+      <td style="font-weight:600;white-space:nowrap"><a class="jlink" href="${JIRA_BASE}${r.epicaKey}" target="_blank">${esc(r.codigo)}</a></td>
+      <td class="sg-el" title="${esc(r.proyecto)}">${esc(r.proyecto)}</td>
+      <td class="sg-el" title="${esc(r.entregable)}">${esc(r.entregable)}</td>
+      <td style="white-space:nowrap">${esc(r.responsable)}</td>
+      <td style="white-space:nowrap">${esc(r.estado)}</td>
+      <td style="white-space:nowrap;text-align:right">${r.vence?fmtD(r.vence):'—'}</td>
+      <td style="white-space:nowrap;text-align:right;font-weight:700;color:${a.c}">${a.t}</td>
+    </tr>`;}).join('');
+
+  return `<div class="sg-box">${cab}<div class="sg-body">
+    <div class="sg-kpis">
+      ${kpi('ABIERTOS',rows.length)}
+      ${kpi('VENCIDOS',venc,venc?'#ef4444':'#3fb950')}
+      ${kpi('VENCEN ≤5 DÍAS',prox,prox?'#F5B800':'var(--text-dim)')}
+      ${kpi('BLOQUEADOS',bloq,bloq?'#ef4444':'var(--text-dim)')}
+      ${kpi('SIN FECHA',sinF,sinF?'#F5B800':'var(--text-dim)')}
+    </div>
+    <div style="overflow-x:auto"><table class="sg-tabla">
+      <thead><tr><th>CÓDIGO</th><th>PROYECTO</th><th>ENTREGABLE</th><th>RESPONSABLE</th>
+      <th>ESTADO</th><th style="text-align:right">VENCE</th><th style="text-align:right">ALERTA</th></tr></thead>
+      <tbody>${filas}</tbody></table></div>
+  </div></div>`;
+}
+
+document.getElementById('btn-seguimiento')?.addEventListener('click',abrirSeguimiento);
