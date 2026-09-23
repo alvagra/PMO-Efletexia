@@ -517,6 +517,9 @@ a.jlink:hover{text-decoration:underline}
 .sg-x{margin-left:auto;background:transparent;border:none;color:var(--text-muted);font-size:17px;cursor:pointer;line-height:1}
 .sg-x:hover{color:var(--text-primary)}
 .sg-body{padding:16px 20px}
+.sg-wrap{padding:16px 20px}
+.sg-filtros{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.sg-filtros select,.sg-filtros input{background:var(--bg-elevated);border:1px solid var(--border);border-radius:5px;padding:6px 10px;font-size:12px;color:var(--text-primary);font-family:var(--font);height:32px}
 .sg-kpis{display:flex;gap:11px;flex-wrap:wrap;margin-bottom:16px}
 .sg-kpi{background:var(--bg-elevated);border:1px solid var(--border);border-radius:9px;padding:11px 17px;min-width:118px}
 .sg-kpi-l{font-size:10px;color:var(--text-muted);letter-spacing:.05em;margin-bottom:6px}
@@ -618,6 +621,9 @@ a.jlink:hover{text-decoration:underline}
   </div>
   <div class="tab" data-tab="informe" data-permiso="tab.informe">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 2h6l2.5 2.5V14H4z"/><path d="M6 7h5M6 10h5"/></svg>Informe
+  </div>
+  <div class="tab" data-tab="seguimiento" data-permiso="tab.seguimiento">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 8h-3l-2 5L6 2 4 8H1"/></svg>Seguimiento
   </div>
   <div class="tab" data-tab="costos" data-permiso="tab.costos">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v12"/><path d="M11 5H6.5a1.75 1.75 0 0 0 0 3.5h3a1.75 1.75 0 0 1 0 3.5H5"/></svg>Costos
@@ -855,12 +861,7 @@ a.jlink:hover{text-decoration:underline}
 </div>
 
 <div class="tab-panel" id="panel-entregables">
-  <div class="sg-bar">
-    <button class="sg-btn" id="btn-seguimiento" type="button" title="Seguimiento y control de entregables">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-      Seguimiento
-    </button>
-  </div>
+
   <div class="ent-top-row">
     <div class="ent-resumen-col" id="ent-resumen-wrap"></div>
     <div class="ent-kpi-col" id="ent-kpi-wrap"></div>
@@ -904,6 +905,10 @@ a.jlink:hover{text-decoration:underline}
 
 <div class="tab-panel" id="panel-informe" data-permiso="tab.informe">
   <div class="mt-wrap" id="inf-contenido"></div>
+</div>
+
+<div class="tab-panel" id="panel-seguimiento" data-permiso="tab.seguimiento">
+  <div class="sg-wrap" id="sg-contenido"></div>
 </div>
 
 <div class="tab-panel" id="panel-costos" data-permiso="tab.costos">
