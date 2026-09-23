@@ -3730,7 +3730,7 @@ function sgDias(f){
 
 async function loadSeguimiento(){
   const cont=document.getElementById('sg-contenido');
-  cont.innerHTML='<div class="mt-empty">Cargando subtareas…</div>';
+  cont.innerHTML='<div class="mt-empty">Cargando entregables…</div>';
   try{
     const r=await fetch('/api/jira',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({type:'seguimiento'})});
@@ -3738,24 +3738,19 @@ async function loadSeguimiento(){
     if(!r.ok) throw new Error(j.error||'Error de API');
     // Se excluyen las épicas operativas (Soporte Requerimientos y Gestión PMO-TI)
     sgRows=(j.items||[]).filter(it=>!SPECIAL_EPIC_KEYS.includes(it.fields?._epica?.key)).map(it=>{
-      const f=it.fields||{}, ep=f._epica||null, pa=f._padre||null;
+      const f=it.fields||{}, ep=f._epica||null;
       const dn=f.assignee?.displayName||'';
       return {
         key:it.key,
         subtarea:f.summary||it.key,
-        padre:pa?pa.summary:'—',
-        padreKey:pa?pa.key:'',
-        esBug:!!pa?.esBug,
         codigo:ep?.codigo||ep?.key||'—',
         epicaKey:ep?.key||'',
         proyecto:ep?.summary||'Sin épica',
         estado:f.status?.name||'—',
         responsable:dn?(resolveNombreDesdeJira(dn)?.nombre||dn):'Sin asignar',
         area:dn?(resolveNombreDesdeJira(dn)?.area||'Sin área'):'Sin área',
-        inicio:f.customfield_10015||null,
-        vence:f.duedate||null,
-        est:f.customfield_11136||0,
-        reg:+(((f.timespent||0)/3600).toFixed(1))
+        inicio:f._ini||null,
+        vence:f._fin||null
       };
     });
     sgLoaded=true;
@@ -3791,13 +3786,13 @@ function sgFiltradas(){
 
 function renderSeguimientoUI(){
   const cont=document.getElementById('sg-contenido');
-  if(!sgRows.length){ cont.innerHTML='<div class="mt-empty">No hay subtareas en el proyecto.</div>'; return; }
+  if(!sgRows.length){ cont.innerHTML='<div class="mt-empty">Ninguna historia está marcada como Entregable en Jira.</div>'; return; }
   const recs=[...new Set(sgRows.map(r=>r.responsable))].sort();
   const ests=[...new Set(sgRows.map(r=>r.estado))].sort();
   const areas=[...new Set(sgRows.map(r=>r.area))].sort();
   cont.innerHTML=`
     <div class="sg-filtros">
-      <input id="sg-q" type="text" placeholder="Buscar subtarea, clave o proyecto…" style="min-width:230px"/>
+      <input id="sg-q" type="text" placeholder="Buscar entregable o proyecto…" style="min-width:230px"/>
       <select id="sg-rec"><option value="">Todos los recursos</option>${
         recs.map(x=>`<option>${esc(x)}</option>`).join('')}</select>
       <span id="sg-area-chips" class="rec-area-btns">${
@@ -3862,7 +3857,6 @@ function renderSeguimientoTabla(){
   const abiertas=rows.length-cerr;
   const venc=rows.filter(r=>{const d=sgDias(r.vence); return d!==null&&d<0&&!esEstadoCerrado(r.estado);}).length;
   const sinF=rows.filter(r=>!r.vence&&!esEstadoCerrado(r.estado)).length;
-  const est=rows.reduce((a,r)=>a+r.est,0), reg=+(rows.reduce((a,r)=>a+r.reg,0)).toFixed(1);
   const kpi=(l,v,c,s)=>`<div class="sg-kpi"><div class="sg-kpi-l">${l}</div>
     <div class="sg-kpi-v" style="color:${c||'var(--text-primary)'}">${v}</div>
     ${s?`<div class="sg-kpi-s">${s}</div>`:''}</div>`;
@@ -3875,40 +3869,35 @@ function renderSeguimientoTabla(){
     return `<tr>
       <td style="font-weight:500;white-space:nowrap">${r.epicaKey?`<a class="jlink" href="${JIRA_BASE}${r.epicaKey}" target="_blank">${esc(r.codigo)}</a>`:esc(r.codigo)}</td>
       <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.proyecto)}">${esc(r.proyecto)}</td>
-      <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.subtarea)}">${
-        r.esBug?'<span class="bg-est" style="background:rgba(239,68,68,.15);color:#ef4444;margin-right:6px">BUG</span>':''}${esc(r.subtarea)}</td>
+      <td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.subtarea)}">${esc(r.subtarea)}</td>
       <td style="white-space:nowrap">${esc(r.responsable)}</td>
       <td><span class="det-badge det-badge-${st.cls}">${esc(r.estado)}</span></td>
       <td style="white-space:nowrap;color:var(--text-muted)">${r.inicio?fmtD(r.inicio):'—'}</td>
       <td style="white-space:nowrap;color:${colFin}">${r.vence?fmtD(r.vence):'sin fecha'}</td>
-      <td style="text-align:right">${r.est?r.est+'h':'—'}</td>
-      <td style="text-align:right;color:${r.reg>r.est&&r.est>0?'#ef4444':'var(--text-primary)'}">${r.reg?r.reg+'h':'—'}</td>
     </tr>`;}).join('');
 
   cuerpo.innerHTML=`
     <div class="sg-kpis">
-      ${kpi('SUBTAREAS',rows.length,null,`de ${sgRows.length} en total`)}
+      ${kpi('ENTREGABLES',rows.length,null,`de ${sgRows.length} en total`)}
       ${kpi('ABIERTAS',abiertas,abiertas?'#F5B800':'#3fb950')}
       ${kpi('CERRADAS',cerr,'#3fb950')}
       ${kpi('VENCIDAS',venc,venc?'#ef4444':'#3fb950')}
       ${kpi('SIN FECHA',sinF,sinF?'#F5B800':'var(--text-dim)')}
-      ${kpi('HORAS',reg+'h',reg>est&&est>0?'#ef4444':'var(--text-primary)',`${est}h estimadas`)}
     </div>
     <div style="overflow-x:auto"><table class="sg-tabla">
-      <thead><tr><th>CÓDIGO</th><th>PROYECTO</th><th>SUBTAREA</th><th>RECURSO</th>
-      <th>ESTADO</th><th>INICIO</th><th>VENCE</th>
-      <th style="text-align:right">HRS EST.</th><th style="text-align:right">HRS REG.</th></tr></thead>
+      <thead><tr><th>CÓDIGO</th><th>PROYECTO</th><th>ENTREGABLE</th><th>RECURSO</th>
+      <th>ESTADO</th><th>INICIO</th><th>VENCE</th></tr></thead>
       <tbody>${filas}</tbody></table></div>`;
 }
 
 function exportSeguimientoCSV(){
   const rows=sgFiltradas();
   const q=v=>`"${String(v??'').replace(/"/g,'""')}"`;
-  const csv=[['Codigo','Proyecto','Subtarea','Recurso','Estado','Inicio','Vence','Horas estimadas','Horas registradas'].join(',')]
-    .concat(rows.map(r=>[r.codigo,r.proyecto,r.subtarea,r.responsable,r.estado,r.inicio||'',r.vence||'',r.est,r.reg].map(q).join(',')))
+  const csv=[['Codigo','Proyecto','Entregable','Recurso','Estado','Inicio','Vence'].join(',')]
+    .concat(rows.map(r=>[r.codigo,r.proyecto,r.subtarea,r.responsable,r.estado,r.inicio||'',r.vence||''].map(q).join(',')))
     .join('\n');
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'}));
-  a.download=`seguimiento_subtareas_${new Date().toISOString().slice(0,10)}.csv`;
+  a.download=`seguimiento_entregables_${new Date().toISOString().slice(0,10)}.csv`;
   a.click();
 }
