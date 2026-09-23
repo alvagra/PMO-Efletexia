@@ -3788,7 +3788,10 @@ function renderSeguimientoUI(){
   const cont=document.getElementById('sg-contenido');
   if(!sgRows.length){ cont.innerHTML='<div class="mt-empty">Ninguna historia está marcada como Entregable en Jira.</div>'; return; }
   const recs=[...new Set(sgRows.map(r=>r.responsable))].sort();
-  const ests=[...new Set(sgRows.map(r=>r.estado))].sort();
+  // Estados del flujo de historias en orden, más los que aparezcan en los datos
+  const SG_BASE=['Pendiente','Análisis','Desarrollo','Pruebas QA','Pruebas UAT','Producción','Blocked'];
+  const presentes=[...new Set(sgRows.map(r=>r.estado))];
+  const ests=[...SG_BASE, ...presentes.filter(x=>!SG_BASE.includes(x)).sort()];
   const areas=[...new Set(sgRows.map(r=>r.area))].sort();
   cont.innerHTML=`
     <div class="sg-filtros">
