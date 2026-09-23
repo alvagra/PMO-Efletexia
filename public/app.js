@@ -3767,7 +3767,16 @@ function sgFiltradas(){
   const q=(document.getElementById('sg-q')?.value||'').toLowerCase();
   const rec=document.getElementById('sg-rec')?.value||'';
   const est=document.getElementById('sg-est')?.value||'';
+  const desde=document.getElementById('sg-desde')?.value||'';
+  const hasta=document.getElementById('sg-hasta')?.value||'';
   return sgRows.filter(r=>{
+    if(desde||hasta){
+      // La subtarea entra si su periodo se cruza con el rango
+      const ini=r.inicio||r.vence, fin=r.vence||r.inicio;
+      if(!ini&&!fin) return false;              // sin fechas no se puede ubicar
+      if(hasta && ini > hasta) return false;
+      if(desde && fin < desde) return false;
+    }
     if(rec && r.responsable!==rec) return false;
     if(est && r.estado!==est) return false;
     if(q && !(r.subtarea.toLowerCase().includes(q) || r.key.toLowerCase().includes(q)
@@ -3791,11 +3800,24 @@ function renderSeguimientoUI(){
       <button class="btn-limpiar" id="sg-limpiar" type="button">Limpiar</button>
       <button class="btn-export" id="sg-csv" type="button">CSV</button>
     </div>
+    <div class="sg-rango">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+      <span class="sg-rango-t">RANGO DE FECHAS</span>
+      <span style="font-size:11px;color:var(--text-muted)">Desde</span>
+      <input id="sg-desde" type="date"/>
+      <span style="font-size:11px;color:var(--text-muted)">Hasta</span>
+      <input id="sg-hasta" type="date"/>
+      <button class="btn-rango" id="sg-rango-limpiar" type="button">Limpiar rango</button>
+    </div>
     <div id="sg-cuerpo"></div>`;
   document.getElementById('sg-q').addEventListener('input',renderSeguimientoTabla);
-  ['sg-rec','sg-est'].forEach(id=>document.getElementById(id).addEventListener('change',renderSeguimientoTabla));
+  ['sg-rec','sg-est','sg-desde','sg-hasta'].forEach(id=>document.getElementById(id).addEventListener('change',renderSeguimientoTabla));
+  document.getElementById('sg-rango-limpiar').addEventListener('click',()=>{
+    ['sg-desde','sg-hasta'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
+    renderSeguimientoTabla();
+  });
   document.getElementById('sg-limpiar').addEventListener('click',()=>{
-    ['sg-q','sg-rec','sg-est'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
+    ['sg-q','sg-rec','sg-est','sg-desde','sg-hasta'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
     renderSeguimientoTabla();
   });
   document.getElementById('sg-csv').addEventListener('click',exportSeguimientoCSV);
