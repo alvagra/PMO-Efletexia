@@ -56,12 +56,30 @@ function sbClass(s){
   return map[s.toLowerCase()]||'backlog';
 }
 // Clasificación de 4 estados usada en las barras del Gantt (detalle de épica), para respetar la leyenda: Completado/En curso/Pendiente/Bloqueado
-function ganttLegendCls(s){
-  const v = (s||'').toLowerCase();
-  if(v==='finalizada') return 'gb-done';
+// Color de barra según el estado de Jira. Historias y subtareas tienen
+// flujos distintos, por eso el mapeo se resuelve por separado.
+function ganttNorm(s){
+  return (s||'').toLowerCase().normalize('NFD')
+    .replace(/[\u0300-\u036f]/g,'').replace(/[.\u00B7]/g,'')
+    .replace(/\s+/g,' ').trim();
+}
+function ganttLegendCls(s, nivel){
+  const v = ganttNorm(s);
+  // Bloqueado: rojo en ambos niveles
   if(v==='blocked'||v==='bloqueado'||v==='bloqued') return 'gb-bloq';
-  if(v==='en curso'||v==='review') return 'gb-open';
-  return 'gb-pend'; // incluye 'tareas por hacer' y cualquier otro estado
+
+  if(nivel==='subtarea'){
+    if(v==='finalizada'||v==='cerrado'||v==='closed'||v==='done') return 'gb-done';   // verde
+    if(v==='en curso'||v==='in progress'||v==='review'||v==='in review'
+       ||v==='en revision') return 'gb-open';                                          // amarillo
+    return 'gb-pend';                                                                  // gris
+  }
+
+  // Historias (flujo EDP2): Backlog gris · Análisis/QA/UAT amarillo · Producción verde
+  if(v==='produccion'||v==='production'||v==='finalizada'||v==='cerrado') return 'gb-done';
+  if(v==='analisis'||v==='pruebas qa'||v==='pruebas uat'||v==='qa'||v==='uat'
+     ||v==='en curso'||v==='review'||v==='en revision') return 'gb-open';
+  return 'gb-pend'; // Backlog, Tareas por hacer y cualquier otro estado
 }
 function fmtD(iso){
   if(!iso) return null;
@@ -1070,7 +1088,7 @@ function buildGantt(e, stories){
     stories.forEach(story=>{
       const sf=story.fields;
       const sNom=sf.summary||story.key;
-      const sStatus=sf.status?sf.status.name:'', sCls=ganttLegendCls(sStatus);
+      const sStatus=sf.status?sf.status.name:'', sCls=ganttLegendCls(sStatus,'historia');
       const sStart=sf.customfield_10015||null, sEnd=sf.duedate||null;
       const sPos=barPos(sStart, sEnd);
       const sBarHtml=sPos?`<div class="g-bar ${sCls}" style="left:${sPos.l.toFixed(2)}%;width:${sPos.w.toFixed(2)}%"></div>`:'';
@@ -1111,7 +1129,7 @@ function buildGantt(e, stories){
       </div>`;
       (sf._subtasks||[]).forEach(sub=>{
         const tf=sub.fields, tNom=tf.summary||sub.key, tAsig=tf.assignee?tf.assignee.displayName:'';
-        const tStatus=tf.status?tf.status.name:'', tCls=ganttLegendCls(tStatus);
+        const tStatus=tf.status?tf.status.name:'', tCls=ganttLegendCls(tStatus,'subtarea');
         const tStart=tf.customfield_10015||null, tEnd=tf.duedate||null;
         const tPos=barPos(tStart, tEnd);
         const tBarHtml=tPos?`<div class="g-bar ${tCls}" style="left:${tPos.l.toFixed(2)}%;width:${tPos.w.toFixed(2)}%"></div>`:'';
