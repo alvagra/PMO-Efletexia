@@ -176,6 +176,7 @@ document.querySelectorAll('.tabs .tab').forEach(tab => {
     if(tab.dataset.tab==='entregables') renderEntregables();
     if(tab.dataset.tab==='metricas' && !metricasLoaded) loadMetricas();
     if(tab.dataset.tab==='informe') renderInforme();
+    if(tab.dataset.tab==='seguimiento' && !sgLoaded) loadSeguimiento();
   });
 });
 
@@ -3714,113 +3715,149 @@ async function cargarBugsSilencioso(){
 
 
 // ═══════════════════════════════════════════════════════════
-//  SEGUIMIENTO Y CONTROL DE ENTREGABLES  (ventana en Entregables)
-//  Historias marcadas como Entregable en Jira que no están Finalizada.
+//  PESTAÑA SEGUIMIENTO — todas las subtareas del proyecto
 // ═══════════════════════════════════════════════════════════
-let sgData = null;
+let sgLoaded = false;
+let sgRows = [];
 
 function sgDias(f){
   if(!f) return null;
   const hoy=new Date(); hoy.setHours(0,0,0,0);
   return Math.round((new Date(f+'T00:00:00')-hoy)/86400000);
 }
-function sgAlerta(d,estado){
-  const e=(estado||'').toLowerCase();
-  if(e.includes('blocked')||e.includes('bloque')) return {t:'Bloqueado',c:'#ef4444'};
-  if(d===null) return {t:'Sin fecha',c:'#F5B800'};
-  if(d<0)  return {t:d+' d',c:'#ef4444'};
-  if(d<=5) return {t:d+' d',c:'#F5B800'};
-  return {t:d+' d',c:'var(--text-muted)'};
-}
 
-async function abrirSeguimiento(){
-  let ov=document.getElementById('sg-ov');
-  if(!ov){
-    ov=document.createElement('div'); ov.id='sg-ov'; ov.className='sg-ov';
-    ov.addEventListener('click',ev=>{ if(ev.target===ov) ov.style.display='none'; });
-    document.body.appendChild(ov);
-  }
-  ov.style.display='flex';
-  ov.innerHTML='<div class="sg-box"><div class="sg-empty">Cargando entregables…</div></div>';
+async function loadSeguimiento(){
+  const cont=document.getElementById('sg-contenido');
+  cont.innerHTML='<div class="mt-empty">Cargando subtareas…</div>';
   try{
-    if(!sgData){
-      const r=await fetch('/api/jira',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({type:'seguimiento'})});
-      const j=await r.json();
-      if(!r.ok) throw new Error(j.error||'Error de API');
-      sgData=(j.items||[]).map(it=>{
-        const f=it.fields||{}, ep=f._epica||null;
-        const dn=f.assignee?.displayName||'';
-        return {
-          key:it.key,
-          codigo:ep?.codigo||ep?.key||'—',
-          epicaKey:ep?.key||it.key,
-          proyecto:ep?.summary||'Sin épica',
-          entregable:f.summary||it.key,
-          responsable:dn?(resolveNombreDesdeJira(dn)?.nombre||dn):'Sin asignar',
-          estado:f.status?.name||'—',
-          vence:f.duedate||null
-        };
-      }).sort((a,b)=>(a.vence||'9999').localeCompare(b.vence||'9999'));
-      sgData._campo=j.campoEntregable;
-    }
-    ov.innerHTML=renderSeguimiento(sgData);
+    const r=await fetch('/api/jira',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({type:'seguimiento'})});
+    const j=await r.json();
+    if(!r.ok) throw new Error(j.error||'Error de API');
+    sgRows=(j.items||[]).map(it=>{
+      const f=it.fields||{}, ep=f._epica||null, pa=f._padre||null;
+      const dn=f.assignee?.displayName||'';
+      return {
+        key:it.key,
+        subtarea:f.summary||it.key,
+        padre:pa?pa.summary:'—',
+        padreKey:pa?pa.key:'',
+        esBug:!!pa?.esBug,
+        codigo:ep?.codigo||ep?.key||'—',
+        epicaKey:ep?.key||'',
+        proyecto:ep?.summary||'Sin épica',
+        estado:f.status?.name||'—',
+        responsable:dn?(resolveNombreDesdeJira(dn)?.nombre||dn):'Sin asignar',
+        inicio:f.customfield_10015||null,
+        vence:f.duedate||null,
+        est:f.customfield_11136||0,
+        reg:+(((f.timespent||0)/3600).toFixed(1))
+      };
+    });
+    sgLoaded=true;
+    renderSeguimientoUI();
   }catch(e){
-    ov.innerHTML=`<div class="sg-box"><div class="sg-empty">No se pudieron cargar los entregables.<br>
-      <span style="font-size:11px">${esc(e.message)}</span></div></div>`;
+    cont.innerHTML=`<div class="mt-empty">No se pudieron cargar las subtareas.<br>
+      <span style="font-size:11px">${esc(e.message)}</span></div>`;
   }
 }
 
-function renderSeguimiento(rows){
-  const cab=`<div class="sg-head">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-      <div><div class="sg-title">Seguimiento y control de entregables</div>
-      <div class="sg-sub">Historias marcadas como Entregable · en estado En curso</div></div>
-      <button class="sg-x" type="button" onclick="document.getElementById('sg-ov').style.display='none'">✕</button>
-    </div>`;
+function sgFiltradas(){
+  const q=(document.getElementById('sg-q')?.value||'').toLowerCase();
+  const rec=document.getElementById('sg-rec')?.value||'';
+  const est=document.getElementById('sg-est')?.value||'';
+  return sgRows.filter(r=>{
+    if(rec && r.responsable!==rec) return false;
+    if(est && r.estado!==est) return false;
+    if(q && !(r.subtarea.toLowerCase().includes(q) || r.key.toLowerCase().includes(q)
+              || r.proyecto.toLowerCase().includes(q) || (r.codigo||'').toLowerCase().includes(q))) return false;
+    return true;
+  });
+}
 
-  if(!rows.length){
-    const aviso = rows._campo
-      ? 'Ninguna historia En curso está marcada como Entregable en Jira.'
-      : 'No se encontró el campo <b>Entregable</b> en esta instancia de Jira.';
-    return `<div class="sg-box">${cab}<div class="sg-empty">${aviso}</div></div>`;
-  }
+function renderSeguimientoUI(){
+  const cont=document.getElementById('sg-contenido');
+  if(!sgRows.length){ cont.innerHTML='<div class="mt-empty">No hay subtareas en el proyecto.</div>'; return; }
+  const recs=[...new Set(sgRows.map(r=>r.responsable))].sort();
+  const ests=[...new Set(sgRows.map(r=>r.estado))].sort();
+  cont.innerHTML=`
+    <div class="sg-filtros">
+      <input id="sg-q" type="text" placeholder="Buscar subtarea, clave o proyecto…" style="min-width:230px"/>
+      <select id="sg-rec"><option value="">Todos los recursos</option>${
+        recs.map(x=>`<option>${esc(x)}</option>`).join('')}</select>
+      <select id="sg-est"><option value="">Todos los estados</option>${
+        ests.map(x=>`<option>${esc(x)}</option>`).join('')}</select>
+      <button class="btn-limpiar" id="sg-limpiar" type="button">Limpiar</button>
+      <button class="btn-export" id="sg-csv" type="button">CSV</button>
+    </div>
+    <div id="sg-cuerpo"></div>`;
+  document.getElementById('sg-q').addEventListener('input',renderSeguimientoTabla);
+  ['sg-rec','sg-est'].forEach(id=>document.getElementById(id).addEventListener('change',renderSeguimientoTabla));
+  document.getElementById('sg-limpiar').addEventListener('click',()=>{
+    ['sg-q','sg-rec','sg-est'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
+    renderSeguimientoTabla();
+  });
+  document.getElementById('sg-csv').addEventListener('click',exportSeguimientoCSV);
+  renderSeguimientoTabla();
+}
 
-  const ds=rows.map(r=>sgDias(r.vence));
-  const bloq=rows.filter(r=>/blocked|bloque/i.test(r.estado)).length;
-  const venc=rows.filter((r,i)=>ds[i]!==null&&ds[i]<0).length;
-  const prox=rows.filter((r,i)=>ds[i]!==null&&ds[i]>=0&&ds[i]<=5).length;
-  const sinF=rows.filter(r=>!r.vence).length;
+function renderSeguimientoTabla(){
+  const rows=sgFiltradas();
+  const cuerpo=document.getElementById('sg-cuerpo');
+  if(!rows.length){ cuerpo.innerHTML='<div class="mt-empty">Sin resultados para el filtro.</div>'; return; }
+
+  const cerr=rows.filter(r=>esEstadoCerrado(r.estado)).length;
+  const abiertas=rows.length-cerr;
+  const venc=rows.filter(r=>{const d=sgDias(r.vence); return d!==null&&d<0&&!esEstadoCerrado(r.estado);}).length;
+  const sinF=rows.filter(r=>!r.vence&&!esEstadoCerrado(r.estado)).length;
+  const est=rows.reduce((a,r)=>a+r.est,0), reg=+(rows.reduce((a,r)=>a+r.reg,0)).toFixed(1);
   const kpi=(l,v,c,s)=>`<div class="sg-kpi"><div class="sg-kpi-l">${l}</div>
     <div class="sg-kpi-v" style="color:${c||'var(--text-primary)'}">${v}</div>
     ${s?`<div class="sg-kpi-s">${s}</div>`:''}</div>`;
 
-  const filas=rows.map((r,i)=>{
-    const a=sgAlerta(ds[i],r.estado);
-    const rojo=ds[i]!==null&&ds[i]<0;
-    return `<tr${rojo?' style="background:rgba(239,68,68,.07)"':''}>
-      <td style="font-weight:600;white-space:nowrap"><a class="jlink" href="${JIRA_BASE}${r.epicaKey}" target="_blank">${esc(r.codigo)}</a></td>
-      <td class="sg-el" title="${esc(r.proyecto)}">${esc(r.proyecto)}</td>
-      <td class="sg-el" title="${esc(r.entregable)}">${esc(r.entregable)}</td>
+  const filas=rows.map(r=>{
+    const st=clsActStatus(r.estado);
+    const d=sgDias(r.vence);
+    const cerrada=esEstadoCerrado(r.estado);
+    const colFin = cerrada ? 'var(--text-muted)' : (d===null?'#F5B800' : d<0?'#ef4444' : d<=5?'#F5B800':'var(--text-muted)');
+    return `<tr>
+      <td style="white-space:nowrap"><a class="jlink" href="${JIRA_BASE}${r.key}" target="_blank">${r.key}</a></td>
+      <td style="font-weight:500;white-space:nowrap">${r.epicaKey?`<a class="jlink" href="${JIRA_BASE}${r.epicaKey}" target="_blank">${esc(r.codigo)}</a>`:esc(r.codigo)}</td>
+      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.proyecto)}">${esc(r.proyecto)}</td>
+      <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.subtarea)}">${
+        r.esBug?'<span class="bg-est" style="background:rgba(239,68,68,.15);color:#ef4444;margin-right:6px">BUG</span>':''}${esc(r.subtarea)}</td>
       <td style="white-space:nowrap">${esc(r.responsable)}</td>
-      <td style="white-space:nowrap">${esc(r.estado)}</td>
-      <td style="white-space:nowrap;text-align:right">${r.vence?fmtD(r.vence):'—'}</td>
-      <td style="white-space:nowrap;text-align:right;font-weight:700;color:${a.c}">${a.t}</td>
+      <td><span class="det-badge det-badge-${st.cls}">${esc(r.estado)}</span></td>
+      <td style="white-space:nowrap;color:var(--text-muted)">${r.inicio?fmtD(r.inicio):'—'}</td>
+      <td style="white-space:nowrap;color:${colFin}">${r.vence?fmtD(r.vence):'sin fecha'}</td>
+      <td style="text-align:right">${r.est?r.est+'h':'—'}</td>
+      <td style="text-align:right;color:${r.reg>r.est&&r.est>0?'#ef4444':'var(--text-primary)'}">${r.reg?r.reg+'h':'—'}</td>
     </tr>`;}).join('');
 
-  return `<div class="sg-box">${cab}<div class="sg-body">
+  cuerpo.innerHTML=`
     <div class="sg-kpis">
-      ${kpi('ABIERTOS',rows.length)}
-      ${kpi('VENCIDOS',venc,venc?'#ef4444':'#3fb950')}
-      ${kpi('VENCEN ≤5 DÍAS',prox,prox?'#F5B800':'var(--text-dim)')}
-      ${kpi('BLOQUEADOS',bloq,bloq?'#ef4444':'var(--text-dim)')}
+      ${kpi('SUBTAREAS',rows.length,null,`de ${sgRows.length} en total`)}
+      ${kpi('ABIERTAS',abiertas,abiertas?'#F5B800':'#3fb950')}
+      ${kpi('CERRADAS',cerr,'#3fb950')}
+      ${kpi('VENCIDAS',venc,venc?'#ef4444':'#3fb950')}
       ${kpi('SIN FECHA',sinF,sinF?'#F5B800':'var(--text-dim)')}
+      ${kpi('HORAS',reg+'h',reg>est&&est>0?'#ef4444':'var(--text-primary)',`${est}h estimadas`)}
     </div>
     <div style="overflow-x:auto"><table class="sg-tabla">
-      <thead><tr><th>CÓDIGO</th><th>PROYECTO</th><th>ENTREGABLE</th><th>RESPONSABLE</th>
-      <th>ESTADO</th><th style="text-align:right">VENCE</th><th style="text-align:right">ALERTA</th></tr></thead>
-      <tbody>${filas}</tbody></table></div>
-  </div></div>`;
+      <thead><tr><th>CLAVE</th><th>CÓDIGO</th><th>PROYECTO</th><th>SUBTAREA</th><th>RECURSO</th>
+      <th>ESTADO</th><th>INICIO</th><th>VENCE</th>
+      <th style="text-align:right">HRS EST.</th><th style="text-align:right">HRS REG.</th></tr></thead>
+      <tbody>${filas}</tbody></table></div>`;
 }
 
-document.getElementById('btn-seguimiento')?.addEventListener('click',abrirSeguimiento);
+function exportSeguimientoCSV(){
+  const rows=sgFiltradas();
+  const q=v=>`"${String(v??'').replace(/"/g,'""')}"`;
+  const csv=[['Clave','Codigo','Proyecto','Subtarea','Recurso','Estado','Inicio','Vence','Horas estimadas','Horas registradas'].join(',')]
+    .concat(rows.map(r=>[r.key,r.codigo,r.proyecto,r.subtarea,r.responsable,r.estado,r.inicio||'',r.vence||'',r.est,r.reg].map(q).join(',')))
+    .join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'}));
+  a.download=`seguimiento_subtareas_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
