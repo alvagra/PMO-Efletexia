@@ -3720,6 +3720,7 @@ async function cargarBugsSilencioso(){
 let sgLoaded = false;
 let sgRows = [];
 let sgEstSel = new Set();   // estados seleccionados (multi)
+let sgAreaSel = new Set();  // áreas (equipos) seleccionadas
 
 function sgDias(f){
   if(!f) return null;
@@ -3750,6 +3751,7 @@ async function loadSeguimiento(){
         proyecto:ep?.summary||'Sin épica',
         estado:f.status?.name||'—',
         responsable:dn?(resolveNombreDesdeJira(dn)?.nombre||dn):'Sin asignar',
+        area:dn?(resolveNombreDesdeJira(dn)?.area||'Sin área'):'Sin área',
         inicio:f.customfield_10015||null,
         vence:f.duedate||null,
         est:f.customfield_11136||0,
@@ -3780,6 +3782,7 @@ function sgFiltradas(){
     }
     if(rec && r.responsable!==rec) return false;
     if(est.size && !est.has(r.estado)) return false;
+    if(sgAreaSel.size && !sgAreaSel.has(r.area)) return false;
     if(q && !(r.subtarea.toLowerCase().includes(q) || r.key.toLowerCase().includes(q)
               || r.proyecto.toLowerCase().includes(q) || (r.codigo||'').toLowerCase().includes(q))) return false;
     return true;
@@ -3791,13 +3794,19 @@ function renderSeguimientoUI(){
   if(!sgRows.length){ cont.innerHTML='<div class="mt-empty">No hay subtareas en el proyecto.</div>'; return; }
   const recs=[...new Set(sgRows.map(r=>r.responsable))].sort();
   const ests=[...new Set(sgRows.map(r=>r.estado))].sort();
+  const areas=[...new Set(sgRows.map(r=>r.area))].sort();
   cont.innerHTML=`
     <div class="sg-filtros">
       <input id="sg-q" type="text" placeholder="Buscar subtarea, clave o proyecto…" style="min-width:230px"/>
       <select id="sg-rec"><option value="">Todos los recursos</option>${
         recs.map(x=>`<option>${esc(x)}</option>`).join('')}</select>
-      <span id="sg-est-chips" class="bg-chips">${
-        ests.map(x=>`<button type="button" class="bg-chip${sgEstSel.has(x)?' on':''}" data-est="${esc(x)}">${esc(x)}</button>`).join('')}</span>
+      <span id="sg-area-chips" class="rec-area-btns">${
+        areas.map(x=>`<button type="button" class="rec-area-btn${sgAreaSel.has(x)?' active':''}" data-area="${esc(x)}">${esc(x)}</button>`).join('')}</span>
+      <div class="rec-user-dd" id="sg-est-dd">
+        <button type="button" class="rec-user-dd-btn" id="sg-est-btn">Estado <span id="sg-est-count"></span> ▾</button>
+        <div class="rec-user-dd-panel" id="sg-est-panel">${
+          ests.map(x=>`<label class="rec-user-dd-item"><input type="checkbox" class="sg-est-cb" value="${esc(x)}"${sgEstSel.has(x)?' checked':''}>${esc(x)}</label>`).join('')}</div>
+      </div>
       <button class="btn-limpiar" id="sg-limpiar" type="button">Limpiar</button>
       <button class="btn-export" id="sg-csv" type="button">CSV</button>
     </div>
@@ -3813,21 +3822,31 @@ function renderSeguimientoUI(){
     <div id="sg-cuerpo"></div>`;
   document.getElementById('sg-q').addEventListener('input',renderSeguimientoTabla);
   ['sg-rec','sg-desde','sg-hasta'].forEach(id=>document.getElementById(id).addEventListener('change',renderSeguimientoTabla));
-  document.getElementById('sg-est-chips').addEventListener('click',ev=>{
-    const b=ev.target.closest('.bg-chip'); if(!b) return;
-    const v=b.dataset.est;
-    if(sgEstSel.has(v)) sgEstSel.delete(v); else sgEstSel.add(v);
-    b.classList.toggle('on',sgEstSel.has(v));
+  document.getElementById('sg-area-chips').addEventListener('click',ev=>{
+    const b=ev.target.closest('.rec-area-btn'); if(!b) return;
+    const v=b.dataset.area;
+    if(sgAreaSel.has(v)) sgAreaSel.delete(v); else sgAreaSel.add(v);
+    b.classList.toggle('active',sgAreaSel.has(v));
     renderSeguimientoTabla();
   });
+  const estBtn=document.getElementById('sg-est-btn'), estPanel=document.getElementById('sg-est-panel');
+  estBtn.addEventListener('click',ev=>{ ev.stopPropagation(); estPanel.classList.toggle('open'); });
+  document.addEventListener('click',ev=>{ if(!document.getElementById('sg-est-dd')?.contains(ev.target)) estPanel.classList.remove('open'); });
+  estPanel.querySelectorAll('.sg-est-cb').forEach(cb=>cb.addEventListener('change',()=>{
+    if(cb.checked) sgEstSel.add(cb.value); else sgEstSel.delete(cb.value);
+    document.getElementById('sg-est-count').textContent = sgEstSel.size ? `(${sgEstSel.size})` : '';
+    renderSeguimientoTabla();
+  }));
   document.getElementById('sg-rango-limpiar').addEventListener('click',()=>{
     ['sg-desde','sg-hasta'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
     renderSeguimientoTabla();
   });
   document.getElementById('sg-limpiar').addEventListener('click',()=>{
     ['sg-q','sg-rec','sg-desde','sg-hasta'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
-    sgEstSel.clear();
-    document.querySelectorAll('#sg-est-chips .bg-chip').forEach(c=>c.classList.remove('on'));
+    sgEstSel.clear(); sgAreaSel.clear();
+    document.querySelectorAll('.sg-est-cb').forEach(cb=>cb.checked=false);
+    document.querySelectorAll('#sg-area-chips .rec-area-btn').forEach(c=>c.classList.remove('active'));
+    const cnt=document.getElementById('sg-est-count'); if(cnt) cnt.textContent='';
     renderSeguimientoTabla();
   });
   document.getElementById('sg-csv').addEventListener('click',exportSeguimientoCSV);
