@@ -1730,7 +1730,7 @@ function renderRecursos(){
               <td>${fmtD(t.fechaInicio)||'—'}</td>
               <td>${fmtD(t.fechaFin)||'—'}</td>
               <td>${t.horasEst}h</td>
-              <td><span class="det-badge det-badge-${st.cls}">${st.label}</span></td>
+              <td><span class="det-badge det-badge-${st.cls}">${esc(t.status||st.label)}</span></td>
             </tr>`;
           }).join('');
 
@@ -1839,7 +1839,7 @@ function verProyecto(epicIdx){
   const sbCls={'Backlog':'backlog','Análisis':'analisis','Desarrollo':'desarrollo','Pruebas':'pruebas','Producción':'produccion','Planificado':'planificado','Stand by':'standby','Desestimado':'desestimado'}[estado]||'backlog';
   const tareas=(p.tareas||[]).slice().sort((a,b)=>(b.updated||b.fecha||'').localeCompare(a.updated||a.fecha||''));
   const tareasHtml=tareas.length
-    ?tareas.map(t=>{ const st=clsActStatus(t.status); return `<div class="det-task-row"><span class="det-task-date">${fmtD(t.fecha)||'—'}</span><span class="det-task-name" title="${esc(t.nombre)}">${esc(t.nombre)}</span><span class="det-task-hrs">${t.horasEst}h</span><span class="det-task-status"><span class="det-badge det-badge-${st.cls}">${st.label}</span></span></div>`; }).join('')
+    ?tareas.map(t=>{ const st=clsActStatus(t.status); return `<div class="det-task-row"><span class="det-task-date">${fmtD(t.fecha)||'—'}</span><span class="det-task-name" title="${esc(t.nombre)}">${esc(t.nombre)}</span><span class="det-task-hrs">${t.horasEst}h</span><span class="det-task-status"><span class="det-badge det-badge-${st.cls}">${esc(t.status||st.label)}</span></span></div>`; }).join('')
     :'<div style="color:var(--text-muted);font-size:12px;padding:8px 0">Sin actividades registradas</div>';
   document.getElementById('det-title').textContent=p.nombre;
   document.getElementById('det-body').innerHTML=`
