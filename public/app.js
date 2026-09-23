@@ -3719,6 +3719,7 @@ async function cargarBugsSilencioso(){
 // ═══════════════════════════════════════════════════════════
 let sgLoaded = false;
 let sgRows = [];
+let sgEstSel = new Set();   // estados seleccionados (multi)
 
 function sgDias(f){
   if(!f) return null;
@@ -3766,7 +3767,7 @@ async function loadSeguimiento(){
 function sgFiltradas(){
   const q=(document.getElementById('sg-q')?.value||'').toLowerCase();
   const rec=document.getElementById('sg-rec')?.value||'';
-  const est=document.getElementById('sg-est')?.value||'';
+  const est=sgEstSel;
   const desde=document.getElementById('sg-desde')?.value||'';
   const hasta=document.getElementById('sg-hasta')?.value||'';
   return sgRows.filter(r=>{
@@ -3778,7 +3779,7 @@ function sgFiltradas(){
       if(desde && fin < desde) return false;
     }
     if(rec && r.responsable!==rec) return false;
-    if(est && r.estado!==est) return false;
+    if(est.size && !est.has(r.estado)) return false;
     if(q && !(r.subtarea.toLowerCase().includes(q) || r.key.toLowerCase().includes(q)
               || r.proyecto.toLowerCase().includes(q) || (r.codigo||'').toLowerCase().includes(q))) return false;
     return true;
@@ -3795,8 +3796,8 @@ function renderSeguimientoUI(){
       <input id="sg-q" type="text" placeholder="Buscar subtarea, clave o proyecto…" style="min-width:230px"/>
       <select id="sg-rec"><option value="">Todos los recursos</option>${
         recs.map(x=>`<option>${esc(x)}</option>`).join('')}</select>
-      <select id="sg-est"><option value="">Todos los estados</option>${
-        ests.map(x=>`<option>${esc(x)}</option>`).join('')}</select>
+      <span id="sg-est-chips" class="bg-chips">${
+        ests.map(x=>`<button type="button" class="bg-chip${sgEstSel.has(x)?' on':''}" data-est="${esc(x)}">${esc(x)}</button>`).join('')}</span>
       <button class="btn-limpiar" id="sg-limpiar" type="button">Limpiar</button>
       <button class="btn-export" id="sg-csv" type="button">CSV</button>
     </div>
@@ -3811,13 +3812,22 @@ function renderSeguimientoUI(){
     </div>
     <div id="sg-cuerpo"></div>`;
   document.getElementById('sg-q').addEventListener('input',renderSeguimientoTabla);
-  ['sg-rec','sg-est','sg-desde','sg-hasta'].forEach(id=>document.getElementById(id).addEventListener('change',renderSeguimientoTabla));
+  ['sg-rec','sg-desde','sg-hasta'].forEach(id=>document.getElementById(id).addEventListener('change',renderSeguimientoTabla));
+  document.getElementById('sg-est-chips').addEventListener('click',ev=>{
+    const b=ev.target.closest('.bg-chip'); if(!b) return;
+    const v=b.dataset.est;
+    if(sgEstSel.has(v)) sgEstSel.delete(v); else sgEstSel.add(v);
+    b.classList.toggle('on',sgEstSel.has(v));
+    renderSeguimientoTabla();
+  });
   document.getElementById('sg-rango-limpiar').addEventListener('click',()=>{
     ['sg-desde','sg-hasta'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
     renderSeguimientoTabla();
   });
   document.getElementById('sg-limpiar').addEventListener('click',()=>{
-    ['sg-q','sg-rec','sg-est','sg-desde','sg-hasta'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
+    ['sg-q','sg-rec','sg-desde','sg-hasta'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
+    sgEstSel.clear();
+    document.querySelectorAll('#sg-est-chips .bg-chip').forEach(c=>c.classList.remove('on'));
     renderSeguimientoTabla();
   });
   document.getElementById('sg-csv').addEventListener('click',exportSeguimientoCSV);
