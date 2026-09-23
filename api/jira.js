@@ -337,72 +337,48 @@ module.exports = async function handler(req, res) {
         campoEntregable: CF_ENT || null });
 
     } else if (type === 'seguimiento') {
-      // Seguimiento de entregables: historias marcadas como Entregable en Jira
-      // que NO están Finalizada. El filtro va por nombre de estado, no por
-      // categoría, porque "Blocked" está clasificado como Listo en esta instancia.
-      let CF = await idCampoEntregable(auth, JIRA_CLOUD);
-      const CAMPOS = ['summary', 'status', 'assignee', 'parent', 'duedate',
-                      'customfield_10015', 'issuetype', 'customfield_11381'];
-      if (CF) CAMPOS.push(CF);
-      // El estado se filtra en código con un mapa de equivalencias, no en la JQL:
-      // así no depende de que el nombre exacto exista en la instancia.
-      const JQL = 'project = PTS AND issuetype not in subTaskIssueTypes() ORDER BY duedate ASC';
-      let items = await fetchAllPages(auth, JIRA_CLOUD, JQL, CAMPOS);
+      // Seguimiento: todas las subtareas del proyecto con su contexto
+      const SG_FIELDS = ['summary', 'status', 'assignee', 'parent', 'duedate',
+                         'customfield_10015', 'customfield_11136', 'timespent', 'issuetype'];
+      const subs = await fetchAllPages(
+        auth, JIRA_CLOUD,
+        'project = PTS AND issuetype in subTaskIssueTypes() ORDER BY duedate ASC',
+        SG_FIELDS
+      );
 
-      if (!CF && items.length) {
-        CF = await idCampoEntregable(auth, JIRA_CLOUD, items[0].key);
-        if (CF) { CAMPOS.push(CF); items = await fetchAllPages(auth, JIRA_CLOUD, JQL, CAMPOS); }
-      }
-      // Solo las historias marcadas como entregable
-      // Se quitan tildes, puntos y espacios extra: el estado real es "REVIEW."
-      const norm = x => String(x || '').toLowerCase().normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '').replace(/[.\u00B7]/g, '')
-        .replace(/\s+/g, ' ').trim();
-      // Equivalencias de estado para el seguimiento
-      const EQUIV = {
-        'tareas por hacer': 'Pendiente',
-        'to do':            'Pendiente',
-        'en curso':         'En desarrollo',
-        'in progress':      'En desarrollo',
-        'en revision':      'En desarrollo',
-        'review':           'En desarrollo',
-        'in review':        'En desarrollo'
-      };
-      items = items.filter(it => {
-        const t = it.fields.issuetype || {};
-        if (t.hierarchyLevel === 1 || t.name === 'Epic') return false;
-        const eq = EQUIV[norm(it.fields.status?.name)];
-        if (!eq) return false;
-        it.fields._estadoSg = eq;
-        return CF ? esEntregable(it.fields[CF]) === true : false;
-      });
-
-      // Épica de cada historia, para código y nombre de proyecto
-      const padres = [...new Set(items.map(i => i.fields.parent?.key).filter(Boolean))];
+      // Padre (historia o error) y su épica, para código y nombre de proyecto
+      const padreKeys = [...new Set(subs.map(x => x.fields.parent?.key).filter(Boolean))];
       const pMap = {};
-      for (let i = 0; i < padres.length; i += 50) {
-        const chunk = padres.slice(i, i + 50);
+      for (let i = 0; i < padreKeys.length; i += 50) {
+        const chunk = padreKeys.slice(i, i + 50);
         if (!chunk.length) continue;
-        const eps = await fetchAllPages(auth, JIRA_CLOUD, `key in (${chunk.join(',')})`,
-          ['summary', 'parent', 'customfield_10934', 'issuetype']);
-        eps.forEach(e => { pMap[e.key] = e; });
+        const ps = await fetchAllPages(auth, JIRA_CLOUD, `key in (${chunk.join(',')})`,
+          ['summary', 'parent', 'issuetype', 'customfield_10934']);
+        ps.forEach(x => { pMap[x.key] = x; });
       }
-      items.forEach(it => {
-        const pk = it.fields.parent?.key;
-        const padre = pk ? pMap[pk] : null;
-        const esEp = (padre?.fields?.issuetype?.hierarchyLevel === 1) ||
-                     (padre?.fields?.issuetype?.name === 'Epic');
-        const epKey = esEp ? padre?.key : padre?.fields?.parent?.key;
-        const ep = esEp ? padre : (padre?.fields?.parent?.key ? pMap[padre.fields.parent.key] : null);
-        it.fields._epica = epKey
-          ? { key: epKey,
-              summary: (esEp ? padre?.fields?.summary : padre?.fields?.parent?.fields?.summary) || epKey,
-              codigo: (esEp ? padre?.fields?.customfield_10934 : ep?.fields?.customfield_10934) || '' }
+      const epKeys = [...new Set(Object.values(pMap)
+        .map(x => x.fields?.parent?.key).filter(Boolean))];
+      const eMap = {};
+      for (let i = 0; i < epKeys.length; i += 50) {
+        const chunk = epKeys.slice(i, i + 50);
+        if (!chunk.length) continue;
+        const es = await fetchAllPages(auth, JIRA_CLOUD, `key in (${chunk.join(',')})`,
+          ['summary', 'customfield_10934']);
+        es.forEach(x => { eMap[x.key] = x; });
+      }
+      subs.forEach(x => {
+        const padre = x.fields.parent?.key ? pMap[x.fields.parent.key] : null;
+        const epK = padre?.fields?.parent?.key;
+        const ep = epK ? eMap[epK] : null;
+        x.fields._padre = padre ? { key: padre.key, summary: padre.fields?.summary,
+          esBug: (padre.fields?.issuetype?.name || '').toLowerCase() === 'error' } : null;
+        x.fields._epica = epK
+          ? { key: epK, summary: ep?.fields?.summary || epK,
+              codigo: ep?.fields?.customfield_10934 || '' }
           : null;
       });
 
-      return res.status(200).json({ items, total: items.length,
-        campoEntregable: CF || null, type: 'seguimiento' });
+      return res.status(200).json({ items: subs, total: subs.length, type: 'seguimiento' });
 
     } else if (type === 'bugs') {
       // Módulo de gestión de bugs: todos los Errores del proyecto con su épica,
