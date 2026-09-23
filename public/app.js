@@ -3873,7 +3873,6 @@ function renderSeguimientoTabla(){
     const cerrada=esEstadoCerrado(r.estado);
     const colFin = cerrada ? 'var(--text-muted)' : (d===null?'#F5B800' : d<0?'#ef4444' : d<=5?'#F5B800':'var(--text-muted)');
     return `<tr>
-      <td style="white-space:nowrap"><a class="jlink" href="${JIRA_BASE}${r.key}" target="_blank">${r.key}</a></td>
       <td style="font-weight:500;white-space:nowrap">${r.epicaKey?`<a class="jlink" href="${JIRA_BASE}${r.epicaKey}" target="_blank">${esc(r.codigo)}</a>`:esc(r.codigo)}</td>
       <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.proyecto)}">${esc(r.proyecto)}</td>
       <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.subtarea)}">${
@@ -3896,7 +3895,7 @@ function renderSeguimientoTabla(){
       ${kpi('HORAS',reg+'h',reg>est&&est>0?'#ef4444':'var(--text-primary)',`${est}h estimadas`)}
     </div>
     <div style="overflow-x:auto"><table class="sg-tabla">
-      <thead><tr><th>CLAVE</th><th>CÓDIGO</th><th>PROYECTO</th><th>SUBTAREA</th><th>RECURSO</th>
+      <thead><tr><th>CÓDIGO</th><th>PROYECTO</th><th>SUBTAREA</th><th>RECURSO</th>
       <th>ESTADO</th><th>INICIO</th><th>VENCE</th>
       <th style="text-align:right">HRS EST.</th><th style="text-align:right">HRS REG.</th></tr></thead>
       <tbody>${filas}</tbody></table></div>`;
@@ -3905,8 +3904,8 @@ function renderSeguimientoTabla(){
 function exportSeguimientoCSV(){
   const rows=sgFiltradas();
   const q=v=>`"${String(v??'').replace(/"/g,'""')}"`;
-  const csv=[['Clave','Codigo','Proyecto','Subtarea','Recurso','Estado','Inicio','Vence','Horas estimadas','Horas registradas'].join(',')]
-    .concat(rows.map(r=>[r.key,r.codigo,r.proyecto,r.subtarea,r.responsable,r.estado,r.inicio||'',r.vence||'',r.est,r.reg].map(q).join(',')))
+  const csv=[['Codigo','Proyecto','Subtarea','Recurso','Estado','Inicio','Vence','Horas estimadas','Horas registradas'].join(',')]
+    .concat(rows.map(r=>[r.codigo,r.proyecto,r.subtarea,r.responsable,r.estado,r.inicio||'',r.vence||'',r.est,r.reg].map(q).join(',')))
     .join('\n');
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'}));
