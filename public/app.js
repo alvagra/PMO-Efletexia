@@ -3734,7 +3734,8 @@ async function loadSeguimiento(){
       body:JSON.stringify({type:'seguimiento'})});
     const j=await r.json();
     if(!r.ok) throw new Error(j.error||'Error de API');
-    sgRows=(j.items||[]).map(it=>{
+    // Se excluyen las épicas operativas (Soporte Requerimientos y Gestión PMO-TI)
+    sgRows=(j.items||[]).filter(it=>!SPECIAL_EPIC_KEYS.includes(it.fields?._epica?.key)).map(it=>{
       const f=it.fields||{}, ep=f._epica||null, pa=f._padre||null;
       const dn=f.assignee?.displayName||'';
       return {
