@@ -1528,7 +1528,7 @@ function recomputeRecursos(){
     const pais=f.customfield_10592?f.customfield_10592.value:null;
     const bloq=f.customfield_11003?f.customfield_11003.value:null;
     const status=f.status?f.status.name:'';
-    const isDone=['Finalizada','Producción','En producción','Cerrado','Done','Closed'].includes(status);
+    const isDone=esEstadoCerrado(status);
     if(!byPerson[nombre]) byPerson[nombre]={nombre,area,pais,horasEst:0,horasPend:0,horasCerr:0,totalHistorias:0,entregasPend:0,bloqueantes:0,epicasMap:{}};
     const p=byPerson[nombre];
     p.horasEst+=horasEst; p.horasPend+=horasPend; p.horasCerr+=horasCerr;
@@ -1807,13 +1807,20 @@ function verRecurso(nombre){
   document.getElementById('rec-modal-overlay').classList.add('open');
 }
 
+// Estados de cierre, en cualquier variante de escritura
+function esEstadoCerrado(status){
+  return ['finalizada','finalizado','cerrado','cerrada','produccion',
+          'en produccion','done','closed'].includes(ganttNorm(status));
+}
+
 // Clasificación de estado de actividades en detalle de proyecto
 function clsActStatus(status) {
-  const s = (status||'').toLowerCase();
-  if(['finalizada','producción','en producción','cerrado','done','closed'].includes(s)) return { label:'Cerrado',    cls:'done' };
-  if(['blocked','bloqueado'].includes(s))                                               return { label:'Bloqueado',  cls:'bloq' };
-  if(['en curso','review','en proceso'].includes(s))                                    return { label:'En proceso', cls:'open' };
-  return { label:'Pendiente', cls:'pend' };
+  const s = ganttNorm(status);
+  if(esEstadoCerrado(s))                                      return { label:'Cerrado',    cls:'done' };
+  if(['blocked','bloqueado'].includes(s))                     return { label:'Bloqueado',  cls:'bloq' };
+  if(['en curso','review','in review','en revision','en proceso','in progress'].includes(s))
+                                                              return { label:'En proceso', cls:'open' };
+  return { label:'Pendiente', cls:'pend' }; // Pendiente, Tareas por hacer, Backlog
 }
 
 function verProyecto(epicIdx){
@@ -2556,7 +2563,7 @@ async function fetchSpecialStories(epicKey) {
 
 function parseSpecialStory(s) {
   const f = s.fields || {};
-  const isDone = ['done','cerrado','closed','producción','produccion'].includes((f.status?.name||'').toLowerCase());
+  const isDone = esEstadoCerrado(f.status?.name);
   const subtasks = f._subtasks || [];
   // HP = suma de customfield_11136 ("Horas estimadas") de subtareas (valor numérico directo)
   const horasPlan = subtasks.reduce((acc, sub) => {
