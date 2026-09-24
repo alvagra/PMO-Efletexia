@@ -461,7 +461,10 @@ module.exports = async function handler(req, res) {
           if (dn) conteo[dn] = (conteo[dn] || 0) + 1;
         });
         const top = Object.entries(conteo).sort((a, b) => b[1] - a[1])[0];
-        if (top) it.fields._responsableFase = top[0];
+        if (top) { it.fields._responsableFase = top[0]; return; }
+        // En QA y UAT la subtarea de la fase siempre debe tener responsable:
+        // si no lo tiene, se muestra "Sin asignar" en vez del asignado de la historia.
+        if (fase === 'qa' || fase === 'uat') it.fields._sinAsignar = true;
       });
 
       return res.status(200).json({ items, total: items.length,
