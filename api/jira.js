@@ -439,7 +439,7 @@ module.exports = async function handler(req, res) {
         if (!chunk.length) continue;
         const subs = await fetchAllPages(auth, JIRA_CLOUD,
           `project = PTS AND parent in (${chunk.join(',')})`,
-          ['summary', 'assignee', 'parent', 'status']);
+          ['summary', 'assignee', 'parent', 'status', 'duedate', 'customfield_10015']);
         subs.forEach(su => {
           const pk = su.fields.parent?.key;
           if (!pk) return;
@@ -460,6 +460,15 @@ module.exports = async function handler(req, res) {
           const dn = su.fields.assignee?.displayName;
           if (dn) conteo[dn] = (conteo[dn] || 0) + 1;
         });
+        // Fechas: en Desarrollo se usan las de la historia; en el resto de
+        // fases se toman de la subtarea correspondiente (min inicio, max fin).
+        if (fase !== 'desarrollo' && candidatas.length) {
+          const inis = candidatas.map(su => su.fields.customfield_10015).filter(Boolean);
+          const fins = candidatas.map(su => su.fields.duedate).filter(Boolean);
+          if (inis.length) it.fields._ini = inis.reduce((a, b) => a < b ? a : b);
+          if (fins.length) it.fields._fin = fins.reduce((a, b) => a > b ? a : b);
+        }
+
         const top = Object.entries(conteo).sort((a, b) => b[1] - a[1])[0];
         if (top) { it.fields._responsableFase = top[0]; return; }
         // En QA y UAT la subtarea de la fase siempre debe tener responsable:
