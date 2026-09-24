@@ -3898,7 +3898,12 @@ function renderSeguimientoTabla(){
     const st=clsActStatus(r.estado);
     const d=sgDias(r.vence);
     const cerrada=esEstadoCerrado(r.estado);
-    const colFin = cerrada ? 'var(--text-muted)' : (d===null?'#F5B800' : d<0?'#ef4444' : d<=5?'#F5B800':'var(--text-muted)');
+    // Vencido rojo · ≤5 días ámbar · >5 días verde tenue · sin fecha gris neutro
+    const colFin = cerrada ? 'var(--text-muted)'
+      : d===null ? 'var(--text-muted)'
+      : d<0      ? '#ef4444'
+      : d<=5     ? '#F5B800'
+      :            '#6a9a55';
     return `<tr>
       <td style="font-weight:500;white-space:nowrap">${r.epicaKey?`<a class="jlink" href="${JIRA_BASE}${r.epicaKey}" target="_blank">${esc(r.codigo)}</a>`:esc(r.codigo)}</td>
       <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.proyecto)}">${esc(r.proyecto)}</td>
