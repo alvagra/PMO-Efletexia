@@ -466,10 +466,12 @@ module.exports = async function handler(req, res) {
         // Fechas: en Desarrollo se usan las de la historia; en el resto de
         // fases se toman de la subtarea correspondiente (min inicio, max fin).
         if (fase && fase !== 'desarrollo' && candidatas.length) {
+          // Las fechas son las de la subtarea de la fase. Si no las tiene, quedan
+          // vacías: no se heredan las de la historia, que son de desarrollo.
           const inis = candidatas.map(su => su.fields.customfield_10015).filter(Boolean);
           const fins = candidatas.map(su => su.fields.duedate).filter(Boolean);
-          if (inis.length) it.fields._ini = inis.reduce((a, b) => a < b ? a : b);
-          if (fins.length) it.fields._fin = fins.reduce((a, b) => a > b ? a : b);
+          it.fields._ini = inis.length ? inis.reduce((a, b) => a < b ? a : b) : null;
+          it.fields._fin = fins.length ? fins.reduce((a, b) => a > b ? a : b) : null;
         }
 
         const top = Object.entries(conteo).sort((a, b) => b[1] - a[1])[0];
