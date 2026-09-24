@@ -3920,14 +3920,14 @@ function renderSeguimientoTabla(){
     </div>
     <div style="overflow-x:auto"><table class="sg-tabla">
       <thead><tr>${sgTh('CÓDIGO','codigo')}${sgTh('PROYECTO','proyecto')}${sgTh('ENTREGABLE','subtarea')}
-      ${sgTh('RECURSO','responsable')}${sgTh('ESTADO','estado')}${sgTh('INICIO','inicio')}${sgTh('VENCE','vence')}</tr></thead>
+      ${sgTh('RESPONSABLE','responsable')}${sgTh('ESTADO','estado')}${sgTh('INICIO','inicio')}${sgTh('VENCE','vence')}</tr></thead>
       <tbody>${filas}</tbody></table></div>`;
 }
 
 function exportSeguimientoCSV(){
   const rows=sgFiltradas();
   const q=v=>`"${String(v??'').replace(/"/g,'""')}"`;
-  const csv=[['Codigo','Proyecto','Entregable','Recurso','Estado','Inicio','Vence'].join(',')]
+  const csv=[['Codigo','Proyecto','Entregable','Responsable','Estado','Inicio','Vence'].join(',')]
     .concat(rows.map(r=>[r.codigo,r.proyecto,r.subtarea,r.responsable,r.estado,r.inicio||'',r.vence||''].map(q).join(',')))
     .join('\n');
   const a=document.createElement('a');
