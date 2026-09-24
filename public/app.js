@@ -1449,7 +1449,10 @@ async function loadRecursos(){
     // Populate dropdown de Estado (checkbox múltiple), con los estados reales de las subtareas
     const estadosSet = new Set();
     recursos.forEach(r=> (r.proyectosMes||[]).forEach(p=> (p.tareas||[]).forEach(t=> { if(t.status) estadosSet.add(t.status); })));
-    const estados = [...estadosSet].sort();
+    // Estados actuales del flujo de subtareas, en orden; los históricos que
+    // aún aparezcan en los datos se listan al final para no perderlos de vista.
+    const SUB_BASE = ['Pendiente','En curso','Cerrado','Blocked'];
+    const estados = [...SUB_BASE, ...[...estadosSet].filter(x=>!SUB_BASE.includes(x)).sort()];
     const statusPanel=document.getElementById('rec-status-dd-panel');
     const statusBtn=document.getElementById('rec-status-dd-btn');
     const statusCount=document.getElementById('rec-status-dd-count');
