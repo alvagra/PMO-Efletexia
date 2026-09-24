@@ -3750,8 +3750,12 @@ async function loadSeguimiento(){
         epicaKey:ep?.key||'',
         proyecto:ep?.summary||'Sin épica',
         estado:f.status?.name||'—',
-        responsable:dn?(resolveNombreDesdeJira(dn)?.nombre||dn):'Sin asignar',
-        area:dn?(resolveNombreDesdeJira(dn)?.area||'Sin área'):'Sin área',
+        responsable:(()=>{ const n=f._responsableFase||dn;
+          return n?(resolveNombreDesdeJira(n)?.nombre||n):'Sin asignar'; })(),
+        area:(()=>{ const n=f._responsableFase||dn;
+          return n?(resolveNombreDesdeJira(n)?.area||'Sin área'):'Sin área'; })(),
+        fase:f._fase||null,
+        derivado:!!f._responsableFase,
         inicio:f._ini||null,
         vence:f._fin||null
       };
@@ -3876,7 +3880,8 @@ function renderSeguimientoTabla(){
       <td style="font-weight:500;white-space:nowrap">${r.epicaKey?`<a class="jlink" href="${JIRA_BASE}${r.epicaKey}" target="_blank">${esc(r.codigo)}</a>`:esc(r.codigo)}</td>
       <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.proyecto)}">${esc(r.proyecto)}</td>
       <td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.subtarea)}">${esc(r.subtarea)}</td>
-      <td style="white-space:nowrap">${esc(r.responsable)}</td>
+      <td style="white-space:nowrap" title="${r.derivado?'Responsable de la fase '+esc(r.fase||''):'Asignado de la historia'}">${esc(r.responsable)}${
+        r.derivado?'':'<span style="color:var(--text-dim);font-size:10px"> ·</span>'}</td>
       <td><span class="det-badge det-badge-${st.cls}">${esc(r.estado)}</span></td>
       <td style="white-space:nowrap;color:var(--text-muted)">${r.inicio?fmtD(r.inicio):'—'}</td>
       <td style="white-space:nowrap;color:${colFin}">${r.vence?fmtD(r.vence):'sin fecha'}</td>
