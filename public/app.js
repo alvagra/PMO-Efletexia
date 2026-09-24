@@ -3724,6 +3724,27 @@ let sgLoaded = false;
 let sgRows = [];
 let sgEstSel = new Set();   // estados seleccionados (multi)
 let sgAreaSel = new Set();  // áreas (equipos) seleccionadas
+let sgSortCol = null, sgSortDir = 1;   // columna y sentido del ordenamiento
+
+function sgOrdenar(campo){
+  if(sgSortCol===campo) sgSortDir=-sgSortDir; else { sgSortCol=campo; sgSortDir=1; }
+  renderSeguimientoTabla();
+}
+function sgAplicarOrden(rows){
+  if(!sgSortCol) return rows;
+  const val=r=>{
+    const v=r[sgSortCol];
+    if(v===null||v===undefined||v==='') return sgSortDir===1?'\uffff':'';
+    return String(v).toLowerCase();
+  };
+  return rows.slice().sort((a,b)=>val(a).localeCompare(val(b),'es',{numeric:true})*sgSortDir);
+}
+function sgTh(label,campo,extra){
+  const act=sgSortCol===campo;
+  const flecha=act?(sgSortDir===1?'▲':'▼'):'⇅';
+  return `<th style="cursor:pointer;user-select:none;${extra||''}" onclick="sgOrdenar('${campo}')">${label}
+    <span style="color:${act?'var(--blue)':'var(--text-dim)'};font-size:9px;margin-left:3px">${flecha}</span></th>`;
+}
 
 function sgDias(f){
   if(!f) return null;
@@ -3861,7 +3882,7 @@ function renderSeguimientoUI(){
 }
 
 function renderSeguimientoTabla(){
-  const rows=sgFiltradas();
+  const rows=sgAplicarOrden(sgFiltradas());
   const cuerpo=document.getElementById('sg-cuerpo');
   if(!rows.length){ cuerpo.innerHTML='<div class="mt-empty">Sin resultados para el filtro.</div>'; return; }
 
@@ -3898,8 +3919,8 @@ function renderSeguimientoTabla(){
       ${kpi('SIN FECHA',sinF,sinF?'#F5B800':'var(--text-dim)')}
     </div>
     <div style="overflow-x:auto"><table class="sg-tabla">
-      <thead><tr><th>CÓDIGO</th><th>PROYECTO</th><th>ENTREGABLE</th><th>RECURSO</th>
-      <th>ESTADO</th><th>INICIO</th><th>VENCE</th></tr></thead>
+      <thead><tr>${sgTh('CÓDIGO','codigo')}${sgTh('PROYECTO','proyecto')}${sgTh('ENTREGABLE','subtarea')}
+      ${sgTh('RECURSO','responsable')}${sgTh('ESTADO','estado')}${sgTh('INICIO','inicio')}${sgTh('VENCE','vence')}</tr></thead>
       <tbody>${filas}</tbody></table></div>`;
 }
 
