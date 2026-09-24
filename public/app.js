@@ -3750,12 +3750,14 @@ async function loadSeguimiento(){
         epicaKey:ep?.key||'',
         proyecto:ep?.summary||'Sin épica',
         estado:f.status?.name||'—',
-        responsable:(()=>{ const n=f._responsableFase||dn;
+        responsable:(()=>{ if(f._sinAsignar) return 'Sin asignar';
+          const n=f._responsableFase||dn;
           return n?(resolveNombreDesdeJira(n)?.nombre||n):'Sin asignar'; })(),
-        area:(()=>{ const n=f._responsableFase||dn;
+        area:(()=>{ if(f._sinAsignar) return 'Sin área';
+          const n=f._responsableFase||dn;
           return n?(resolveNombreDesdeJira(n)?.area||'Sin área'):'Sin área'; })(),
         fase:f._fase||null,
-        derivado:!!f._responsableFase,
+        derivado:!!f._responsableFase||!!f._sinAsignar,
         inicio:f._ini||null,
         vence:f._fin||null
       };
