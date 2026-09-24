@@ -408,6 +408,62 @@ module.exports = async function handler(req, res) {
         it.fields._fin = (CF_FIN ? it.fields[CF_FIN] : null) || it.fields.duedate || null;
       });
 
+      // ── Responsable por fase ───────────────────────────────────────────
+      // El responsable se deriva de las subtareas de la fase en curso:
+      // el estado de la historia indica qué fase mirar.
+      const nz = t => (t || '').toLowerCase().normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '').replace(/[.\u00B7]/g, '')
+        .replace(/\s+/g, ' ').trim();
+      const faseDeSubtarea = nombre => {
+        const n = nz(nombre);
+        if (n.includes('uat')) return 'uat';
+        if (n.includes('qa')) return 'qa';
+        if (n.includes('produccion')) return 'produccion';
+        if (n.includes('analisis')) return 'analisis';
+        return 'desarrollo';          // todo lo demás es construcción
+      };
+      const faseDeEstado = estado => {
+        const n = nz(estado);
+        if (n === 'analisis') return 'analisis';
+        if (n === 'desarrollo') return 'desarrollo';
+        if (n.includes('uat')) return 'uat';
+        if (n.includes('qa')) return 'qa';
+        if (n.includes('produccion')) return 'produccion';
+        return null;                  // Backlog, Pendiente, Blocked…
+      };
+
+      const hKeys = items.map(i => i.key);
+      const subsPorHistoria = {};
+      for (let i = 0; i < hKeys.length; i += 50) {
+        const chunk = hKeys.slice(i, i + 50);
+        if (!chunk.length) continue;
+        const subs = await fetchAllPages(auth, JIRA_CLOUD,
+          `project = PTS AND parent in (${chunk.join(',')})`,
+          ['summary', 'assignee', 'parent', 'status']);
+        subs.forEach(su => {
+          const pk = su.fields.parent?.key;
+          if (!pk) return;
+          (subsPorHistoria[pk] = subsPorHistoria[pk] || []).push(su);
+        });
+      }
+
+      items.forEach(it => {
+        const fase = faseDeEstado(it.fields.status?.name);
+        it.fields._fase = fase;
+        it.fields._responsableFase = null;
+        if (!fase) return;
+        const candidatas = (subsPorHistoria[it.key] || [])
+          .filter(su => faseDeSubtarea(su.fields.summary) === fase);
+        // Responsable con más subtareas en esa fase
+        const conteo = {};
+        candidatas.forEach(su => {
+          const dn = su.fields.assignee?.displayName;
+          if (dn) conteo[dn] = (conteo[dn] || 0) + 1;
+        });
+        const top = Object.entries(conteo).sort((a, b) => b[1] - a[1])[0];
+        if (top) it.fields._responsableFase = top[0];
+      });
+
       return res.status(200).json({ items, total: items.length,
         campoEntregable: CF_ENT || null, campoInicio: CF_INI || null,
         campoFin: CF_FIN || null, type: 'seguimiento' });
