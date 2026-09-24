@@ -451,9 +451,12 @@ module.exports = async function handler(req, res) {
         const fase = faseDeEstado(it.fields.status?.name);
         it.fields._fase = fase;
         it.fields._responsableFase = null;
-        if (!fase) return;
+        // Sin fase en curso (Pendiente, Backlog, Blocked) el responsable se toma
+        // de las subtareas de desarrollo: el trabajo ya está repartido aunque
+        // la historia no haya arrancado.
+        const faseResp = fase || 'desarrollo';
         const candidatas = (subsPorHistoria[it.key] || [])
-          .filter(su => faseDeSubtarea(su.fields.summary) === fase);
+          .filter(su => faseDeSubtarea(su.fields.summary) === faseResp);
         // Responsable con más subtareas en esa fase
         const conteo = {};
         candidatas.forEach(su => {
@@ -462,7 +465,7 @@ module.exports = async function handler(req, res) {
         });
         // Fechas: en Desarrollo se usan las de la historia; en el resto de
         // fases se toman de la subtarea correspondiente (min inicio, max fin).
-        if (fase !== 'desarrollo' && candidatas.length) {
+        if (fase && fase !== 'desarrollo' && candidatas.length) {
           const inis = candidatas.map(su => su.fields.customfield_10015).filter(Boolean);
           const fins = candidatas.map(su => su.fields.duedate).filter(Boolean);
           if (inis.length) it.fields._ini = inis.reduce((a, b) => a < b ? a : b);
