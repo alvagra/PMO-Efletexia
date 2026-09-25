@@ -510,6 +510,7 @@ module.exports = async function handler(req, res) {
         'timespent', 'priority',
         'customfield_10015', // Fecha inicio
         'customfield_11136', // Horas estimadas
+        'customfield_11203', // Aplicación (del propio bug)
       ];
       const bugs = await fetchAllPages(
         auth, JIRA_CLOUD,
@@ -566,6 +567,8 @@ module.exports = async function handler(req, res) {
         b.fields._segTotal   = (b.fields.timespent || 0) + extra.seg;
         b.fields._estTotal   = (b.fields.customfield_11136 || 0) + extra.est;
         b.fields._nSubtareas = extra.n;
+        // Aplicación registrada en el bug (no la de su épica)
+        b.fields._aplicacion = b.fields.customfield_11203?.value || null;
       });
 
       return res.status(200).json({ bugs, total: bugs.length, type: 'bugs' });
