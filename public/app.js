@@ -3344,7 +3344,8 @@ async function loadMetricas(){
         return {
           key:b.key,
           resumen:f.summary||b.key,
-          aplicacion:f._epica?.aplicacion||'Sin aplicación',
+          // Aplicación del campo del propio bug en Jira
+          aplicacion:f._aplicacion||'Sin aplicación',
           responsable:(()=>{ const dn=f.assignee?.displayName; if(!dn) return 'Sin asignar';
             return resolveNombreDesdeJira(dn)?.nombre||dn; })(),
           cerrado:bgEstadoCls(f.status?.name).g==='Cerrado',
