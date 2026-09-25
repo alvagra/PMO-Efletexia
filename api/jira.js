@@ -295,8 +295,8 @@ module.exports = async function handler(req, res) {
 
 
     } else if (type === 'metricas') {
-      // Desvío de entrega = "Fecha de entrega desarrollo" (customfield_11381) − duedate.
-      // Aplica a historias y a bugs; solo entran los que ya tienen la fecha cargada.
+      // Desvío de entrega = "Fecha de entrega desarrollo" − "Fecha fin desarrollo".
+      // Aplica a historias y a bugs; solo entran los que tienen ambas fechas.
       const MET_FIELDS = [
         'summary', 'status', 'assignee', 'parent', 'duedate', 'issuetype',
         'customfield_11381', // Fecha de entrega desarrollo
@@ -306,7 +306,10 @@ module.exports = async function handler(req, res) {
       // Campo "Entregable": solo las historias marcadas con Sí entran a la métrica
       let CF_ENT = await idCampoEntregable(auth, JIRA_CLOUD);
       if (CF_ENT) MET_FIELDS.push(CF_ENT);
-      const MET_JQL = 'project = PTS AND cf[11381] IS NOT EMPTY AND duedate IS NOT EMPTY ORDER BY cf[11381] DESC';
+      // "Fecha fin desarrollo" es ahora la fecha comprometida de la métrica
+      const CF_FIN = await idCampoPorNombre(auth, JIRA_CLOUD, 'Fecha fin desarrollo');
+      if (CF_FIN && !MET_FIELDS.includes(CF_FIN)) MET_FIELDS.push(CF_FIN);
+      const MET_JQL = 'project = PTS AND cf[11381] IS NOT EMPTY ORDER BY cf[11381] DESC';
       let items = await fetchAllPages(auth, JIRA_CLOUD, MET_JQL, MET_FIELDS);
 
       // Épica de cada item, para mostrar código y nombre de proyecto
