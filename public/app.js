@@ -3364,7 +3364,9 @@ async function loadMetricas(){
         proyKey:ep?.key||'', proyecto:ep?.summary||'Sin épica', codigo:ep?.codigo||'',
         aplicacion:ep?.aplicacion||'Sin aplicación',
         estado:f.status?.name||'—',
-        responsable:dn?(nom?.nombre||dn):'Sin asignar', pais,
+        // Responsable = "Resp. Desarrollo"; varios se separan por coma
+        responsable:(Array.isArray(f.customfield_11451)?f.customfield_11451:[])
+          .map(o=>(o&&(o.value||o.name||o.displayName))||'').filter(Boolean).join(', ')||'Sin asignar', pais,
         entregable:f._entregable,   // null = el campo no existe en esta instancia
         // Vence = Fecha fin desarrollo · Entrega = Fecha de entrega desarrollo
         vence:f._vence||null, entrega:f.customfield_11381||null, inicio:f.customfield_10015||null,
