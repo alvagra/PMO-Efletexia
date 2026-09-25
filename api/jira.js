@@ -307,8 +307,9 @@ module.exports = async function handler(req, res) {
       let CF_ENT = await idCampoEntregable(auth, JIRA_CLOUD);
       if (CF_ENT) MET_FIELDS.push(CF_ENT);
       // "Fecha fin desarrollo" es ahora la fecha comprometida de la métrica
-      const CF_FIN = await idCampoPorNombre(auth, JIRA_CLOUD, 'Fecha fin desarrollo');
-      if (CF_FIN && !MET_FIELDS.includes(CF_FIN)) MET_FIELDS.push(CF_FIN);
+      // Si no se resuelve por nombre se usa el id conocido de PTS
+      const CF_FIN = (await idCampoPorNombre(auth, JIRA_CLOUD, 'Fecha fin desarrollo')) || 'customfield_11450';
+      if (!MET_FIELDS.includes(CF_FIN)) MET_FIELDS.push(CF_FIN);
       const MET_JQL = 'project = PTS AND cf[11381] IS NOT EMPTY ORDER BY cf[11381] DESC';
       let items = await fetchAllPages(auth, JIRA_CLOUD, MET_JQL, MET_FIELDS);
 
@@ -354,9 +355,11 @@ module.exports = async function handler(req, res) {
       }
       items.forEach(it => {
         it.fields._entregable = CF_ENT ? esEntregable(it.fields[CF_ENT]) : null;
+        // Vence de la métrica = "Fecha fin desarrollo" (no duedate)
+        it.fields._vence = it.fields[CF_FIN] || null;
       });
       return res.status(200).json({ items, total: items.length, type: 'metricas',
-        campoEntregable: CF_ENT || null });
+        campoEntregable: CF_ENT || null, campoFin: CF_FIN });
 
     } else if (type === 'seguimiento') {
       // Seguimiento por entregable: historias con el campo Entregable = Sí.
