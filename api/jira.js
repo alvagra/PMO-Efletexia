@@ -302,6 +302,7 @@ module.exports = async function handler(req, res) {
         'customfield_11381', // Fecha de entrega desarrollo
         'customfield_10015', // Fecha inicio
         'customfield_10934', // Código
+        'customfield_11451', // Resp. Desarrollo (selección múltiple)
       ];
       // Campo "Entregable": solo las historias marcadas con Sí entran a la métrica
       let CF_ENT = await idCampoEntregable(auth, JIRA_CLOUD);
