@@ -570,6 +570,66 @@ module.exports = async function handler(req, res) {
 
       return res.status(200).json({ bugs, total: bugs.length, type: 'bugs' });
 
+    } else if (type === 'bugHoras') {
+      // Horas registradas en bugs, desde el Registro de actividad (worklogs).
+      // Se incluyen los worklogs de las subtareas del bug, sumados al bug padre.
+      // El mes es el de la fecha en que se hizo el trabajo (worklog.started).
+      const bugs = await fetchAllPages(auth, JIRA_CLOUD,
+        'project = PTS AND issuetype = Error ORDER BY created DESC',
+        ['summary', 'timespent']);
+      const info = {};
+      bugs.forEach(b => { info[b.key] = { resumen: b.fields.summary || b.key }; });
+
+      // Incidencias con horas: el propio bug o sus subtareas (clave → bug padre)
+      const conHoras = bugs.filter(b => (b.fields.timespent || 0) > 0)
+        .map(b => ({ key: b.key, bug: b.key }));
+      const bugKeys = bugs.map(b => b.key);
+      for (let i = 0; i < bugKeys.length; i += 50) {
+        const chunk = bugKeys.slice(i, i + 50);
+        if (!chunk.length) continue;
+        const subs = await fetchAllPages(auth, JIRA_CLOUD,
+          `project = PTS AND parent in (${chunk.join(',')})`, ['parent', 'timespent']);
+        subs.forEach(su => {
+          const pk = su.fields.parent?.key;
+          if (pk && (su.fields.timespent || 0) > 0) conHoras.push({ key: su.key, bug: pk });
+        });
+      }
+
+      // Worklogs de cada incidencia, paginados, en lotes de 10 en paralelo
+      const traerWorklogs = async key => {
+        let startAt = 0, todos = [];
+        for (let vuelta = 0; vuelta < 20; vuelta++) {
+          const r = await jiraGet(auth, JIRA_CLOUD,
+            `/rest/api/3/issue/${key}/worklog?startAt=${startAt}&maxResults=1000`);
+          if (r.status !== 200) break;
+          const w = r.body.worklogs || [];
+          todos = todos.concat(w);
+          startAt += w.length;
+          if (!w.length || startAt >= (r.body.total || 0)) break;
+        }
+        return todos;
+      };
+      const acum = {};   // "bug|autor|mes" → segundos
+      for (let i = 0; i < conHoras.length; i += 10) {
+        const lote = conHoras.slice(i, i + 10);
+        const logs = await Promise.all(lote.map(x => traerWorklogs(x.key).catch(() => [])));
+        lote.forEach((x, idx) => {
+          logs[idx].forEach(w => {
+            const mes = (w.started || '').slice(0, 7);
+            if (!/^\d{4}-\d{2}$/.test(mes)) return;
+            const autor = w.author?.displayName || 'Sin autor';
+            const k = `${x.bug}|${autor}|${mes}`;
+            acum[k] = (acum[k] || 0) + (w.timeSpentSeconds || 0);
+          });
+        });
+      }
+      const registros = Object.entries(acum).map(([k, seg]) => {
+        const [bug, autor, mes] = k.split('|');
+        return { bug, resumen: info[bug]?.resumen || bug, autor, mes,
+                 horas: Math.round(seg / 36) / 100 };
+      });
+      return res.status(200).json({ registros, total: registros.length, type: 'bugHoras' });
+
     } else if (type === 'bugHistory') {
       // Ciclo de vida de un bug: se reconstruye desde el changelog de Jira,
       // que conserva los valores anteriores aunque los campos se sobrescriban.
