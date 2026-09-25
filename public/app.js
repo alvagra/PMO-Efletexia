@@ -3299,6 +3299,8 @@ document.addEventListener('click', e => {
 let metricasLoaded = false;
 let metRows = [];
 let metBugsMes = [];   // universo completo de bugs para el gráfico mensual
+// Bugs que no se consideran en los gráficos de Métricas (decisión PMO)
+const MT_BUGS_EXCLUIDOS = ['PTS-1398','PTS-1399'];
 let metHorasBugs = []; // horas del Registro de actividad de bugs: {bug,resumen,recurso,mes,horas}
 
 // Desvío en días efectivos: no se cuentan los domingos.
@@ -3352,7 +3354,7 @@ async function loadMetricas(){
           mes:(usaDue?due:created).slice(0,7),
           estimado:!usaDue
         };
-      }).filter(x=>/^\d{4}-\d{2}$/.test(x.mes));
+      }).filter(x=>/^\d{4}-\d{2}$/.test(x.mes) && !MT_BUGS_EXCLUIDOS.includes(x.key));
     }catch(e){ metBugsMes=[]; }
 
     // Horas registradas en bugs (worklogs), por bug, recurso y mes
@@ -3361,7 +3363,7 @@ async function loadMetricas(){
       metHorasBugs=(jh.registros||[]).map(x=>({
         bug:x.bug, resumen:x.resumen||x.bug, mes:x.mes, horas:+x.horas||0,
         recurso:resolveNombreDesdeJira(x.autor)?.nombre||x.autor||'Sin autor'
-      })).filter(x=>x.horas>0 && /^\d{4}-\d{2}$/.test(x.mes));
+      })).filter(x=>x.horas>0 && /^\d{4}-\d{2}$/.test(x.mes) && !MT_BUGS_EXCLUIDOS.includes(x.bug));
     }catch(e){ metHorasBugs=[]; }
 
     metRows=(j.items||[]).map(it=>{
