@@ -3771,6 +3771,16 @@ async function loadSeguimiento(){
     sgRows=(j.items||[]).filter(it=>!SPECIAL_EPIC_KEYS.includes(it.fields?._epica?.key)).map(it=>{
       const f=it.fields||{}, ep=f._epica||null;
       const dn=f.assignee?.displayName||'';
+      // Personas responsables: en Desarrollo, las de "Resp. Desarrollo"; si no, una sola
+      const personas=(()=>{
+        if(Array.isArray(f._respDesarrollo)&&f._respDesarrollo.length)
+          return f._respDesarrollo.map(n=>({nombre:resolveNombreDesdeJira(n)?.nombre||n,
+                                             area:resolveNombreDesdeJira(n)?.area||'Sin área'}));
+        if(f._sinAsignar) return [];
+        const n=f._responsableFase||dn;
+        return n?[{nombre:resolveNombreDesdeJira(n)?.nombre||n, area:resolveNombreDesdeJira(n)?.area||'Sin área'}]:[];
+      })();
+      const areasP=[...new Set(personas.map(p=>p.area))];
       return {
         key:it.key,
         subtarea:f.summary||it.key,
@@ -3778,14 +3788,14 @@ async function loadSeguimiento(){
         epicaKey:ep?.key||'',
         proyecto:ep?.summary||'Sin épica',
         estado:f.status?.name||'—',
-        responsable:(()=>{ if(f._sinAsignar) return 'Sin asignar';
-          const n=f._responsableFase||dn;
-          return n?(resolveNombreDesdeJira(n)?.nombre||n):'Sin asignar'; })(),
-        area:(()=>{ if(f._sinAsignar) return 'Sin área';
-          const n=f._responsableFase||dn;
-          return n?(resolveNombreDesdeJira(n)?.area||'Sin área'):'Sin área'; })(),
+        // Varios responsables se muestran separados por coma
+        responsable:personas.length?personas.map(p=>p.nombre).join(', '):'Sin asignar',
+        responsables:personas.length?personas.map(p=>p.nombre):['Sin asignar'],
+        area:areasP.length?areasP.join(', '):'Sin área',
+        areas:areasP.length?areasP:['Sin área'],
         fase:f._fase||null,
-        derivado:!!f._responsableFase||!!f._sinAsignar,
+        respDesarrollo:!!(f._respDesarrollo&&f._respDesarrollo.length),
+        derivado:!!f._responsableFase||!!f._sinAsignar||!!(f._respDesarrollo&&f._respDesarrollo.length),
         inicio:f._ini||null,
         vence:f._fin||null
       };
@@ -3812,9 +3822,9 @@ function sgFiltradas(){
       if(hasta && ini > hasta) return false;
       if(desde && fin < desde) return false;
     }
-    if(rec && r.responsable!==rec) return false;
+    if(rec && !r.responsables.includes(rec)) return false;
     if(est.size && !est.has(r.estado)) return false;
-    if(sgAreaSel.size && !sgAreaSel.has(r.area)) return false;
+    if(sgAreaSel.size && !r.areas.some(a=>sgAreaSel.has(a))) return false;
     if(q && !(r.subtarea.toLowerCase().includes(q) || r.key.toLowerCase().includes(q)
               || r.proyecto.toLowerCase().includes(q) || (r.codigo||'').toLowerCase().includes(q))) return false;
     return true;
@@ -3824,12 +3834,12 @@ function sgFiltradas(){
 function renderSeguimientoUI(){
   const cont=document.getElementById('sg-contenido');
   if(!sgRows.length){ cont.innerHTML='<div class="mt-empty">Ninguna historia está marcada como Entregable en Jira.</div>'; return; }
-  const recs=[...new Set(sgRows.map(r=>r.responsable))].sort();
+  const recs=[...new Set(sgRows.flatMap(r=>r.responsables))].sort();
   // Estados del flujo de historias en orden, más los que aparezcan en los datos
   const SG_BASE=['Pendiente','Análisis','Desarrollo','Pruebas QA','Pruebas UAT','Producción','Blocked'];
   const presentes=[...new Set(sgRows.map(r=>r.estado))];
   const ests=[...SG_BASE, ...presentes.filter(x=>!SG_BASE.includes(x)).sort()];
-  const areas=[...new Set(sgRows.map(r=>r.area))].sort();
+  const areas=[...new Set(sgRows.flatMap(r=>r.areas))].sort();
   cont.innerHTML=`
     <div class="sg-filtros">
       <input id="sg-q" type="text" placeholder="Buscar entregable o proyecto…" style="min-width:230px"/>
@@ -3915,7 +3925,7 @@ function renderSeguimientoTabla(){
       <td style="font-weight:500;white-space:nowrap">${r.epicaKey?`<a class="jlink" href="${JIRA_BASE}${r.epicaKey}" target="_blank">${esc(r.codigo)}</a>`:esc(r.codigo)}</td>
       <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.proyecto)}">${esc(r.proyecto)}</td>
       <td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.subtarea)}">${esc(r.subtarea)}</td>
-      <td style="white-space:nowrap" title="${r.derivado?'Responsable de la fase '+esc(r.fase||''):'Asignado de la historia'}">${esc(r.responsable)}${
+      <td style="white-space:nowrap" title="${r.respDesarrollo?'Resp. Desarrollo de la historia':r.derivado?'Responsable de la fase '+esc(r.fase||''):'Asignado de la historia'}">${esc(r.responsable)}${
         r.derivado?'':'<span style="color:var(--text-dim);font-size:10px"> ·</span>'}</td>
       <td><span class="det-badge det-badge-${st.cls}">${esc(r.estado)}</span></td>
       <td style="white-space:nowrap;color:var(--text-muted)">${r.inicio?fmtD(r.inicio):'—'}</td>
