@@ -3403,7 +3403,7 @@ function metFiltradas(){
 function renderMetricas(){
   const cont=document.getElementById('mt-contenido');
   if(!metRows.length){
-    cont.innerHTML=mtBugsCards()+mtHorasCards()+
+    cont.innerHTML=mtDonasFila()+
       '<div class="mt-empty">Ninguna historia o bug tiene cargada la <b>Fecha de entrega desarrollo</b> en Jira.<br>'+
       '<span style="font-size:11px">La métrica de desvío se activa sola en cuanto el campo empiece a llenarse.</span></div>';
     return;
@@ -3428,7 +3428,7 @@ function renderMetricasCuerpo(){
   // KPIs globales sobre el total filtrado
   const soloHistorias=(document.getElementById('mt-tipo')?.value||'')==='Historia';
   cuerpo.innerHTML = mtKpis(rows)
-    + (soloHistorias?'':mtBugsCards()+mtHorasCards())
+    + (soloHistorias?'':mtDonasFila())
     + mtSeccion('HISTORIAS', rows.filter(r=>r.tipo==='Historia'))
     + mtSeccion('BUGS',      rows.filter(r=>r.tipo==='Bug'));
 }
@@ -3523,173 +3523,152 @@ function mtMesCorto(m){
   return MT_MESES[+ms-1]+(+a.slice(2)!==new Date().getFullYear()%100?` ${a.slice(2)}`:'');
 }
 
-// Las dos tarjetas, lado a lado
-function mtBugsCards(){
-  if(!metBugsMes.length) return '';
-  return `<div class="mt-duo">
-    ${mtBugsPorMes('aplicacion','BUG POR APLICACIÓN')}
-    ${mtBugsPorMes('responsable','BUGS POR DESARROLLADOR')}
+// ── Fila de cuatro donas: bugs y horas en bugs ────────────────
+// Mismo diseño que el donut de la pestaña Bugs. Un selector de periodo
+// aplica a las cuatro (por defecto, los últimos 6 meses con actividad).
+let metPeriodo='';   // '' = últimos 6 meses · 'AAAA-MM' = un mes
+
+function mtMesesDisponibles(){
+  return [...new Set([...metBugsMes.map(d=>d.mes), ...metHorasBugs.map(d=>d.mes)])].sort();
+}
+function mtEnPeriodo(lista){
+  if(metPeriodo) return lista.filter(d=>d.mes===metPeriodo);
+  const ult=mtMesesDisponibles().slice(-6);
+  return lista.filter(d=>ult.includes(d.mes));
+}
+
+// Agrupa en top 6 + resto; cada item {lbl, v, c, sub, tip}
+function mtTop(mapa, resto, subDe, tipDe){
+  const orden=Object.keys(mapa).sort((a,b)=>mapa[b].v-mapa[a].v);
+  const top=orden.slice(0,6), otros=orden.slice(6);
+  const items=top.map((k,i)=>({lbl:k, v:mapa[k].v, c:MT_COLORES[i%MT_COLORES.length],
+    sub:subDe(mapa[k],k), tip:tipDe?tipDe(k):k}));
+  if(otros.length){
+    const acc={v:0,ab:0,ce:0,n:0,bugs:new Set()};
+    otros.forEach(k=>{ const m=mapa[k]; acc.v+=m.v; acc.ab+=m.ab||0; acc.ce+=m.ce||0;
+      (m.bugs||new Set()).forEach(b=>acc.bugs.add(b)); });
+    items.push({lbl:resto, v:acc.v, c:'#6e7681', sub:subDe(acc,resto), tip:`${resto}: ${otros.length}`});
+  }
+  return items;
+}
+
+function mtDonasFila(){
+  if(!metBugsMes.length && !metHorasBugs.length) return '';
+  const meses=mtMesesDisponibles();
+  const opciones=[`<option value="">Últimos ${Math.min(6,meses.length)} meses</option>`]
+    .concat(meses.slice().reverse().map(m=>`<option value="${m}"${m===metPeriodo?' selected':''}>${mtMesCorto(m)} ${m.slice(0,4)}</option>`)).join('');
+
+  const bugs=mtEnPeriodo(metBugsMes), horas=mtEnPeriodo(metHorasBugs);
+  const fmtH=h=>(Math.round(h*10)/10).toString().replace('.',',');
+
+  // Conteo de bugs por dimensión, con abiertos / cerrados
+  const porConteo=dim=>{
+    const m={};
+    bugs.forEach(d=>{ const k=d[dim]||(dim==='aplicacion'?'Sin aplicación':'Sin asignar');
+      m[k]=m[k]||{v:0,ab:0,ce:0}; m[k].v++; d.cerrado?m[k].ce++:m[k].ab++; });
+    return m;
+  };
+  const subConteo=x=>`${x.ab} abierto${x.ab===1?'':'s'} · ${x.ce} cerrado${x.ce===1?'':'s'}`;
+
+  // Horas por bug y por recurso
+  const hBug={}, resumen={};
+  horas.forEach(d=>{ hBug[d.bug]=hBug[d.bug]||{v:0,rec:new Set()}; hBug[d.bug].v+=d.horas;
+    hBug[d.bug].rec.add(d.recurso); resumen[d.bug]=d.resumen; });
+  const hRec={};
+  horas.forEach(d=>{ hRec[d.recurso]=hRec[d.recurso]||{v:0,bugs:new Set()}; hRec[d.recurso].v+=d.horas;
+    hRec[d.recurso].bugs.add(d.bug); });
+  const corto=t=>{ t=t||''; return t.length>22?t.slice(0,21)+'…':t; };
+
+  const tarjetas=[
+    mtDonaCard('BUGS POR APLICACIÓN',
+      mtTop(porConteo('aplicacion'),'Otras',subConteo), bugs.length, 'BUGS', v=>v),
+    mtDonaCard('BUGS POR DESARROLLADOR',
+      mtTop(porConteo('responsable'),'Otros',subConteo), bugs.length, 'BUGS', v=>v),
+    mtDonaCard('HORAS REGISTRADAS POR BUG',
+      mtTop(hBug,'Otros bugs',(x,k)=>x.rec?corto(resumen[k]):'varios bugs', k=>`${k} · ${resumen[k]||''}`),
+      Object.values(hBug).reduce((a,x)=>a+x.v,0), 'HORAS', v=>fmtH(v)+'h'),
+    mtDonaCard('HORAS EN BUGS POR RECURSO',
+      mtTop(hRec,'Otros',x=>`${x.bugs.size} bug${x.bugs.size===1?'':'s'}`),
+      Object.values(hRec).reduce((a,x)=>a+x.v,0), 'HORAS', v=>fmtH(v)+'h')
+  ].join('');
+
+  return `<div id="mt-donas" style="margin-bottom:16px">
+    <style>
+      .mt-cuatro{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+      @media (max-width:1280px){.mt-cuatro{grid-template-columns:repeat(2,minmax(0,1fr))}}
+      @media (max-width:700px){.mt-cuatro{grid-template-columns:1fr}}
+    </style>
+    <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:8px">
+      <span style="font-size:11px;color:var(--text-muted)">Periodo</span>
+      <select id="mt-periodo" onchange="metPeriodo=this.value;mtRefrescarDonas()">${opciones}</select>
+    </div>
+    <div class="mt-cuatro">${tarjetas}</div>
+    <div style="font-size:10px;color:var(--text-dim);text-align:center;margin-top:8px">
+      Bugs: mes de vencimiento (o de registro si no tiene) · Horas: Registro de actividad del bug y sus subtareas, por mes del trabajo
+    </div>
   </div>`;
 }
 
-function mtBugsPorMes(dim,titulo){
-  const datos=metBugsMes;
-  if(!datos.length) return '';
-  const vacio = dim==='responsable' ? 'Sin asignar' : 'Sin aplicación';
+function mtRefrescarDonas(){
+  const el=document.getElementById('mt-donas');
+  if(el) el.outerHTML=mtDonasFila();
+}
 
-  // Últimos 6 meses con actividad, para que las columnas no se aplasten
-  const meses=[...new Set(datos.map(d=>d.mes))].sort().slice(-6);
-  const enRango=datos.filter(d=>meses.includes(d.mes));
-  if(!meses.length) return '';
+function mtDonaCard(titulo, items, total, centro, fmtV){
+  return `<div class="mt-card" style="margin:0;padding:12px 8px">
+    <div class="mt-card-t" style="text-align:center">${titulo}</div>
+    ${mtDona(items,total,centro,fmtV)}
+  </div>`;
+}
 
-  // Series: top 6 por volumen, el resto agrupado
-  const tot={};
-  enRango.forEach(d=>{ const k=d[dim]||vacio; tot[k]=(tot[k]||0)+1; });
-  const orden=Object.keys(tot).sort((a,b)=>tot[b]-tot[a]);
-  const top=new Set(orden.slice(0,6));
-  const resto = dim==='responsable' ? 'Otros' : 'Otras';
-  const series=orden.filter(k=>top.has(k));
-  if(orden.length>series.length) series.push(resto);
-
-  // cubo[mes][abierto|cerrado][serie] = cantidad
-  const cubo={}; let estimados=0;
-  meses.forEach(m=>{ cubo[m]={abierto:{},cerrado:{}}; });
-  enRango.forEach(d=>{
-    const s=top.has(d[dim]||vacio)?(d[dim]||vacio):resto;
-    const col=d.cerrado?'cerrado':'abierto';
-    cubo[d.mes][col][s]=(cubo[d.mes][col][s]||0)+1;
-    if(d.estimado) estimados++;
+// Donut compacto con etiquetas repartidas a los lados y ramita a su porción
+function mtDona(items, total, centro, fmtV){
+  items=items.filter(i=>i.v>0);
+  if(!total||!items.length) return '<div style="font-size:12px;color:var(--text-muted);padding:40px 0;text-align:center">Sin datos en el periodo</div>';
+  const W=620, H=340, cx=310, cy=170, R=76, r=47, COD=36;
+  let ang=-Math.PI/2, segs=[], paths='';
+  items.forEach(it=>{
+    const frac=it.v/total, a2=ang+Math.min(frac,0.9999)*Math.PI*2, large=(a2-ang)>Math.PI?1:0;
+    const p=(rad,a)=>`${(cx+rad*Math.cos(a)).toFixed(1)} ${(cy+rad*Math.sin(a)).toFixed(1)}`;
+    paths+=`<path d="M${p(R,ang)} A${R} ${R} 0 ${large} 1 ${p(R,a2)} L${p(r,a2)} A${r} ${r} 0 ${large} 0 ${p(r,ang)} Z"
+      fill="${it.c}" stroke="var(--bg-surface)" stroke-width="2"><title>${esc(it.tip)}: ${fmtV(it.v)}</title></path>`;
+    segs.push({...it, am:(ang+a2)/2});
+    ang=a2;
   });
 
-  // Escala
-  const W=420,H=240,PL=10,PR=10,PT=14,PB=46;
-  const alto=H-PT-PB;
-  const totCol=(m,c)=>series.reduce((a,s)=>a+(cubo[m][c][s]||0),0);
-  const maxY=Math.max(1,...meses.flatMap(m=>[totCol(m,'abierto'),totCol(m,'cerrado')]));
-  const anchoMes=(W-PL-PR)/meses.length;
-  const bw=Math.min(30,(anchoMes-16)/2);
-  const idxSerie={}; series.forEach((s,i)=>{ idxSerie[s]=i; });
-
-  const cols=meses.map((m,i)=>{
-    const x0=PL+i*anchoMes;
-    const cx=x0+anchoMes/2;
-    const barras=['abierto','cerrado'].map((c,ci)=>{
-      const bx=cx+(ci?3:-3-bw);
-      const total=totCol(m,c);
-      let y=PT+alto;
-      const segs=series.map(s=>{
-        const n=cubo[m][c][s]||0; if(!n) return '';
-        const h=n/maxY*alto; y-=h;
-        const col=MT_COLORES[idxSerie[s]%MT_COLORES.length];
-        const lbl = h>=13 ? `<text x="${(bx+bw/2).toFixed(1)}" y="${(y+h/2+3.5).toFixed(1)}"
-          text-anchor="middle" font-size="10" fill="#0d1117" font-weight="600">${n}</text>` : '';
-        return `<rect x="${bx.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}"
-          height="${h.toFixed(1)}" fill="${col}"><title>${esc(s)} · ${mtMesCorto(m)} · ${c}: ${n}</title></rect>${lbl}`;
-      }).join('');
-      const cero = total?'':`<text x="${(bx+bw/2).toFixed(1)}" y="${PT+alto-4}"
-        text-anchor="middle" font-size="10" fill="var(--text-dim)">0</text>`;
-      return `${segs}${cero}<text x="${(bx+bw/2).toFixed(1)}" y="${H-PB+14}"
-        text-anchor="middle" font-size="9.5" fill="var(--text-muted)">${ci?'Cerrado':'Abierto'}</text>`;
-    }).join('');
-    return `${barras}<text x="${cx.toFixed(1)}" y="${H-PB+30}" text-anchor="middle"
-      font-size="10" fill="var(--text-dim)">${mtMesCorto(m)}</text>`;
-  }).join('');
-
-  const leyenda=series.map(s=>
-    `<span><i style="background:${MT_COLORES[idxSerie[s]%MT_COLORES.length]}"></i>${esc(s)}</span>`).join('');
-
-  const nota=estimados?`* ${estimados} sin fecha de vencimiento, ubicados en su mes de registro.`:'';
-
-  return `<div class="mt-card">
-    <div class="mt-card-t" style="text-align:center">${titulo}</div>
-    <svg viewBox="0 0 ${W} ${H}" role="img" style="width:100%;height:auto;display:block"
-      aria-label="${titulo}">
-      <line x1="${PL}" y1="${PT+alto}" x2="${W-PR}" y2="${PT+alto}" stroke="var(--border)" stroke-width="1"/>
-      ${cols}
-    </svg>
-    <div class="mt-leg" style="justify-content:center">${leyenda}</div>
-    ${nota?`<div style="font-size:10px;color:var(--text-dim);text-align:center;margin-top:6px">${nota}</div>`:''}
-  </div>`;
-}
-
-// ── Horas registradas en bugs por mes (Registro de actividad) ────
-// Una columna por mes, apilada por bug o por recurso. Las horas salen de
-// los worklogs del bug y de sus subtareas; el mes es el del trabajo.
-function mtHorasCards(){
-  if(!metHorasBugs.length) return '';
-  return `<div class="mt-duo">
-    ${mtHorasPorMes('bug','HORAS REGISTRADAS POR BUG')}
-    ${mtHorasPorMes('recurso','HORAS EN BUGS POR RECURSO')}
-  </div>`;
-}
-
-function mtFmtH(h){ return (Math.round(h*10)/10).toString().replace('.',','); }
-
-function mtHorasPorMes(dim,titulo){
-  const datos=metHorasBugs;
-  const meses=[...new Set(datos.map(d=>d.mes))].sort().slice(-6);
-  if(!meses.length) return '';
-  const enRango=datos.filter(d=>meses.includes(d.mes));
-
-  // Series: top 6 por horas, el resto agrupado
-  const tot={}, nombre={};
-  enRango.forEach(d=>{ const k=d[dim]; tot[k]=(tot[k]||0)+d.horas; if(dim==='bug') nombre[k]=d.resumen; });
-  const orden=Object.keys(tot).sort((a,b)=>tot[b]-tot[a]);
-  const top=new Set(orden.slice(0,6));
-  const resto = dim==='bug' ? 'Otros bugs' : 'Otros';
-  const series=orden.filter(k=>top.has(k));
-  if(orden.length>series.length) series.push(resto);
-
-  // cubo[mes][serie] = horas
-  const cubo={}; meses.forEach(m=>{ cubo[m]={}; });
-  enRango.forEach(d=>{
-    const s=top.has(d[dim])?d[dim]:resto;
-    cubo[d.mes][s]=(cubo[d.mes][s]||0)+d.horas;
+  const GAP=40, TOP=26, BOT=H-22;
+  ['der','izq'].forEach(lado=>{
+    const arr=segs.filter(x=>(Math.cos(x.am)>=0)===(lado==='der'))
+      .map(x=>{ x.y=cy+(R+14)*Math.sin(x.am); x.lado=lado; return x; })
+      .sort((a,b)=>a.y-b.y);
+    for(let i=1;i<arr.length;i++) if(arr[i].y-arr[i-1].y<GAP) arr[i].y=arr[i-1].y+GAP;
+    if(arr.length){
+      const ex=arr[arr.length-1].y-BOT; if(ex>0) arr.forEach(a=>a.y-=ex);
+      if(arr[0].y<TOP){ const d=TOP-arr[0].y; arr.forEach(a=>a.y+=d); }
+    }
   });
-  const totMes=m=>series.reduce((a,s)=>a+(cubo[m][s]||0),0);
 
-  const W=420,H=240,PL=10,PR=10,PT=22,PB=30;
-  const alto=H-PT-PB;
-  const maxY=Math.max(1,...meses.map(totMes));
-  const anchoMes=(W-PL-PR)/meses.length;
-  const bw=Math.min(44,anchoMes-18);
-  const idxSerie={}; series.forEach((s,i)=>{ idxSerie[s]=i; });
-  const etiqueta=s=> dim==='bug'&&nombre[s] ? `${s} · ${nombre[s]}` : s;
-
-  const cols=meses.map((m,i)=>{
-    const cx=PL+i*anchoMes+anchoMes/2, bx=cx-bw/2;
-    const total=totMes(m);
-    let y=PT+alto;
-    const segs=series.map(s=>{
-      const h0=cubo[m][s]||0; if(!h0) return '';
-      const h=h0/maxY*alto; y-=h;
-      const col=MT_COLORES[idxSerie[s]%MT_COLORES.length];
-      const lbl = h>=13 ? `<text x="${cx.toFixed(1)}" y="${(y+h/2+3.5).toFixed(1)}"
-        text-anchor="middle" font-size="10" fill="#0d1117" font-weight="600">${mtFmtH(h0)}</text>` : '';
-      return `<rect x="${bx.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}"
-        height="${h.toFixed(1)}" fill="${col}"><title>${esc(etiqueta(s))} · ${mtMesCorto(m)}: ${mtFmtH(h0)} h</title></rect>${lbl}`;
-    }).join('');
-    const sup=`<text x="${cx.toFixed(1)}" y="${(total?y-5:PT+alto-4).toFixed(1)}" text-anchor="middle"
-      font-size="10" font-weight="600" fill="var(--text-muted)">${mtFmtH(total)} h</text>`;
-    return `${segs}${sup}<text x="${cx.toFixed(1)}" y="${H-PB+16}" text-anchor="middle"
-      font-size="10" fill="var(--text-dim)">${mtMesCorto(m)}</text>`;
+  const etiquetas=segs.map(x=>{
+    const der=x.lado==='der', sg=der?1:-1;
+    const xa=cx+(R+3)*Math.cos(x.am), ya=cy+(R+3)*Math.sin(x.am);
+    const xb=cx+(R+18)*Math.cos(x.am), yb=cy+(R+18)*Math.sin(x.am);
+    const xc=cx+sg*(R+COD), xt=xc+sg*8, an=der?'start':'end';
+    return `<g><title>${esc(x.tip)}: ${fmtV(x.v)}</title>
+      <path d="M${xa.toFixed(1)} ${ya.toFixed(1)} L${xb.toFixed(1)} ${yb.toFixed(1)} L${xc.toFixed(1)} ${x.y.toFixed(1)}"
+        fill="none" stroke="${x.c}" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" opacity=".75"/>
+      <circle cx="${xc.toFixed(1)}" cy="${x.y.toFixed(1)}" r="3" fill="${x.c}"/>
+      <text x="${xt.toFixed(1)}" y="${(x.y-2).toFixed(1)}" text-anchor="${an}" font-size="14" font-weight="700" fill="${x.c}">${fmtV(x.v)}<tspan font-size="12.5" font-weight="500" fill="var(--text-primary)"> ${esc(x.lbl.length>18?x.lbl.slice(0,17)+'…':x.lbl)}</tspan></text>
+      <text x="${xt.toFixed(1)}" y="${(x.y+13).toFixed(1)}" text-anchor="${an}" font-size="10.5" fill="var(--text-muted)">${esc(x.sub||'')}</text>
+    </g>`;
   }).join('');
 
-  const leyenda=series.map(s=>
-    `<span title="${esc(etiqueta(s))}"><i style="background:${MT_COLORES[idxSerie[s]%MT_COLORES.length]}"></i>${esc(s)}</span>`).join('');
-  const totalH=meses.reduce((a,m)=>a+totMes(m),0);
-
-  return `<div class="mt-card">
-    <div class="mt-card-t" style="text-align:center">${titulo}</div>
-    <svg viewBox="0 0 ${W} ${H}" role="img" style="width:100%;height:auto;display:block" aria-label="${titulo}">
-      <line x1="${PL}" y1="${PT+alto}" x2="${W-PR}" y2="${PT+alto}" stroke="var(--border)" stroke-width="1"/>
-      ${cols}
-    </svg>
-    <div class="mt-leg" style="justify-content:center">${leyenda}</div>
-    <div style="font-size:10px;color:var(--text-dim);text-align:center;margin-top:6px">${mtFmtH(totalH)} h en los últimos ${meses.length} meses · fuente: Registro de actividad del bug y sus subtareas</div>
-  </div>`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block" role="img" aria-label="${esc(centro)}">
+    <circle cx="${cx}" cy="${cy}" r="${R+5}" fill="none" stroke="var(--border)" stroke-width="1" opacity=".5"/>
+    ${paths}${etiquetas}
+    <text x="${cx}" y="${cy+4}" text-anchor="middle" font-size="26" font-weight="700" fill="var(--text-primary)">${fmtV(total)}</text>
+    <text x="${cx}" y="${cy+21}" text-anchor="middle" font-size="9.5" fill="var(--text-muted)" letter-spacing="1.5">${esc(centro)}</text>
+  </svg>`;
 }
-
 
 // ═══════════════════════════════════════════════════════════
 //  INFORME EJECUTIVO — estado de proyectos para dirección TI
