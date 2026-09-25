@@ -3300,11 +3300,8 @@ let metricasLoaded = false;
 let metRows = [];
 let metBugsMes = [];   // universo completo de bugs para el gráfico mensual
 
-// Desvío en días efectivos: no cuenta domingos ni los feriados DEL PAÍS
-// del responsable. Sin responsable identificado solo se descuentan domingos.
-// Días entre dos fechas, saltando domingos. Los feriados SÍ se cuentan:
-// por decisión de PMO la métrica no los descuenta, así que un tramo con
-// feriado mide lo mismo que cualquier otra semana.
+// Desvío en días efectivos: no se cuentan los domingos.
+// Los feriados sí cuentan como días.
 function mtDias(entrega, vence){
   if(!entrega||!vence) return 0;
   const ini=new Date(vence+'T00:00:00'), fin=new Date(entrega+'T00:00:00');
@@ -3313,7 +3310,7 @@ function mtDias(entrega, vence){
   let d=new Date(signo>0?ini:fin); const hasta=new Date(signo>0?fin:ini); let n=0;
   d.setDate(d.getDate()+1);              // no se cuenta el propio día de vencimiento
   while(d<=hasta){
-    if(d.getDay()!==0) n++;
+    if(d.getDay()!==0) n++;              // 0 = domingo
     d.setDate(d.getDate()+1);
   }
   return signo*n;
