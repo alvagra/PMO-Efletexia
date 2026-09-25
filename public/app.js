@@ -3428,8 +3428,8 @@ function renderMetricasCuerpo(){
   // KPIs globales sobre el total filtrado
   const soloHistorias=(document.getElementById('mt-tipo')?.value||'')==='Historia';
   cuerpo.innerHTML = mtKpis(rows)
-    + (soloHistorias?'':mtDonasFila())
     + mtSeccion('HISTORIAS', rows.filter(r=>r.tipo==='Historia'))
+    + (soloHistorias?'':`<div style="margin-top:22px">${mtDonasFila()}</div>`)
     + mtSeccion('BUGS',      rows.filter(r=>r.tipo==='Bug'));
 }
 
@@ -3523,7 +3523,7 @@ function mtMesCorto(m){
   return MT_MESES[+ms-1]+(+a.slice(2)!==new Date().getFullYear()%100?` ${a.slice(2)}`:'');
 }
 
-// ── Fila de cuatro donas: bugs y horas en bugs ────────────────
+// ── Fila de tres donas: bugs y horas en bugs ────────────────
 // Mismo diseño que el donut de la pestaña Bugs. Un selector de periodo
 // aplica a las cuatro (por defecto, los últimos 6 meses con actividad).
 let metPeriodo='';   // '' = últimos 6 meses · 'AAAA-MM' = un mes
@@ -3570,23 +3570,16 @@ function mtDonasFila(){
   };
   const subConteo=x=>`${x.ab} abierto${x.ab===1?'':'s'} · ${x.ce} cerrado${x.ce===1?'':'s'}`;
 
-  // Horas por bug y por recurso
-  const hBug={}, resumen={};
-  horas.forEach(d=>{ hBug[d.bug]=hBug[d.bug]||{v:0,rec:new Set()}; hBug[d.bug].v+=d.horas;
-    hBug[d.bug].rec.add(d.recurso); resumen[d.bug]=d.resumen; });
+  // Horas por recurso
   const hRec={};
   horas.forEach(d=>{ hRec[d.recurso]=hRec[d.recurso]||{v:0,bugs:new Set()}; hRec[d.recurso].v+=d.horas;
     hRec[d.recurso].bugs.add(d.bug); });
-  const corto=t=>{ t=t||''; return t.length>22?t.slice(0,21)+'…':t; };
 
   const tarjetas=[
     mtDonaCard('BUGS POR APLICACIÓN',
       mtTop(porConteo('aplicacion'),'Otras',subConteo), bugs.length, 'BUGS', v=>v),
     mtDonaCard('BUGS POR DESARROLLADOR',
       mtTop(porConteo('responsable'),'Otros',subConteo), bugs.length, 'BUGS', v=>v),
-    mtDonaCard('HORAS REGISTRADAS POR BUG',
-      mtTop(hBug,'Otros bugs',(x,k)=>x.rec?corto(resumen[k]):'varios bugs', k=>`${k} · ${resumen[k]||''}`),
-      Object.values(hBug).reduce((a,x)=>a+x.v,0), 'HORAS', v=>fmtH(v)+'h'),
     mtDonaCard('HORAS EN BUGS POR RECURSO',
       mtTop(hRec,'Otros',x=>`${x.bugs.size} bug${x.bugs.size===1?'':'s'}`),
       Object.values(hRec).reduce((a,x)=>a+x.v,0), 'HORAS', v=>fmtH(v)+'h')
@@ -3594,8 +3587,8 @@ function mtDonasFila(){
 
   return `<div id="mt-donas" style="margin-bottom:16px">
     <style>
-      .mt-cuatro{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
-      @media (max-width:1280px){.mt-cuatro{grid-template-columns:repeat(2,minmax(0,1fr))}}
+      .mt-cuatro{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+      @media (max-width:1100px){.mt-cuatro{grid-template-columns:repeat(2,minmax(0,1fr))}}
       @media (max-width:700px){.mt-cuatro{grid-template-columns:1fr}}
     </style>
     <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:8px">
