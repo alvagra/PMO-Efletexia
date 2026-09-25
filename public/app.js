@@ -3366,13 +3366,15 @@ async function loadMetricas(){
         estado:f.status?.name||'—',
         responsable:dn?(nom?.nombre||dn):'Sin asignar', pais,
         entregable:f._entregable,   // null = el campo no existe en esta instancia
-        vence:f.duedate, entrega:f.customfield_11381, inicio:f.customfield_10015||null,
-        desvio:mtDias(f.customfield_11381,f.duedate),
-        // Plan = vencimiento − inicio. El % de desviación es real/plan.
-        plan:mtDias(f.duedate,f.customfield_10015),
-        get pct(){ return this.plan>0 ? Math.round(this.desvio/this.plan*1000)/10 : null; }
+        // Vence = Fecha fin desarrollo · Entrega = Fecha de entrega desarrollo
+        vence:f._vence||null, entrega:f.customfield_11381||null, inicio:f.customfield_10015||null,
+        // Desvío = Entrega − Vence, en días (sin domingos). null = falta la fecha fin
+        desvio:(f._vence&&f.customfield_11381)?mtDias(f.customfield_11381,f._vence):null,
+        // Plan = fecha fin desarrollo − inicio. El % de desviación es real/plan.
+        plan:f._vence?mtDias(f._vence,f.customfield_10015):0,
+        get pct(){ return (this.desvio!==null && this.plan>0) ? Math.round(this.desvio/this.plan*1000)/10 : null; }
       };
-    }).sort((a,b)=>b.desvio-a.desvio);
+    }).sort((a,b)=>(b.desvio??-Infinity)-(a.desvio??-Infinity));
     metricasLoaded=true;
     renderMetricas();
   }catch(e){
@@ -3421,13 +3423,17 @@ function renderMetricasCuerpo(){
 function mtPct(v){ return (Math.round(v*10)/10).toString().replace('.',',')+'%'; }
 
 function mtResumen(rows){
+  // Solo se miden las filas con ambas fechas; las demás se cuentan aparte
+  const sinFin=rows.filter(r=>r.desvio===null).length;
+  rows=rows.filter(r=>r.desvio!==null);
+  if(!rows.length) return {mediana:0, prom:0, enFecha:0, peor:0, n:0, medPct:null, nPct:0, sinFin};
   const ds=rows.map(r=>r.desvio).sort((a,b)=>a-b);
   const mediana=ds.length%2?ds[(ds.length-1)/2]:Math.round((ds[ds.length/2-1]+ds[ds.length/2])/2);
   const prom=Math.round(ds.reduce((s,x)=>s+x,0)/ds.length*10)/10;
   const ps=rows.map(r=>r.pct).filter(p=>p!==null).sort((a,b)=>a-b);
   const medPct = ps.length ? (ps.length%2?ps[(ps.length-1)/2]:Math.round((ps[ps.length/2-1]+ps[ps.length/2])/2*10)/10) : null;
   return {mediana, prom, enFecha:rows.filter(r=>r.desvio<=0).length, peor:ds[ds.length-1],
-          n:rows.length, medPct, nPct:ps.length};
+          n:rows.length, medPct, nPct:ps.length, sinFin};
 }
 
 function mtKpis(rows){
@@ -3443,7 +3449,7 @@ function mtKpis(rows){
     ${kpi('DESVIACIÓN', r.medPct===null?'—':(r.medPct>0?'+':'')+mtPct(r.medPct),
         r.medPct===null?'var(--text-dim)':mtColor(r.medPct),
         r.medPct===null?'sin fecha de inicio':`mediana de ${r.nPct}`)}
-    ${kpi('MEDIDOS',r.n,'var(--text-primary)','con fecha de entrega')}
+    ${kpi('MEDIDOS',r.n,'var(--text-primary)', r.sinFin?`${r.sinFin} sin fecha fin`:'con ambas fechas')}
   </div>`;
 }
 
@@ -3458,15 +3464,17 @@ function mtSeccion(titulo, rows){
     <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(x.proyecto)}">${esc(x.proyecto)}</td>
     <td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(x.resumen)}">${esc(x.resumen)}</td>
     <td style="white-space:nowrap">${esc(x.responsable)}</td>
-    <td style="white-space:nowrap">${fmtD(x.vence)}</td>
+    <td style="white-space:nowrap">${x.vence?fmtD(x.vence):'<span style="color:var(--text-muted)">sin fecha fin</span>'}</td>
     <td style="white-space:nowrap">${fmtD(x.entrega)}</td>
-    <td style="text-align:right;font-weight:700;white-space:nowrap;color:${mtColor(x.desvio)}">${x.desvio>0?'+':''}${x.desvio} d</td>
+    ${x.desvio===null
+      ? '<td style="text-align:right;white-space:nowrap;color:var(--text-muted)">—</td>'
+      : `<td style="text-align:right;font-weight:700;white-space:nowrap;color:${mtColor(x.desvio)}">${x.desvio>0?'+':''}${x.desvio} d</td>`}
   </tr>`).join('');
 
   return `
   <div style="display:flex;align-items:center;gap:10px;margin:22px 0 12px">
     <span style="font-size:13px;font-weight:700;letter-spacing:.05em;color:${col}">${titulo}</span>
-    <span style="font-size:11px;color:var(--text-muted)">${r.n} ${esBug?'bug':'historia'}${r.n===1?'':'s'} · mediana ${r.mediana>0?'+':''}${r.mediana} d · ${r.enFecha} en fecha</span>
+    <span style="font-size:11px;color:var(--text-muted)">${rows.length} ${esBug?'bug':'historia'}${rows.length===1?'':'s'} · mediana ${r.mediana>0?'+':''}${r.mediana} d · ${r.enFecha} en fecha${r.sinFin?` · ${r.sinFin} sin fecha fin`:''}</span>
   </div>
   <div class="mt-card">
     <div class="mt-card-t">DETALLE DE ${titulo}</div>
@@ -3481,7 +3489,7 @@ function exportMetricasCSV(){
   const rows=metFiltradas();
   const q=v=>`"${String(v??'').replace(/"/g,'""')}"`;
   const csv=[['Tipo','Codigo','Proyecto','Detalle','Responsable','Pais','Vence','Entrega','Desvio (dias efectivos)'].join(',')]
-    .concat(rows.map(r=>[r.tipo,r.codigo,r.proyecto,r.resumen,r.responsable,r.pais||'',r.vence,r.entrega,r.desvio].map(q).join(',')))
+    .concat(rows.map(r=>[r.tipo,r.codigo,r.proyecto,r.resumen,r.responsable,r.pais||'',r.vence||'',r.entrega||'',r.desvio??''].map(q).join(',')))
     .join('\n');
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'}));
