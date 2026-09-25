@@ -370,7 +370,8 @@ module.exports = async function handler(req, res) {
       const CF_FIN = await idCampoPorNombre(auth, JIRA_CLOUD, 'Fecha fin desarrollo');
 
       const CAMPOS = ['summary', 'status', 'assignee', 'parent', 'duedate',
-                      'customfield_10015', 'issuetype'];
+                      'customfield_10015', 'issuetype',
+                      'customfield_11451'];   // Resp. Desarrollo (selección múltiple)
       [CF_ENT, CF_INI, CF_FIN].forEach(c => { if (c && !CAMPOS.includes(c)) CAMPOS.push(c); });
 
       const JQL = 'project = PTS AND issuetype not in subTaskIssueTypes() ORDER BY duedate ASC';
@@ -458,6 +459,13 @@ module.exports = async function handler(req, res) {
         const fase = faseDeEstado(it.fields.status?.name);
         it.fields._fase = fase;
         it.fields._responsableFase = null;
+        // En estado Desarrollo el responsable es "Resp. Desarrollo" de la historia.
+        // Si el campo está vacío se sigue derivando de las subtareas.
+        if (fase === 'desarrollo') {
+          const rd = (Array.isArray(it.fields.customfield_11451) ? it.fields.customfield_11451 : [])
+            .map(o => (o && (o.value || o.name || o.displayName)) || '').filter(Boolean);
+          if (rd.length) { it.fields._respDesarrollo = rd; return; }
+        }
         // Sin fase en curso (Pendiente, Backlog, Blocked) el responsable se toma
         // de las subtareas de desarrollo: el trabajo ya está repartido aunque
         // la historia no haya arrancado.
