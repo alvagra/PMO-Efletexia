@@ -3299,6 +3299,7 @@ document.addEventListener('click', e => {
 let metricasLoaded = false;
 let metRows = [];
 let metBugsMes = [];   // universo completo de bugs para el gráfico mensual
+let metHorasBugs = []; // horas del Registro de actividad de bugs: {bug,resumen,recurso,mes,horas}
 
 // Desvío en días efectivos: no se cuentan los domingos.
 // Los feriados sí cuentan como días.
@@ -3322,9 +3323,10 @@ async function loadMetricas(){
   const cont=document.getElementById('mt-contenido');
   cont.innerHTML='<div class="mt-empty">Cargando métricas…</div>';
   try{
-    const [r,rb]=await Promise.all([
+    const [r,rb,rh]=await Promise.all([
       fetch('/api/jira',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'metricas'})}),
-      fetch('/api/jira',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'bugs'})})
+      fetch('/api/jira',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'bugs'})}),
+      fetch('/api/jira',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'bugHoras'})})
     ]);
     const j=await r.json();
     if(!r.ok) throw new Error(j.error||'Error de API');
@@ -3351,6 +3353,15 @@ async function loadMetricas(){
         };
       }).filter(x=>/^\d{4}-\d{2}$/.test(x.mes));
     }catch(e){ metBugsMes=[]; }
+
+    // Horas registradas en bugs (worklogs), por bug, recurso y mes
+    try{
+      const jh=await rh.json();
+      metHorasBugs=(jh.registros||[]).map(x=>({
+        bug:x.bug, resumen:x.resumen||x.bug, mes:x.mes, horas:+x.horas||0,
+        recurso:resolveNombreDesdeJira(x.autor)?.nombre||x.autor||'Sin autor'
+      })).filter(x=>x.horas>0 && /^\d{4}-\d{2}$/.test(x.mes));
+    }catch(e){ metHorasBugs=[]; }
 
     metRows=(j.items||[]).map(it=>{
       const f=it.fields||{}, ep=f._epica||null;
@@ -3392,7 +3403,7 @@ function metFiltradas(){
 function renderMetricas(){
   const cont=document.getElementById('mt-contenido');
   if(!metRows.length){
-    cont.innerHTML=mtBugsCards()+
+    cont.innerHTML=mtBugsCards()+mtHorasCards()+
       '<div class="mt-empty">Ninguna historia o bug tiene cargada la <b>Fecha de entrega desarrollo</b> en Jira.<br>'+
       '<span style="font-size:11px">La métrica de desvío se activa sola en cuanto el campo empiece a llenarse.</span></div>';
     return;
@@ -3417,7 +3428,7 @@ function renderMetricasCuerpo(){
   // KPIs globales sobre el total filtrado
   const soloHistorias=(document.getElementById('mt-tipo')?.value||'')==='Historia';
   cuerpo.innerHTML = mtKpis(rows)
-    + (soloHistorias?'':mtBugsCards())
+    + (soloHistorias?'':mtBugsCards()+mtHorasCards())
     + mtSeccion('HISTORIAS', rows.filter(r=>r.tipo==='Historia'))
     + mtSeccion('BUGS',      rows.filter(r=>r.tipo==='Bug'));
 }
@@ -3598,6 +3609,84 @@ function mtBugsPorMes(dim,titulo){
     </svg>
     <div class="mt-leg" style="justify-content:center">${leyenda}</div>
     ${nota?`<div style="font-size:10px;color:var(--text-dim);text-align:center;margin-top:6px">${nota}</div>`:''}
+  </div>`;
+}
+
+// ── Horas registradas en bugs por mes (Registro de actividad) ────
+// Una columna por mes, apilada por bug o por recurso. Las horas salen de
+// los worklogs del bug y de sus subtareas; el mes es el del trabajo.
+function mtHorasCards(){
+  if(!metHorasBugs.length) return '';
+  return `<div class="mt-duo">
+    ${mtHorasPorMes('bug','HORAS REGISTRADAS POR BUG')}
+    ${mtHorasPorMes('recurso','HORAS EN BUGS POR RECURSO')}
+  </div>`;
+}
+
+function mtFmtH(h){ return (Math.round(h*10)/10).toString().replace('.',','); }
+
+function mtHorasPorMes(dim,titulo){
+  const datos=metHorasBugs;
+  const meses=[...new Set(datos.map(d=>d.mes))].sort().slice(-6);
+  if(!meses.length) return '';
+  const enRango=datos.filter(d=>meses.includes(d.mes));
+
+  // Series: top 6 por horas, el resto agrupado
+  const tot={}, nombre={};
+  enRango.forEach(d=>{ const k=d[dim]; tot[k]=(tot[k]||0)+d.horas; if(dim==='bug') nombre[k]=d.resumen; });
+  const orden=Object.keys(tot).sort((a,b)=>tot[b]-tot[a]);
+  const top=new Set(orden.slice(0,6));
+  const resto = dim==='bug' ? 'Otros bugs' : 'Otros';
+  const series=orden.filter(k=>top.has(k));
+  if(orden.length>series.length) series.push(resto);
+
+  // cubo[mes][serie] = horas
+  const cubo={}; meses.forEach(m=>{ cubo[m]={}; });
+  enRango.forEach(d=>{
+    const s=top.has(d[dim])?d[dim]:resto;
+    cubo[d.mes][s]=(cubo[d.mes][s]||0)+d.horas;
+  });
+  const totMes=m=>series.reduce((a,s)=>a+(cubo[m][s]||0),0);
+
+  const W=420,H=240,PL=10,PR=10,PT=22,PB=30;
+  const alto=H-PT-PB;
+  const maxY=Math.max(1,...meses.map(totMes));
+  const anchoMes=(W-PL-PR)/meses.length;
+  const bw=Math.min(44,anchoMes-18);
+  const idxSerie={}; series.forEach((s,i)=>{ idxSerie[s]=i; });
+  const etiqueta=s=> dim==='bug'&&nombre[s] ? `${s} · ${nombre[s]}` : s;
+
+  const cols=meses.map((m,i)=>{
+    const cx=PL+i*anchoMes+anchoMes/2, bx=cx-bw/2;
+    const total=totMes(m);
+    let y=PT+alto;
+    const segs=series.map(s=>{
+      const h0=cubo[m][s]||0; if(!h0) return '';
+      const h=h0/maxY*alto; y-=h;
+      const col=MT_COLORES[idxSerie[s]%MT_COLORES.length];
+      const lbl = h>=13 ? `<text x="${cx.toFixed(1)}" y="${(y+h/2+3.5).toFixed(1)}"
+        text-anchor="middle" font-size="10" fill="#0d1117" font-weight="600">${mtFmtH(h0)}</text>` : '';
+      return `<rect x="${bx.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}"
+        height="${h.toFixed(1)}" fill="${col}"><title>${esc(etiqueta(s))} · ${mtMesCorto(m)}: ${mtFmtH(h0)} h</title></rect>${lbl}`;
+    }).join('');
+    const sup=`<text x="${cx.toFixed(1)}" y="${(total?y-5:PT+alto-4).toFixed(1)}" text-anchor="middle"
+      font-size="10" font-weight="600" fill="var(--text-muted)">${mtFmtH(total)} h</text>`;
+    return `${segs}${sup}<text x="${cx.toFixed(1)}" y="${H-PB+16}" text-anchor="middle"
+      font-size="10" fill="var(--text-dim)">${mtMesCorto(m)}</text>`;
+  }).join('');
+
+  const leyenda=series.map(s=>
+    `<span title="${esc(etiqueta(s))}"><i style="background:${MT_COLORES[idxSerie[s]%MT_COLORES.length]}"></i>${esc(s)}</span>`).join('');
+  const totalH=meses.reduce((a,m)=>a+totMes(m),0);
+
+  return `<div class="mt-card">
+    <div class="mt-card-t" style="text-align:center">${titulo}</div>
+    <svg viewBox="0 0 ${W} ${H}" role="img" style="width:100%;height:auto;display:block" aria-label="${titulo}">
+      <line x1="${PL}" y1="${PT+alto}" x2="${W-PR}" y2="${PT+alto}" stroke="var(--border)" stroke-width="1"/>
+      ${cols}
+    </svg>
+    <div class="mt-leg" style="justify-content:center">${leyenda}</div>
+    <div style="font-size:10px;color:var(--text-dim);text-align:center;margin-top:6px">${mtFmtH(totalH)} h en los últimos ${meses.length} meses · fuente: Registro de actividad del bug y sus subtareas</div>
   </div>`;
 }
 
