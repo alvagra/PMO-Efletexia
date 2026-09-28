@@ -470,8 +470,11 @@ module.exports = async function handler(req, res) {
         // de las subtareas de desarrollo: el trabajo ya está repartido aunque
         // la historia no haya arrancado.
         const faseResp = fase || 'desarrollo';
+        // Las subtareas cerradas no se consideran: ni su responsable ni sus fechas
+        const cerrada = su => nz(su.fields.status?.name) === 'cerrado'
+          || su.fields.status?.statusCategory?.key === 'done';
         const candidatas = (subsPorHistoria[it.key] || [])
-          .filter(su => faseDeSubtarea(su.fields.summary) === faseResp);
+          .filter(su => !cerrada(su) && faseDeSubtarea(su.fields.summary) === faseResp);
         // Responsable con más subtareas en esa fase
         const conteo = {};
         candidatas.forEach(su => {
