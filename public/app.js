@@ -3299,6 +3299,9 @@ document.addEventListener('click', e => {
 let metricasLoaded = false;
 let metRows = [];
 let metBugsMes = [];   // universo completo de bugs para el gráfico mensual
+// Épicas cuyos bugs se ubican en un mes fijo en Métricas (decisión PMO).
+// PTS-128: bugs de la migración Laravel T1, cargados en setiembre pero de junio.
+const MT_MES_POR_EPICA = { 'PTS-128': '2026-06' };
 // Bugs que no se consideran en los gráficos de Métricas (decisión PMO)
 const MT_BUGS_EXCLUIDOS = ['PTS-1398','PTS-1399'];
 let metHorasBugs = []; // horas del Registro de actividad de bugs: {bug,resumen,recurso,mes,horas}
@@ -3343,6 +3346,8 @@ async function loadMetricas(){
         const created=(f.created||'').slice(0,10);
         const due=f.duedate||null;
         const usaDue=!!(due && created && due>=created);
+        const epKey=f.parent?.key||f._epica?.key||null;
+        const mesFijo=epKey?MT_MES_POR_EPICA[epKey]:null;
         return {
           key:b.key,
           resumen:f.summary||b.key,
@@ -3351,7 +3356,7 @@ async function loadMetricas(){
           responsable:(()=>{ const dn=f.assignee?.displayName; if(!dn) return 'Sin asignar';
             return resolveNombreDesdeJira(dn)?.nombre||dn; })(),
           cerrado:bgEstadoCls(f.status?.name).g==='Cerrado',
-          mes:(usaDue?due:created).slice(0,7),
+          mes:mesFijo||(usaDue?due:created).slice(0,7),
           estimado:!usaDue
         };
       }).filter(x=>/^\d{4}-\d{2}$/.test(x.mes) && !MT_BUGS_EXCLUIDOS.includes(x.key));
