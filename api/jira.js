@@ -459,9 +459,11 @@ module.exports = async function handler(req, res) {
         const fase = faseDeEstado(it.fields.status?.name);
         it.fields._fase = fase;
         it.fields._responsableFase = null;
-        // En estado Desarrollo el responsable es "Resp. Desarrollo" de la historia.
-        // Si el campo está vacío se sigue derivando de las subtareas.
-        if (fase === 'desarrollo') {
+        // Etapas del equipo de desarrollo: Desarrollo y las que no tienen fase en
+        // curso (Pendiente, Backlog, Blocked). Ahí el responsable es "Resp.
+        // Desarrollo" de la historia; si está vacío se deriva de las subtareas.
+        // Análisis, QA, UAT y Producción mantienen el responsable de su fase.
+        if (fase === 'desarrollo' || fase === null) {
           const rd = (Array.isArray(it.fields.customfield_11451) ? it.fields.customfield_11451 : [])
             .map(o => (o && (o.value || o.name || o.displayName)) || '').filter(Boolean);
           if (rd.length) { it.fields._respDesarrollo = rd; return; }
