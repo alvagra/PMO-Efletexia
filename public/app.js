@@ -3302,6 +3302,10 @@ let metBugsMes = [];   // universo completo de bugs para el gráfico mensual
 // Épicas cuyos bugs se ubican en un mes fijo en Métricas (decisión PMO).
 // PTS-128: bugs de la migración Laravel T1, cargados en setiembre pero de junio.
 const MT_MES_POR_EPICA = { 'PTS-128': '2026-06' };
+// Bugs individuales ubicados en un mes fijo en Métricas (decisión PMO).
+// PTS-1798..PTS-1817: bugs Viax (PTS-132) cargados en setiembre, corresponden a junio 2026.
+const MT_MES_POR_BUG = {};
+for (let n = 1798; n <= 1817; n++) MT_MES_POR_BUG['PTS-' + n] = '2026-06';
 // Bugs que no se consideran en los gráficos de Métricas (decisión PMO)
 const MT_BUGS_EXCLUIDOS = ['PTS-1398','PTS-1399'];
 let metHorasBugs = []; // horas del Registro de actividad de bugs: {bug,resumen,recurso,mes,horas}
@@ -3347,7 +3351,7 @@ async function loadMetricas(){
         const due=f.duedate||null;
         const usaDue=!!(due && created && due>=created);
         const epKey=f.parent?.key||f._epica?.key||null;
-        const mesFijo=epKey?MT_MES_POR_EPICA[epKey]:null;
+        const mesFijo=MT_MES_POR_BUG[b.key]||(epKey?MT_MES_POR_EPICA[epKey]:null);
         return {
           key:b.key,
           resumen:f.summary||b.key,
