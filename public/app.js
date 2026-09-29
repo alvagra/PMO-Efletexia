@@ -3799,6 +3799,7 @@ async function cargarBugsSilencioso(){
 let sgLoaded = false;
 let sgRows = [];
 let sgEstSel = new Set();   // estados seleccionados (multi)
+let sgRecSel = new Set();   // recursos seleccionados (multi)
 let sgAreaSel = new Set();  // áreas (equipos) seleccionadas
 let sgSortCol = null, sgSortDir = 1;   // columna y sentido del ordenamiento
 
@@ -3879,7 +3880,6 @@ async function loadSeguimiento(){
 
 function sgFiltradas(){
   const q=(document.getElementById('sg-q')?.value||'').toLowerCase();
-  const rec=document.getElementById('sg-rec')?.value||'';
   const est=sgEstSel;
   const desde=document.getElementById('sg-desde')?.value||'';
   const hasta=document.getElementById('sg-hasta')?.value||'';
@@ -3891,7 +3891,7 @@ function sgFiltradas(){
       if(hasta && ini > hasta) return false;
       if(desde && fin < desde) return false;
     }
-    if(rec && !r.responsables.includes(rec)) return false;
+    if(sgRecSel.size && !r.responsables.some(p=>sgRecSel.has(p))) return false;
     if(est.size && !est.has(r.estado)) return false;
     if(sgAreaSel.size && !r.areas.some(a=>sgAreaSel.has(a))) return false;
     if(q && !(r.subtarea.toLowerCase().includes(q) || r.key.toLowerCase().includes(q)
@@ -3912,8 +3912,11 @@ function renderSeguimientoUI(){
   cont.innerHTML=`
     <div class="sg-filtros">
       <input id="sg-q" type="text" placeholder="Buscar entregable o proyecto…" style="min-width:230px"/>
-      <select id="sg-rec"><option value="">Todos los recursos</option>${
-        recs.map(x=>`<option>${esc(x)}</option>`).join('')}</select>
+      <div class="rec-user-dd" id="sg-rec-dd">
+        <button type="button" class="rec-user-dd-btn" id="sg-rec-btn">Recursos <span id="sg-rec-count">${sgRecSel.size?`(${sgRecSel.size})`:''}</span> ▾</button>
+        <div class="rec-user-dd-panel" id="sg-rec-panel">${
+          recs.map(x=>`<label class="rec-user-dd-item"><input type="checkbox" class="sg-rec-cb" value="${esc(x)}"${sgRecSel.has(x)?' checked':''}>${esc(x)}</label>`).join('')}</div>
+      </div>
       <span id="sg-area-chips" class="rec-area-btns">${
         areas.map(x=>`<button type="button" class="rec-area-btn${sgAreaSel.has(x)?' active':''}" data-area="${esc(x)}">${esc(x)}</button>`).join('')}</span>
       <div class="rec-user-dd" id="sg-est-dd">
@@ -3935,7 +3938,16 @@ function renderSeguimientoUI(){
     </div>
     <div id="sg-cuerpo"></div>`;
   document.getElementById('sg-q').addEventListener('input',renderSeguimientoTabla);
-  ['sg-rec','sg-desde','sg-hasta'].forEach(id=>document.getElementById(id).addEventListener('change',renderSeguimientoTabla));
+  ['sg-desde','sg-hasta'].forEach(id=>document.getElementById(id).addEventListener('change',renderSeguimientoTabla));
+  // Recursos: selección múltiple con checkbox
+  const recBtn=document.getElementById('sg-rec-btn'), recPanel=document.getElementById('sg-rec-panel');
+  recBtn.addEventListener('click',ev=>{ ev.stopPropagation(); document.getElementById('sg-est-panel')?.classList.remove('open'); recPanel.classList.toggle('open'); });
+  document.addEventListener('click',ev=>{ if(!document.getElementById('sg-rec-dd')?.contains(ev.target)) recPanel.classList.remove('open'); });
+  recPanel.querySelectorAll('.sg-rec-cb').forEach(cb=>cb.addEventListener('change',()=>{
+    if(cb.checked) sgRecSel.add(cb.value); else sgRecSel.delete(cb.value);
+    document.getElementById('sg-rec-count').textContent = sgRecSel.size ? `(${sgRecSel.size})` : '';
+    renderSeguimientoTabla();
+  }));
   document.getElementById('sg-area-chips').addEventListener('click',ev=>{
     const b=ev.target.closest('.rec-area-btn'); if(!b) return;
     const v=b.dataset.area;
@@ -3944,7 +3956,7 @@ function renderSeguimientoUI(){
     renderSeguimientoTabla();
   });
   const estBtn=document.getElementById('sg-est-btn'), estPanel=document.getElementById('sg-est-panel');
-  estBtn.addEventListener('click',ev=>{ ev.stopPropagation(); estPanel.classList.toggle('open'); });
+  estBtn.addEventListener('click',ev=>{ ev.stopPropagation(); document.getElementById('sg-rec-panel')?.classList.remove('open'); estPanel.classList.toggle('open'); });
   document.addEventListener('click',ev=>{ if(!document.getElementById('sg-est-dd')?.contains(ev.target)) estPanel.classList.remove('open'); });
   estPanel.querySelectorAll('.sg-est-cb').forEach(cb=>cb.addEventListener('change',()=>{
     if(cb.checked) sgEstSel.add(cb.value); else sgEstSel.delete(cb.value);
@@ -3956,9 +3968,10 @@ function renderSeguimientoUI(){
     renderSeguimientoTabla();
   });
   document.getElementById('sg-limpiar').addEventListener('click',()=>{
-    ['sg-q','sg-rec','sg-desde','sg-hasta'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
-    sgEstSel.clear(); sgAreaSel.clear();
-    document.querySelectorAll('.sg-est-cb').forEach(cb=>cb.checked=false);
+    ['sg-q','sg-desde','sg-hasta'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
+    sgEstSel.clear(); sgAreaSel.clear(); sgRecSel.clear();
+    document.querySelectorAll('.sg-est-cb,.sg-rec-cb').forEach(cb=>cb.checked=false);
+    const rc=document.getElementById('sg-rec-count'); if(rc) rc.textContent='';
     document.querySelectorAll('#sg-area-chips .rec-area-btn').forEach(c=>c.classList.remove('active'));
     const cnt=document.getElementById('sg-est-count'); if(cnt) cnt.textContent='';
     renderSeguimientoTabla();
