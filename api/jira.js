@@ -311,7 +311,14 @@ module.exports = async function handler(req, res) {
       // Si no se resuelve por nombre se usa el id conocido de PTS
       const CF_FIN = (await idCampoPorNombre(auth, JIRA_CLOUD, 'Fecha fin desarrollo')) || 'customfield_11450';
       if (!MET_FIELDS.includes(CF_FIN)) MET_FIELDS.push(CF_FIN);
-      const MET_JQL = 'project = PTS AND cf[11381] IS NOT EMPTY ORDER BY cf[11381] DESC';
+      // Bugs: Entrega = "Fecha cierre bug" · Vence = "Fecha de vencimiento" (duedate)
+      const CF_CIERRE = await idCampoPorNombre(auth, JIRA_CLOUD, 'Fecha cierre bug');
+      if (CF_CIERRE && !MET_FIELDS.includes(CF_CIERRE)) MET_FIELDS.push(CF_CIERRE);
+      // Historias entran por "Fecha de entrega desarrollo"; bugs por "Fecha cierre bug"
+      const nCierre = CF_CIERRE ? CF_CIERRE.replace('customfield_', '') : null;
+      const MET_JQL = nCierre
+        ? `project = PTS AND ((issuetype != Error AND cf[11381] IS NOT EMPTY) OR (issuetype = Error AND cf[${nCierre}] IS NOT EMPTY)) ORDER BY created DESC`
+        : 'project = PTS AND cf[11381] IS NOT EMPTY ORDER BY cf[11381] DESC';
       let items = await fetchAllPages(auth, JIRA_CLOUD, MET_JQL, MET_FIELDS);
 
       // Épica de cada item, para mostrar código y nombre de proyecto
@@ -356,11 +363,15 @@ module.exports = async function handler(req, res) {
       }
       items.forEach(it => {
         it.fields._entregable = CF_ENT ? esEntregable(it.fields[CF_ENT]) : null;
-        // Vence de la métrica = "Fecha fin desarrollo" (no duedate)
-        it.fields._vence = it.fields[CF_FIN] || null;
+        const esBug = it.fields.issuetype?.name === 'Error';
+        // Historias: Vence = "Fecha fin desarrollo" · Entrega = "Fecha de entrega desarrollo"
+        // Bugs:      Vence = "Fecha de vencimiento" · Entrega = "Fecha cierre bug"
+        it.fields._vence   = (esBug ? it.fields.duedate : it.fields[CF_FIN]) || null;
+        it.fields._entrega = (esBug ? (CF_CIERRE ? it.fields[CF_CIERRE] : null)
+                                    : it.fields.customfield_11381) || null;
       });
       return res.status(200).json({ items, total: items.length, type: 'metricas',
-        campoEntregable: CF_ENT || null, campoFin: CF_FIN });
+        campoEntregable: CF_ENT || null, campoFin: CF_FIN, campoCierreBug: CF_CIERRE || null });
 
     } else if (type === 'seguimiento') {
       // Seguimiento por entregable: historias con el campo Entregable = Sí.
