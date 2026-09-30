@@ -3299,6 +3299,7 @@ document.addEventListener('click', e => {
 let metricasLoaded = false;
 let metRows = [];
 let metBugsMes = [];   // universo completo de bugs para el gráfico mensual
+let metHistRows = [];  // historias entregables medidas (para las donas de historias)
 // Épicas cuyos bugs se ubican en un mes fijo en Métricas (decisión PMO).
 // PTS-128: bugs de la migración Laravel T1, cargados en setiembre pero de junio.
 const MT_MES_POR_EPICA = { 'PTS-128': '2026-06' };
@@ -3443,8 +3444,10 @@ function renderMetricasCuerpo(){
 
   // KPIs globales sobre el total filtrado
   const soloHistorias=(document.getElementById('mt-tipo')?.value||'')==='Historia';
+  metHistRows=rows.filter(r=>r.tipo==='Historia');
   cuerpo.innerHTML = mtKpis(rows)
-    + mtSeccion('HISTORIAS', rows.filter(r=>r.tipo==='Historia'))
+    + mtSeccion('HISTORIAS', metHistRows)
+    + mtDonasHistorias()
     + (soloHistorias?'':`<div style="margin-top:22px">${mtDonasFila()}</div>`)
     + mtSeccion('BUGS',      rows.filter(r=>r.tipo==='Bug'));
 }
@@ -3618,20 +3621,86 @@ function mtDonasFila(){
   </div>`;
 }
 
+// ── Fila de tres donas: historias entregables ───────────────
+// Mismo diseño que las donas de bugs y el mismo selector de periodo.
+// El mes de cada entregable es el de su Vence (Fecha fin desarrollo).
+// Un entregable con varios responsables cuenta para cada uno.
+function mtDonasHistorias(){
+  const todas=(metHistRows||[]).filter(r=>r.desvio!==null && r.vence)
+    .map(r=>({...r, mes:r.vence.slice(0,7)}));
+  if(!todas.length) return '';
+  const rows=mtEnPeriodo(todas);
+  const fmtD1=v=>(Math.round(v*10)/10).toString().replace('.',',');
+  const sgn=v=>(v>0?'+':'')+fmtD1(v)+' d';
+  const devs=r=>(r.responsable||'Sin asignar').split(',').map(x=>x.trim()).filter(Boolean);
+
+  // 1) Cumplimiento: en fecha / 1–3 d / >3 d (mismos tramos que la columna Desvío)
+  const tramos=[
+    {lbl:'En fecha', c:'#3fb950', f:d=>d<=0},
+    {lbl:'1–3 días', c:'#F5B800', f:d=>d>0&&d<=3},
+    {lbl:'Más de 3 días', c:'#ef4444', f:d=>d>3}];
+  const cumpl=tramos.map(t=>{
+    const g=rows.filter(r=>t.f(r.desvio));
+    const prom=g.length?g.reduce((a,r)=>a+r.desvio,0)/g.length:0;
+    return {lbl:t.lbl, v:g.length, c:t.c, tip:t.lbl,
+      sub:g.length?`prom. ${sgn(prom)} · ${g.length===1?'1 entregable':g.length+' entregables'}`:''};
+  });
+
+  // 2) y 3) Por desarrollador: conteo y días de desvío
+  const porDev={};
+  rows.forEach(r=>devs(r).forEach(d=>{
+    const m=porDev[d]=porDev[d]||{v:0,ok:0,tarde:0,dias:0};
+    m.v++; r.desvio<=0?m.ok++:m.tarde++; m.dias+=Math.max(0,r.desvio);
+  }));
+  const conteo={}, dias={};
+  Object.entries(porDev).forEach(([k,m])=>{
+    conteo[k]={...m};
+    dias[k]={v:m.dias, n:m.v, prom:m.dias/m.v};
+  });
+  const partic=Object.values(conteo).reduce((a,x)=>a+x.v,0);
+  const diasTot=Object.values(dias).reduce((a,x)=>a+x.v,0);
+  const promGral=rows.reduce((a,r)=>a+r.desvio,0)/rows.length;
+  const n=rows.length;
+
+  const tarjetas=[
+    mtDonaCard('ENTREGABLES POR CUMPLIMIENTO', cumpl, n, 'ENTREGABLES', v=>v),
+    mtDonaCard('ENTREGABLES POR DESARROLLADOR',
+      mtTop(conteo,'Otros',x=>`${x.ok} en fecha · ${x.tarde} con desvío`),
+      partic, 'ENTREGABLES', v=>v, n),
+    mtDonaCard('DÍAS DE DESVÍO POR DESARROLLADOR',
+      mtTop(dias,'Otros',x=>`${x.n} entregable${x.n===1?'':'s'} · prom. ${sgn(x.v/x.n)}`),
+      diasTot, 'PROMEDIO', v=>fmtD1(v)+' d', sgn(promGral))
+  ].join('');
+
+  return `<div id="mt-donas-hist" style="margin-top:16px">
+    <style>
+      .mt-cuatro{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+      @media (max-width:1100px){.mt-cuatro{grid-template-columns:repeat(2,minmax(0,1fr))}}
+      @media (max-width:700px){.mt-cuatro{grid-template-columns:1fr}}
+    </style>
+    <div class="mt-cuatro">${tarjetas}</div>
+    <div style="font-size:10px;color:var(--text-dim);text-align:center;margin-top:8px">
+      Historias entregables: mes de Vence (Fecha fin desarrollo) · Desvío en días sin domingos · Un entregable con varios responsables cuenta para cada uno
+    </div>
+  </div>`;
+}
+
 function mtRefrescarDonas(){
   const el=document.getElementById('mt-donas');
   if(el) el.outerHTML=mtDonasFila();
+  const eh=document.getElementById('mt-donas-hist');
+  if(eh) eh.outerHTML=mtDonasHistorias();
 }
 
-function mtDonaCard(titulo, items, total, centro, fmtV){
+function mtDonaCard(titulo, items, total, centro, fmtV, centroTxt){
   return `<div class="mt-card" style="margin:0;padding:12px 8px">
     <div class="mt-card-t" style="text-align:center">${titulo}</div>
-    ${mtDona(items,total,centro,fmtV)}
+    ${mtDona(items,total,centro,fmtV,centroTxt)}
   </div>`;
 }
 
 // Donut compacto con etiquetas repartidas a los lados y ramita a su porción
-function mtDona(items, total, centro, fmtV){
+function mtDona(items, total, centro, fmtV, centroTxt){
   items=items.filter(i=>i.v>0);
   if(!total||!items.length) return '<div style="font-size:12px;color:var(--text-muted);padding:40px 0;text-align:center">Sin datos en el periodo</div>';
   const W=620, H=340, cx=310, cy=170, R=76, r=47, COD=36;
@@ -3674,7 +3743,7 @@ function mtDona(items, total, centro, fmtV){
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block" role="img" aria-label="${esc(centro)}">
     <circle cx="${cx}" cy="${cy}" r="${R+5}" fill="none" stroke="var(--border)" stroke-width="1" opacity=".5"/>
     ${paths}${etiquetas}
-    <text x="${cx}" y="${cy+4}" text-anchor="middle" font-size="26" font-weight="700" fill="var(--text-primary)">${fmtV(total)}</text>
+    <text x="${cx}" y="${cy+4}" text-anchor="middle" font-size="26" font-weight="700" fill="var(--text-primary)">${centroTxt??fmtV(total)}</text>
     <text x="${cx}" y="${cy+21}" text-anchor="middle" font-size="9.5" fill="var(--text-muted)" letter-spacing="1.5">${esc(centro)}</text>
   </svg>`;
 }
