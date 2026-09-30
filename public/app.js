@@ -3300,6 +3300,7 @@ let metricasLoaded = false;
 let metRows = [];
 let metBugsMes = [];   // universo completo de bugs para el gráfico mensual
 let metHistRows = [];  // historias entregables medidas (para las donas de historias)
+let metPeriodoHist = ''; // periodo de las donas de historias: '' = últimos 6 meses · 'AAAA-MM' = un mes
 // Épicas cuyos bugs se ubican en un mes fijo en Métricas (decisión PMO).
 // PTS-128: bugs de la migración Laravel T1, cargados en setiembre pero de junio.
 const MT_MES_POR_EPICA = { 'PTS-128': '2026-06' };
@@ -3446,8 +3447,8 @@ function renderMetricasCuerpo(){
   const soloHistorias=(document.getElementById('mt-tipo')?.value||'')==='Historia';
   metHistRows=rows.filter(r=>r.tipo==='Historia');
   cuerpo.innerHTML = mtKpis(rows)
-    + mtSeccion('HISTORIAS', metHistRows)
     + mtDonasHistorias()
+    + mtSeccion('HISTORIAS', metHistRows)
     + (soloHistorias?'':`<div style="margin-top:22px">${mtDonasFila()}</div>`)
     + mtSeccion('BUGS',      rows.filter(r=>r.tipo==='Bug'));
 }
@@ -3629,7 +3630,12 @@ function mtDonasHistorias(){
   const todas=(metHistRows||[]).filter(r=>r.desvio!==null && r.vence)
     .map(r=>({...r, mes:r.vence.slice(0,7)}));
   if(!todas.length) return '';
-  const rows=mtEnPeriodo(todas);
+  const meses=[...new Set(todas.map(r=>r.mes))].sort();
+  if(metPeriodoHist && !meses.includes(metPeriodoHist)) metPeriodoHist='';
+  const ult=meses.slice(-6);
+  const rows=metPeriodoHist ? todas.filter(r=>r.mes===metPeriodoHist) : todas.filter(r=>ult.includes(r.mes));
+  const opciones=[`<option value="">Últimos ${ult.length} ${ult.length===1?'mes':'meses'}</option>`]
+    .concat(meses.slice().reverse().map(m=>`<option value="${m}"${m===metPeriodoHist?' selected':''}>${mtMesCorto(m)} ${m.slice(0,4)}</option>`)).join('');
   const fmtD1=v=>(Math.round(v*10)/10).toString().replace('.',',');
   const sgn=v=>(v>0?'+':'')+fmtD1(v)+' d';
   const devs=r=>(r.responsable||'Sin asignar').split(',').map(x=>x.trim()).filter(Boolean);
@@ -3669,15 +3675,19 @@ function mtDonasHistorias(){
       partic, 'ENTREGABLES', v=>v, n),
     mtDonaCard('DÍAS DE DESVÍO POR DESARROLLADOR',
       mtTop(dias,'Otros',x=>`${x.n} entregable${x.n===1?'':'s'} · prom. ${sgn(x.v/x.n)}`),
-      diasTot, 'PROMEDIO', v=>fmtD1(v)+' d', sgn(promGral))
+      diasTot, 'PROMEDIO', v=>fmtD1(v)+' d', sgn(promGral), true)
   ].join('');
 
-  return `<div id="mt-donas-hist" style="margin-top:16px">
+  return `<div id="mt-donas-hist" style="margin-top:16px;margin-bottom:4px">
     <style>
       .mt-cuatro{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
       @media (max-width:1100px){.mt-cuatro{grid-template-columns:repeat(2,minmax(0,1fr))}}
       @media (max-width:700px){.mt-cuatro{grid-template-columns:1fr}}
     </style>
+    <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:8px">
+      <span style="font-size:11px;color:var(--text-muted)">Periodo</span>
+      <select id="mt-periodo-hist" onchange="metPeriodoHist=this.value;mtRefrescarDonasHist()">${opciones}</select>
+    </div>
     <div class="mt-cuatro">${tarjetas}</div>
     <div style="font-size:10px;color:var(--text-dim);text-align:center;margin-top:8px">
       Historias entregables: mes de Vence (Fecha fin desarrollo) · Desvío en días sin domingos · Un entregable con varios responsables cuenta para cada uno
@@ -3688,19 +3698,22 @@ function mtDonasHistorias(){
 function mtRefrescarDonas(){
   const el=document.getElementById('mt-donas');
   if(el) el.outerHTML=mtDonasFila();
+}
+
+function mtRefrescarDonasHist(){
   const eh=document.getElementById('mt-donas-hist');
   if(eh) eh.outerHTML=mtDonasHistorias();
 }
 
-function mtDonaCard(titulo, items, total, centro, fmtV, centroTxt){
+function mtDonaCard(titulo, items, total, centro, fmtV, centroTxt, sinValor){
   return `<div class="mt-card" style="margin:0;padding:12px 8px">
     <div class="mt-card-t" style="text-align:center">${titulo}</div>
-    ${mtDona(items,total,centro,fmtV,centroTxt)}
+    ${mtDona(items,total,centro,fmtV,centroTxt,sinValor)}
   </div>`;
 }
 
 // Donut compacto con etiquetas repartidas a los lados y ramita a su porción
-function mtDona(items, total, centro, fmtV, centroTxt){
+function mtDona(items, total, centro, fmtV, centroTxt, sinValor){
   items=items.filter(i=>i.v>0);
   if(!total||!items.length) return '<div style="font-size:12px;color:var(--text-muted);padding:40px 0;text-align:center">Sin datos en el periodo</div>';
   const W=620, H=340, cx=310, cy=170, R=76, r=47, COD=36;
@@ -3735,7 +3748,7 @@ function mtDona(items, total, centro, fmtV, centroTxt){
       <path d="M${xa.toFixed(1)} ${ya.toFixed(1)} L${xb.toFixed(1)} ${yb.toFixed(1)} L${xc.toFixed(1)} ${x.y.toFixed(1)}"
         fill="none" stroke="${x.c}" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" opacity=".75"/>
       <circle cx="${xc.toFixed(1)}" cy="${x.y.toFixed(1)}" r="3" fill="${x.c}"/>
-      <text x="${xt.toFixed(1)}" y="${(x.y-2).toFixed(1)}" text-anchor="${an}" font-size="14" font-weight="700" fill="${x.c}">${fmtV(x.v)}<tspan font-size="12.5" font-weight="500" fill="var(--text-primary)"> ${esc(x.lbl.length>18?x.lbl.slice(0,17)+'…':x.lbl)}</tspan></text>
+      <text x="${xt.toFixed(1)}" y="${(x.y-2).toFixed(1)}" text-anchor="${an}" font-size="14" font-weight="700" fill="${x.c}">${sinValor?'':fmtV(x.v)}<tspan font-size="12.5" font-weight="500" fill="var(--text-primary)">${sinValor?'':' '}${esc(x.lbl.length>18?x.lbl.slice(0,17)+'…':x.lbl)}</tspan></text>
       <text x="${xt.toFixed(1)}" y="${(x.y+13).toFixed(1)}" text-anchor="${an}" font-size="10.5" fill="var(--text-muted)">${esc(x.sub||'')}</text>
     </g>`;
   }).join('');
