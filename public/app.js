@@ -3387,14 +3387,18 @@ async function loadMetricas(){
         proyKey:ep?.key||'', proyecto:ep?.summary||'Sin épica', codigo:ep?.codigo||'',
         aplicacion:ep?.aplicacion||'Sin aplicación',
         estado:f.status?.name||'—',
-        // Responsable = "Resp. Desarrollo"; varios se separan por coma
-        responsable:(Array.isArray(f.customfield_11451)?f.customfield_11451:[])
-          .map(o=>(o&&(o.value||o.name||o.displayName))||'').filter(Boolean).join(', ')||'Sin asignar', pais,
+        // Historias: Responsable = "Resp. Desarrollo" (varios separados por coma)
+        // Bugs: Responsable = "Persona asignada"
+        responsable: tipo==='Bug'
+          ? (dn ? (nom?.nombre||dn) : 'Sin asignar')
+          : (Array.isArray(f.customfield_11451)?f.customfield_11451:[])
+              .map(o=>(o&&(o.value||o.name||o.displayName))||'').filter(Boolean).join(', ')||'Sin asignar', pais,
         entregable:f._entregable,   // null = el campo no existe en esta instancia
-        // Vence = Fecha fin desarrollo · Entrega = Fecha de entrega desarrollo
-        vence:f._vence||null, entrega:f.customfield_11381||null, inicio:f.customfield_10015||null,
-        // Desvío = Entrega − Vence, en días (sin domingos). null = falta la fecha fin
-        desvio:(f._vence&&f.customfield_11381)?mtDias(f.customfield_11381,f._vence):null,
+        // Historias: Vence = Fecha fin desarrollo · Entrega = Fecha de entrega desarrollo
+        // Bugs:      Vence = Fecha de vencimiento · Entrega = Fecha cierre bug
+        vence:f._vence||null, entrega:f._entrega||null, inicio:f.customfield_10015||null,
+        // Desvío = Entrega − Vence, en días (sin domingos). null = falta alguna fecha
+        desvio:(f._vence&&f._entrega)?mtDias(f._entrega,f._vence):null,
         // Plan = fecha fin desarrollo − inicio. El % de desviación es real/plan.
         plan:f._vence?mtDias(f._vence,f.customfield_10015):0,
         get pct(){ return (this.desvio!==null && this.plan>0) ? Math.round(this.desvio/this.plan*1000)/10 : null; }
@@ -3489,7 +3493,7 @@ function mtSeccion(titulo, rows){
     <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(x.proyecto)}">${esc(x.proyecto)}</td>
     <td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(x.resumen)}">${esc(x.resumen)}</td>
     <td style="white-space:nowrap">${esc(x.responsable)}</td>
-    <td style="white-space:nowrap">${x.vence?fmtD(x.vence):'<span style="color:var(--text-muted)">sin fecha fin</span>'}</td>
+    <td style="white-space:nowrap">${x.vence?fmtD(x.vence):`<span style="color:var(--text-muted)">${esBug?'sin vencimiento':'sin fecha fin'}</span>`}</td>
     <td style="white-space:nowrap">${fmtD(x.entrega)}</td>
     ${x.desvio===null
       ? '<td style="text-align:right;white-space:nowrap;color:var(--text-muted)">—</td>'
@@ -3499,7 +3503,7 @@ function mtSeccion(titulo, rows){
   return `
   <div style="display:flex;align-items:center;gap:10px;margin:22px 0 12px">
     <span style="font-size:13px;font-weight:700;letter-spacing:.05em;color:${col}">${titulo}</span>
-    <span style="font-size:11px;color:var(--text-muted)">${rows.length} ${esBug?'bug':'historia'}${rows.length===1?'':'s'} · mediana ${r.mediana>0?'+':''}${r.mediana} d · ${r.enFecha} en fecha${r.sinFin?` · ${r.sinFin} sin fecha fin`:''}</span>
+    <span style="font-size:11px;color:var(--text-muted)">${rows.length} ${esBug?'bug':'historia'}${rows.length===1?'':'s'} · mediana ${r.mediana>0?'+':''}${r.mediana} d · ${r.enFecha} en fecha${r.sinFin?` · ${r.sinFin} ${esBug?'sin vencimiento':'sin fecha fin'}`:''}</span>
   </div>
   <div class="mt-card">
     <div class="mt-card-t">DETALLE DE ${titulo}</div>
