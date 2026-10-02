@@ -578,7 +578,8 @@ async function cargarBugs(){
         codigo:ep?.codigo||'',
         inicio:f.customfield_10015||null,
         fin:f.duedate||null,
-        entrega:f._entregaBug||null,   // Fecha de entrega bug
+        // Fecha de entrega bug: es fecha y hora en Jira ("2026-10-02T03:00:00.000-0500"); se toma solo la fecha
+        entrega:(f._entregaBug||'').slice(0,10)||null,
         creado:(f.created||'').slice(0,10)||null,
         est:f._estTotal||0,
         reg:+(((f._segTotal||0)/3600).toFixed(1)),
@@ -720,7 +721,7 @@ function renderBugsTabla(){
         <td style="color:var(--text-muted);white-space:nowrap">${esc(b.responsable)}</td>
         <td style="color:var(--text-muted);white-space:nowrap">${b.inicio?fmtD(b.inicio):'—'}</td>
         <td style="white-space:nowrap;color:${vencido?'#ef4444':(b.fin?'var(--text-muted)':'#F5B800')}">${b.fin?fmtD(b.fin):'sin fecha'}</td>
-        <td style="color:var(--text-muted);white-space:nowrap">${b.entrega?fmtD(b.entrega):'—'}</td>
+        <td style="color:var(--text-muted);white-space:nowrap">${(b.entrega&&fmtD(b.entrega))||'—'}</td>
         <td style="text-align:right;color:${b.est?'var(--text-primary)':'var(--text-dim)'}">${b.est?b.est+'h':'—'}</td>
         <td style="text-align:right;color:${b.reg>b.est&&b.est>0?'#ef4444':'var(--text-primary)'}">${b.reg?b.reg+'h':'—'}</td>
       </tr>`;
