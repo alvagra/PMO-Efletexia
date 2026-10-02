@@ -528,6 +528,9 @@ module.exports = async function handler(req, res) {
         'customfield_11136', // Horas estimadas
         'customfield_11203', // Aplicación (del propio bug)
       ];
+      // "Fecha de entrega bug" se resuelve por nombre
+      const CF_ENTREGA_BUG = await idCampoPorNombre(auth, JIRA_CLOUD, 'Fecha de entrega bug');
+      if (CF_ENTREGA_BUG) BUG_FIELDS.push(CF_ENTREGA_BUG);
       const bugs = await fetchAllPages(
         auth, JIRA_CLOUD,
         'project = PTS AND issuetype = Error ORDER BY created DESC',
@@ -585,6 +588,7 @@ module.exports = async function handler(req, res) {
         b.fields._nSubtareas = extra.n;
         // Aplicación registrada en el bug (no la de su épica)
         b.fields._aplicacion = b.fields.customfield_11203?.value || null;
+        b.fields._entregaBug = CF_ENTREGA_BUG ? (b.fields[CF_ENTREGA_BUG] || null) : null;
       });
 
       return res.status(200).json({ bugs, total: bugs.length, type: 'bugs' });
