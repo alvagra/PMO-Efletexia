@@ -578,6 +578,7 @@ async function cargarBugs(){
         codigo:ep?.codigo||'',
         inicio:f.customfield_10015||null,
         fin:f.duedate||null,
+        entrega:f._entregaBug||null,   // Fecha de entrega bug
         creado:(f.created||'').slice(0,10)||null,
         est:f._estTotal||0,
         reg:+(((f._segTotal||0)/3600).toFixed(1)),
@@ -719,6 +720,7 @@ function renderBugsTabla(){
         <td style="color:var(--text-muted);white-space:nowrap">${esc(b.responsable)}</td>
         <td style="color:var(--text-muted);white-space:nowrap">${b.inicio?fmtD(b.inicio):'—'}</td>
         <td style="white-space:nowrap;color:${vencido?'#ef4444':(b.fin?'var(--text-muted)':'#F5B800')}">${b.fin?fmtD(b.fin):'sin fecha'}</td>
+        <td style="color:var(--text-muted);white-space:nowrap">${b.entrega?fmtD(b.entrega):'—'}</td>
         <td style="text-align:right;color:${b.est?'var(--text-primary)':'var(--text-dim)'}">${b.est?b.est+'h':'—'}</td>
         <td style="text-align:right;color:${b.reg>b.est&&b.est>0?'#ef4444':'var(--text-primary)'}">${b.reg?b.reg+'h':'—'}</td>
       </tr>`;
@@ -749,7 +751,7 @@ function renderBugsTabla(){
       const opts=[['todos','Todos'],['abiertos','Abiertos'],['cerrados','Cerrados'],['vencidos','Vencidos'],['sinfecha','Sin fecha']];
       const chipsScope=opts.map(([v,l])=>
         `<button type="button" class="bg-chip bg-chip-sm${sc===v?' on':''}" onclick="setBugDetalleScope('${esc(k)}','${v}')">${l}</button>`).join('');
-      detalle=`<tr><td colspan="9" style="background:var(--bg-elevated);padding:16px 18px">
+      detalle=`<tr><td colspan="10" style="background:var(--bg-elevated);padding:16px 18px">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:13px">
           <span style="font-size:11px;color:var(--text-muted);letter-spacing:.04em">FILTRAR ESTE PANEL</span>
           <span class="bg-chips">${chipsScope}</span>
@@ -761,7 +763,7 @@ function renderBugsTabla(){
         </div>
       </td></tr>`;
     }
-    return `<tr class="bg-grupo"><td colspan="9">
+    return `<tr class="bg-grupo"><td colspan="10">
       ${esc(p.codigo?p.codigo+' · ':'')}${esc(p.proyecto)}
       <span style="font-weight:400;color:var(--text-muted);margin-left:8px">${g.length} bug${g.length===1?'':'s'} · ${gAb} abierto${gAb===1?'':'s'} · ${gEst}h est. / ${gReg}h reg.</span>
       <button class="bg-detalle-btn" type="button" onclick="toggleBugDetalle('${esc(k)}')">${abierto?'Ocultar':'Detalle'}</button>
@@ -769,7 +771,7 @@ function renderBugsTabla(){
   }).join('');
 
   wrap.innerHTML=`<table class="bg-tabla">
-    <thead><tr><th>CLAVE</th><th>BUG</th><th>PRIORIDAD</th><th>ESTADO</th><th>RESPONSABLE</th><th>INICIO</th><th>VENCE</th>
+    <thead><tr><th>CLAVE</th><th>BUG</th><th>PRIORIDAD</th><th>ESTADO</th><th>RESPONSABLE</th><th>INICIO</th><th>VENCE</th><th>ENTREGA</th>
     <th style="text-align:right">HRS EST.</th><th style="text-align:right">HRS REG.</th></tr></thead>
     <tbody>${cuerpo}</tbody></table>`;
 }
