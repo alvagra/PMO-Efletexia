@@ -583,6 +583,7 @@ async function cargarBugs(){
         creado:(f.created||'').slice(0,10)||null,
         est:f._estTotal||0,
         reg:+(((f._segTotal||0)/3600).toFixed(1)),
+        regMin:Math.round((f._segTotal||0)/60),   // horas registradas en minutos, para mostrar "Xh Ym"
         nSub:f._nSubtareas||0
       };
     });
@@ -590,6 +591,13 @@ async function cargarBugs(){
   }catch(e){
     panel.innerHTML=`<div class="bg-empty">No se pudieron cargar los bugs.<br><span style="font-size:11px">${esc(e.message)}</span></div>`;
   }
+}
+
+// Minutos → "55h 12m" · "3h" · "45m"
+function fmtHM(min){
+  min=Math.round(min||0);
+  const h=Math.floor(min/60), m=min%60;
+  return h&&m ? `${h}h ${m}m` : h ? `${h}h` : `${m}m`;
 }
 
 function bugsFiltrados(){
@@ -676,10 +684,10 @@ function renderBugsTabla(){
   const rows=bugsFiltrados();
   const hoy=new Date().toISOString().slice(0,10);
   const cont={Pendiente:0,'En curso':0,Bloqueado:0,Cerrado:0};
-  let est=0,reg=0,venc=0,sinF=0;
+  let est=0,reg=0,regMin=0,venc=0,sinF=0;
   rows.forEach(b=>{
     cont[b.grupo]=(cont[b.grupo]||0)+1;
-    est+=b.est; reg+=b.reg;
+    est+=b.est; reg+=b.reg; regMin+=b.regMin;
     if(!b.fin) sinF++;
     else if(b.fin<hoy && b.grupo!=='Cerrado') venc++;
   });
@@ -695,7 +703,7 @@ function renderBugsTabla(){
     kpi('VENCIDOS',venc,venc?'#ef4444':'var(--text-dim)')+
     kpi('SIN FECHA',sinF,sinF?'#F5B800':'var(--text-dim)')+
     kpi('HRS EST.',est+'h')+
-    kpi('HRS REG.',reg+'h',reg>est&&est>0?'#ef4444':'var(--text-primary)');
+    kpi('HRS REG.',fmtHM(regMin),reg>est&&est>0?'#ef4444':'var(--text-primary)');
 
   const wrap=document.getElementById('bg-tabla-wrap');
   if(!rows.length){ wrap.innerHTML='<div class="bg-empty">No hay bugs que coincidan con los filtros.</div>'; return; }
@@ -707,7 +715,7 @@ function renderBugsTabla(){
 
   const cuerpo=orden.map(k=>{
     const g=grupos[k], p=g[0];
-    const gEst=g.reduce((s,x)=>s+x.est,0), gReg=g.reduce((s,x)=>s+x.reg,0);
+    const gEst=g.reduce((s,x)=>s+x.est,0), gReg=g.reduce((s,x)=>s+x.regMin,0);
     const gAb=g.filter(x=>x.grupo!=='Cerrado').length;
     const filas=g.map(b=>{
       const c=bgEstadoCls(b.estado);
@@ -723,7 +731,7 @@ function renderBugsTabla(){
         <td style="white-space:nowrap;color:${vencido?'#ef4444':(b.fin?'var(--text-muted)':'#F5B800')}">${b.fin?fmtD(b.fin):'sin fecha'}</td>
         <td style="color:var(--text-muted);white-space:nowrap">${(b.entrega&&fmtD(b.entrega))||'—'}</td>
         <td style="text-align:right;color:${b.est?'var(--text-primary)':'var(--text-dim)'}">${b.est?b.est+'h':'—'}</td>
-        <td style="text-align:right;color:${b.reg>b.est&&b.est>0?'#ef4444':'var(--text-primary)'}">${b.reg?b.reg+'h':'—'}</td>
+        <td style="text-align:right;color:${b.reg>b.est&&b.est>0?'#ef4444':'var(--text-primary)'}">${b.regMin?fmtHM(b.regMin):'—'}</td>
       </tr>`;
     }).join('');
     // Panel de detalle: distribución por prioridad y por estado, con horas
@@ -766,7 +774,7 @@ function renderBugsTabla(){
     }
     return `<tr class="bg-grupo"><td colspan="10">
       ${esc(p.codigo?p.codigo+' · ':'')}${esc(p.proyecto)}
-      <span style="font-weight:400;color:var(--text-muted);margin-left:8px">${g.length} bug${g.length===1?'':'s'} · ${gAb} abierto${gAb===1?'':'s'} · ${gEst}h est. / ${gReg}h reg.</span>
+      <span style="font-weight:400;color:var(--text-muted);margin-left:8px">${g.length} bug${g.length===1?'':'s'} · ${gAb} abierto${gAb===1?'':'s'} · ${gEst}h est. / ${fmtHM(gReg)} reg.</span>
       <button class="bg-detalle-btn" type="button" onclick="toggleBugDetalle('${esc(k)}')">${abierto?'Ocultar':'Detalle'}</button>
     </td></tr>${detalle}${filas}`;
   }).join('');
