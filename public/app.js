@@ -3569,9 +3569,9 @@ function mtEnPeriodo(lista){
 }
 
 // Agrupa en top 6 + resto; cada item {lbl, v, c, sub, tip}
-function mtTop(mapa, resto, subDe, tipDe){
+function mtTop(mapa, resto, subDe, tipDe, max=6){
   const orden=Object.keys(mapa).sort((a,b)=>mapa[b].v-mapa[a].v);
-  const top=orden.slice(0,6), otros=orden.slice(6);
+  const top=orden.slice(0,max), otros=orden.slice(max);
   const items=top.map((k,i)=>({lbl:k, v:mapa[k].v, c:MT_COLORES[i%MT_COLORES.length],
     sub:subDe(mapa[k],k), tip:tipDe?tipDe(k):k}));
   if(otros.length){
@@ -3610,7 +3610,7 @@ function mtDonasFila(){
     mtDonaCard('BUGS POR APLICACIÓN',
       mtTop(porConteo('aplicacion'),'Otras',subConteo), bugs.length, 'BUGS', v=>v),
     mtDonaCard('BUGS POR DESARROLLADOR',
-      mtTop(porConteo('responsable'),'Otros',subConteo), bugs.length, 'BUGS', v=>v),
+      mtTop(porConteo('responsable'),'Otros',subConteo,null,7), bugs.length, 'BUGS', v=>v),
     mtDonaCard('HORAS EN BUGS POR RECURSO',
       mtTop(hRec,'Otros',x=>`${x.bugs.size} bug${x.bugs.size===1?'':'s'}`),
       Object.values(hRec).reduce((a,x)=>a+x.v,0), 'HORAS', v=>fmtH(v)+'h')
