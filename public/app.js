@@ -530,16 +530,18 @@ function bgBloqueDetalle(titulo, items, k, tipo){
   </div>`;
 }
 
-// Prioridad de Jira → etiqueta del dashboard
+// Prioridad de Jira → etiqueta del dashboard (4 niveles)
+// Highest → Crítico · High → Alto · Medium → Medio · Low y Lowest → Bajo · vacía → Sin prioridad
 const BG_PRIO = {
   'highest': {lbl:'Crítico', c:'#ef4444', bg:'rgba(239,68,68,.15)', ord:1},
   'high':    {lbl:'Alto',    c:'#f0883e', bg:'rgba(240,136,62,.15)', ord:2},
-  'low':     {lbl:'Medio',   c:'#F5B800', bg:'rgba(245,184,0,.15)',  ord:3},
+  'medium':  {lbl:'Medio',   c:'#F5B800', bg:'rgba(245,184,0,.15)',  ord:3},
+  'low':     {lbl:'Bajo',    c:'#3fb950', bg:'rgba(63,185,80,.15)',  ord:4},
   'lowest':  {lbl:'Bajo',    c:'#3fb950', bg:'rgba(63,185,80,.15)',  ord:4}
 };
 function bgPrio(nombre){
   const k=(nombre||'').toLowerCase().trim();
-  return BG_PRIO[k] || {lbl:nombre||'—', c:'var(--text-muted)', bg:'rgba(139,148,158,.15)', ord:5};
+  return BG_PRIO[k] || {lbl:nombre||'Sin prioridad', c:'var(--text-muted)', bg:'rgba(139,148,158,.15)', ord:5};
 }
 
 function bgEstadoCls(status){
