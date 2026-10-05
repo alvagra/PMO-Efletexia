@@ -3608,7 +3608,7 @@ function mtDonasFila(){
 
   const tarjetas=[
     mtDonaCard('BUGS POR APLICACIÓN',
-      mtTop(porConteo('aplicacion'),'Otras',subConteo), bugs.length, 'BUGS', v=>v),
+      mtTop(porConteo('aplicacion'),'Otras',subConteo,null,7), bugs.length, 'BUGS', v=>v),
     mtDonaCard('BUGS POR DESARROLLADOR',
       mtTop(porConteo('responsable'),'Otros',subConteo,null,7), bugs.length, 'BUGS', v=>v),
     mtDonaCard('HORAS EN BUGS POR RECURSO',
