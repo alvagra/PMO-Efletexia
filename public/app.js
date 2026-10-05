@@ -723,7 +723,7 @@ function renderBugsTabla(){
       const vencido=b.fin && b.fin<hoy && b.grupo!=='Cerrado';
       return `<tr>
         <td><a class="jlink" href="${JIRA_BASE}${b.key}" target="_blank">${b.key}</a></td>
-        <td><div style="max-width:340px;overflow-wrap:anywhere">${esc(b.resumen)}${b.nSub?`<span style="color:var(--text-dim);font-size:10px"> · ${b.nSub} subt.</span>`:''}</div></td>
+        <td><div style="max-width:340px;white-space:normal;overflow-wrap:anywhere">${esc(b.resumen)}${b.nSub?`<span style="color:var(--text-dim);font-size:10px"> · ${b.nSub} subt.</span>`:''}</div></td>
         <td><span class="bg-est" style="background:${pr.bg};color:${pr.c}">${esc(b.prioridad)}</span></td>
         <td><span class="bg-est" style="background:${c.bg};color:${c.c}">${esc(b.estado)}</span></td>
         <td style="color:var(--text-muted);white-space:nowrap">${esc(b.responsable)}</td>
@@ -3569,9 +3569,9 @@ function mtEnPeriodo(lista){
 }
 
 // Agrupa en top 6 + resto; cada item {lbl, v, c, sub, tip}
-function mtTop(mapa, resto, subDe, tipDe, max=6){
+function mtTop(mapa, resto, subDe, tipDe){
   const orden=Object.keys(mapa).sort((a,b)=>mapa[b].v-mapa[a].v);
-  const top=orden.slice(0,max), otros=orden.slice(max);
+  const top=orden.slice(0,6), otros=orden.slice(6);
   const items=top.map((k,i)=>({lbl:k, v:mapa[k].v, c:MT_COLORES[i%MT_COLORES.length],
     sub:subDe(mapa[k],k), tip:tipDe?tipDe(k):k}));
   if(otros.length){
@@ -3608,7 +3608,7 @@ function mtDonasFila(){
 
   const tarjetas=[
     mtDonaCard('BUGS POR APLICACIÓN',
-      mtTop(porConteo('aplicacion'),'Otras',subConteo,null,MT_COLORES.length), bugs.length, 'BUGS', v=>v),
+      mtTop(porConteo('aplicacion'),'Otras',subConteo), bugs.length, 'BUGS', v=>v),
     mtDonaCard('BUGS POR DESARROLLADOR',
       mtTop(porConteo('responsable'),'Otros',subConteo), bugs.length, 'BUGS', v=>v),
     mtDonaCard('HORAS EN BUGS POR RECURSO',
