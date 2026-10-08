@@ -3917,32 +3917,36 @@ function infHtml(d){
     const resp=(e.respDesarrollo&&e.respDesarrollo.length?e.respDesarrollo:(e.asignado?[e.asignado]:[]))
       .map(n=>resolveNombreDesdeJira(n)?.nombre||n);
     return { ...e, abiertos:ab.length, totalBugs:bugs.filter(b=>b.entregable===e.key).length, av:infAvance(e,ab), resp:resp.length?resp.join(', '):'Sin asignar' };
-  }).sort((a,b)=>b.av.pct-a.av.pct || a.av.ord-b.av.ord || a.summary.localeCompare(b.summary,'es'));
-  filas.forEach((f,i)=>{ f.clave='E'+String(i+1).padStart(2,'0'); });
+  }).sort((a,b)=>(a.vence?0:1)-(b.vence?0:1) || (a.vence||'').localeCompare(b.vence||'')
+                 || b.av.pct-a.av.pct || a.summary.localeCompare(b.summary,'es'));
 
   const sinAb=abiertosDe(null);
-  const sinTot=bugs.filter(b=>!b.entregable).length;
   const sinTiene=bugs.some(b=>!b.entregable) || (d.sinEntregable?.segRegistrados||0)>0;
   const totalAb=bugs.filter(infBugAbierto).length;
 
+  // Vence y desviación: días entre la fecha de vencimiento y la fecha de corte
+  const MESES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  const fmtVence=v=>{ const [y,m,dd]=v.split('-'); return `${dd}-${MESES[+m-1]}`; };
+  const desv=f=>{
+    if(f.av.pct>=100) return {t:'Entregado',c:'var(--text-muted)'};
+    if(!f.vence) return {t:'Sin fecha',c:'var(--text-muted)'};
+    const n=Math.round((new Date(f.vence+'T00:00:00')-new Date(hoy+'T00:00:00'))/86400000);
+    if(n===0) return {t:'Vence hoy',c:'#d29922'};
+    const t=`${n>0?'+':'−'}${Math.abs(n)} día${Math.abs(n)===1?'':'s'}`;
+    return {t,c:n<0?'#f0883e':'var(--text-primary)'};
+  };
+
   const td='class="inf-td"';
-  const filasHtml=filas.map(f=>`<tr>
-      <td ${td} style="color:var(--text-muted);font-size:10.5px;white-space:nowrap">${f.clave}</td>
-      <td ${td}><a class="jlink" href="${JIRA_BASE}${f.key}" target="_blank" title="${esc(f.key)}">${esc(f.summary)}</a></td>
+  const filasHtml=filas.map(f=>{ const dv=desv(f); return `<tr>
+      <td ${td} style="white-space:nowrap"><a class="jlink" href="${JIRA_BASE}${f.key}" target="_blank">${esc(f.key)}</a></td>
+      <td ${td}>${esc(f.summary)}</td>
       <td ${td} style="white-space:nowrap"><span style="color:${f.av.c};font-weight:600">${esc(f.av.lbl)}</span></td>
       <td ${td} style="text-align:center;font-weight:700">${f.av.pct}%</td>
       <td ${td} style="white-space:nowrap">${esc(f.resp)}</td>
-      <td ${td} style="text-align:center;color:${f.totalBugs?'var(--text-primary)':'var(--text-dim)'}">${f.totalBugs}</td>
-      <td ${td} style="text-align:center;font-weight:${f.abiertos?700:400};color:${f.abiertos?'var(--text-primary)':'var(--text-dim)'}">${f.abiertos}</td>
-    </tr>`).join('') + (sinTiene ? `<tr class="inf-fila-sin">
-      <td ${td} style="color:var(--text-muted)">—</td>
-      <td ${td}>Sin entregable asignado <span style="color:var(--text-muted);font-size:10.5px">(para asignarlos, vincula el bug a la historia entregable en Jira)</span></td>
-      <td ${td} style="color:var(--text-muted)">—</td>
-      <td ${td} style="text-align:center;color:var(--text-muted)">—</td>
-      <td ${td} style="color:var(--text-muted)">—</td>
-      <td ${td} style="text-align:center;color:var(--text-muted)">${sinTot}</td>
-      <td ${td} style="text-align:center;font-weight:${sinAb.length?700:400};color:${sinAb.length?'var(--text-primary)':'var(--text-dim)'}">${sinAb.length}</td>
-    </tr>` : '');
+      <td ${td} style="text-align:center;white-space:nowrap">${f.vence?fmtVence(f.vence):'–'}</td>
+      <td ${td} style="text-align:center;white-space:nowrap;color:${dv.c}">${dv.t}</td>
+    </tr>`; }).join('');
+  const hayFechas=filas.some(f=>f.vence);
 
   const porEstado={};
   filas.forEach(f=>{ porEstado[f.av.lbl]=(porEstado[f.av.lbl]||{n:0,ord:f.av.ord}); porEstado[f.av.lbl].n++; });
@@ -3960,15 +3964,11 @@ function infHtml(d){
   const unir=a=>a.length<=1?a.join(''):a.slice(0,-1).join(', ')+' y '+a[a.length-1];
 
   const sec1 = filas.length ? `
-    <div class="inf-tabla-wrap"><table class="inf-tabla inf-tabla-av">
-      <thead><tr><th>CLAVE</th><th>ENTREGABLE</th><th>ESTADO</th><th style="text-align:center">% AVANCE</th>
-        <th>RESPONSABLE</th><th style="text-align:center">BUGS REGISTRADOS</th><th style="text-align:center">BUGS ABIERTOS</th></tr></thead>
-      <tbody>${filasHtml}
-        <tr class="inf-fila-total"><td colspan="5" style="text-align:right">Total</td>
-          <td style="text-align:center">${bugs.length}</td>
-          <td style="text-align:center">${totalAb}</td></tr>
-      </tbody></table></div>
-    <p class="inf-nota">% avance: 100% corresponde al pase a producción. Un entregable sin bugs abiertos, pendiente de validación usuario y pase a producción, se considera al 95%; con observaciones parte de 90% y se descuenta 5% por bug abierto de prioridad alta, 3% por media y 1% por baja (los bugs en revisión cuentan como abiertos hasta su cierre). Los entregables no tienen fecha de vencimiento registrada en Jira, por lo que no se calcula desviación.</p>
+    <div class="inf-tabla-wrap"><table class="inf-tabla inf-tabla-av inf-tabla-ent">
+      <thead><tr><th>Clave</th><th>Entregable</th><th>Estado</th><th style="text-align:center">% Avance</th>
+        <th>Responsable</th><th style="text-align:center">Vence</th><th style="text-align:center">Desviación</th></tr></thead>
+      <tbody>${filasHtml}</tbody></table></div>
+    <p class="inf-nota">% avance: 100% corresponde al pase a producción. Un entregable sin bugs abiertos, pendiente de validación usuario y pase a producción, se considera al 95%; con observaciones parte de 90% y se descuenta 5% por bug abierto de prioridad alta, 3% por media y 1% por baja (los bugs en revisión cuentan como abiertos hasta su cierre). ${hayFechas?'Desviación: días entre la fecha de vencimiento del entregable en Jira y la fecha de corte (negativo = vencido).':'Los entregables no tienen fecha de vencimiento registrada en Jira, por lo que no se calcula desviación.'}</p>
     <p class="inf-p">${filas.length===1?'El único entregable está':`De los ${filas.length} entregables,`} ${filas.length===1?resumenEst[0].replace(/^1 /,''):unir(resumenEst)}.</p>`
     : `<div class="mt-empty" style="padding:24px 0">El proyecto no tiene historias marcadas como Entregable.</div>
        ${sinTiene?`<p class="inf-p">Hay ${sinAb.length} bug${sinAb.length===1?'':'s'} abierto${sinAb.length===1?'':'s'} sin entregable asignado.</p>`:''}`;
@@ -3989,18 +3989,21 @@ function infHtml(d){
   porciones.forEach((p,i)=>{ p.c=p.k==='_otros'?INF_COLOR_OTROS:INF_COLORES[i%INF_COLORES.length]; });
 
   const cerr=bugs.length-totalAb;
+  // Prioridades: de los abiertos; si no hay abiertos, de los registrados (cerrados)
   const prioCnt={alta:0,media:0,baja:0,sin:0};
-  const estCnt={};
-  bugs.filter(infBugAbierto).forEach(b=>{
+  bugsDona.forEach(b=>{
     const p=(b.prioridad||'').toLowerCase();
     if(p==='highest'||p==='high') prioCnt.alta++; else if(p==='medium') prioCnt.media++;
     else if(p==='low'||p==='lowest') prioCnt.baja++; else prioCnt.sin++;
+  });
+  const estCnt={};
+  bugs.filter(infBugAbierto).forEach(b=>{
     // Los bugs sin iniciar (categoría "Por hacer") se agrupan como pendientes de atención
     const est=b.estadoCat==='new'?'__pend':(b.estado||'Sin estado');
     estCnt[est]=(estCnt[est]||0)+1;
   });
-  const prioTxt=[prioCnt.alta&&`${prioCnt.alta} de prioridad alta`,prioCnt.media&&`${prioCnt.media} media`,
-                 prioCnt.baja&&`${prioCnt.baja} baja`,prioCnt.sin&&`${prioCnt.sin} sin prioridad`].filter(Boolean);
+  const prioTxt=[prioCnt.alta&&`${prioCnt.alta} de prioridad alta`,prioCnt.media&&`${prioCnt.media} ${prioCnt.alta?'':'de prioridad '}media`,
+                 prioCnt.baja&&`${prioCnt.baja} ${prioCnt.alta||prioCnt.media?'':'de prioridad '}baja`,prioCnt.sin&&`${prioCnt.sin} sin prioridad`].filter(Boolean);
   // Orden del texto: en revisión, observados, en curso, otros estados y pendientes al final
   const ordEst=e=>{ const t=e.toLowerCase();
     return e==='__pend'?9:t.includes('revisi')?1:t.startsWith('observ')?2:t==='en curso'?3:5; };
@@ -4018,7 +4021,7 @@ function infHtml(d){
     ${infDona(porciones,totalDona,totalAb?'bugs abiertos':`bug${totalDona===1?'':'s'} registrado${totalDona===1?'':'s'}`)}
     ${totalAb?'':'<p class="inf-nota" style="margin-top:4px">No hay bugs abiertos: el gráfico muestra los bugs registrados (todos cerrados) por entregable.</p>'}
     <p class="inf-p">Se tienen <b>${bugs.length} bug${bugs.length===1?'':'s'} registrado${bugs.length===1?'':'s'}</b>, de los cuales
-      <b>${cerr} ${cerr===1?'está cerrado':'están cerrados'}</b> y <b>${totalAb} abierto${totalAb===1?'':'s'}</b>${prioTxt.length?': '+unir(prioTxt):''}.
+      <b>${cerr} ${cerr===1?'está cerrado':'están cerrados'}</b>${!totalAb&&prioTxt.length?' ('+unir(prioTxt)+')':''} y <b>${totalAb} abierto${totalAb===1?'':'s'}</b>${totalAb&&prioTxt.length?': '+unir(prioTxt):''}.
       ${estTxt.length?`De los abiertos, ${unir(estTxt)}.`:'No hay bugs pendientes de atención.'}</p>`
     : '<div class="mt-empty" style="padding:18px 0">El proyecto no tiene bugs registrados.</div>';
 
