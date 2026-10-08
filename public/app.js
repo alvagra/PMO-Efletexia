@@ -3881,6 +3881,18 @@ function infAvance(e, abiertos){
   return { pct, lbl:'Pendiente', c:'#8b949e', ord:8 };
 }
 
+// Estado de la historia tal como está en Jira, con color y orden para el informe
+function infEstadoJira(e){
+  const lbl=e.estado||'Sin estado', s=ganttNorm(lbl);
+  if(s.includes('produccion')||e.estadoCat==='done') return { lbl, c:'#3fb950', ord:1 };
+  if(s.includes('uat'))        return { lbl, c:'#a371f7', ord:2 };
+  if(s.includes('qa')||s.includes('prueba')) return { lbl, c:'#58a6ff', ord:3 };
+  if(s.includes('desarrollo')) return { lbl, c:'#39c5cf', ord:5 };
+  if(s.includes('analisis'))   return { lbl, c:'#d29922', ord:6 };
+  if(s.includes('blocked')||s.includes('bloque')) return { lbl, c:'#ef4444', ord:7 };
+  return { lbl, c:'#8b949e', ord:8 };
+}
+
 async function renderInforme(){
   const cont=document.getElementById('inf-contenido');
   if(!infProyectos){
@@ -3962,7 +3974,7 @@ function infHtml(d){
     const ab=abiertosDe(e.key);
     const resp=(e.respDesarrollo&&e.respDesarrollo.length?e.respDesarrollo:(e.asignado?[e.asignado]:[]))
       .map(n=>resolveNombreDesdeJira(n)?.nombre||n);
-    return { ...e, abiertos:ab.length, totalBugs:bugs.filter(b=>b.entregable===e.key).length, av:infAvance(e,ab), resp:resp.length?resp.join(', '):'Sin asignar' };
+    return { ...e, abiertos:ab.length, totalBugs:bugs.filter(b=>b.entregable===e.key).length, av:infAvance(e,ab), est:infEstadoJira(e), resp:resp.length?resp.join(', '):'Sin asignar' };
   }).sort((a,b)=>(a.vence?0:1)-(b.vence?0:1) || (a.vence||'').localeCompare(b.vence||'')
                  || b.av.pct-a.av.pct || a.summary.localeCompare(b.summary,'es'));
 
@@ -3986,7 +3998,7 @@ function infHtml(d){
   const filasHtml=filas.map(f=>{ const dv=desv(f); return `<tr>
       <td ${td} style="white-space:nowrap"><a class="jlink" href="${JIRA_BASE}${f.key}" target="_blank">${esc(f.key)}</a></td>
       <td ${td}>${esc(f.summary)}</td>
-      <td ${td} style="white-space:nowrap"><span style="color:${f.av.c};font-weight:600">${esc(f.av.lbl)}</span></td>
+      <td ${td} style="white-space:nowrap"><span style="color:${f.est.c};font-weight:600">${esc(f.est.lbl)}</span></td>
       <td ${td} style="text-align:center;font-weight:700">${f.av.pct}%</td>
       <td ${td} style="white-space:nowrap">${esc(f.resp)}</td>
       <td ${td} style="text-align:center;white-space:nowrap">${f.vence?fmtVence(f.vence):'–'}</td>
@@ -3995,15 +4007,14 @@ function infHtml(d){
   const hayFechas=filas.some(f=>f.vence);
 
   const porEstado={};
-  filas.forEach(f=>{ porEstado[f.av.lbl]=(porEstado[f.av.lbl]||{n:0,ord:f.av.ord}); porEstado[f.av.lbl].n++; });
+  filas.forEach(f=>{ porEstado[f.est.lbl]=(porEstado[f.est.lbl]||{n:0,ord:f.est.ord}); porEstado[f.est.lbl].n++; });
   // Frase del resumen según el estado (con plural cuando corresponde)
+  // Frase del resumen con el estado de Jira (con plural cuando corresponde)
   const fraseEst=(l,n)=>{
-    const pl=n===1?'':'s';
-    return ({'En producción':'en producción',
-      'Pendiente de validación usuario':`pendiente${pl} de validación usuario`,
-      'En levantamiento de observaciones':'en levantamiento de observaciones',
-      'En pruebas QA':'en pruebas QA','Desarrollo':'en desarrollo','Análisis':'en análisis',
-      'Bloqueado':`bloqueado${pl}`,'Pendiente':`pendiente${pl}`})[l]||l.toLowerCase();
+    const pl=n===1?'':'s', t=ganttNorm(l);
+    if(t==='pendiente'||t==='backlog') return `pendiente${pl}`;
+    if(t.includes('blocked')||t.includes('bloque')) return `bloqueado${pl}`;
+    return 'en '+esc(l);
   };
   const resumenEst=Object.entries(porEstado).sort((a,b)=>a[1].ord-b[1].ord)
     .map(([l,v])=>`${v.n} ${fraseEst(l,v.n)}`);
