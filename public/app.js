@@ -3995,13 +3995,23 @@ function infHtml(d){
     const p=(b.prioridad||'').toLowerCase();
     if(p==='highest'||p==='high') prioCnt.alta++; else if(p==='medium') prioCnt.media++;
     else if(p==='low'||p==='lowest') prioCnt.baja++; else prioCnt.sin++;
-    estCnt[b.estado||'Sin estado']=(estCnt[b.estado||'Sin estado']||0)+1;
+    // Los bugs sin iniciar (categoría "Por hacer") se agrupan como pendientes de atención
+    const est=b.estadoCat==='new'?'__pend':(b.estado||'Sin estado');
+    estCnt[est]=(estCnt[est]||0)+1;
   });
   const prioTxt=[prioCnt.alta&&`${prioCnt.alta} de prioridad alta`,prioCnt.media&&`${prioCnt.media} media`,
                  prioCnt.baja&&`${prioCnt.baja} baja`,prioCnt.sin&&`${prioCnt.sin} sin prioridad`].filter(Boolean);
-  const estTxt=Object.entries(estCnt).sort((a,b)=>b[1]-a[1]).map(([e,n])=>{
-    const t=e.toLowerCase();
-    return `<b>${n}</b> ${t.startsWith('en ')?esc(t):'en '+esc(t)}`;
+  // Orden del texto: en revisión, observados, en curso, otros estados y pendientes al final
+  const ordEst=e=>{ const t=e.toLowerCase();
+    return e==='__pend'?9:t.includes('revisi')?1:t.startsWith('observ')?2:t==='en curso'?3:5; };
+  const estTxt=Object.entries(estCnt).sort((a,b)=>ordEst(a[0])-ordEst(b[0])||b[1]-a[1]).map(([e,n])=>{
+    const pl=n!==1, t=e.toLowerCase();
+    let frase;
+    if(e==='__pend') frase=`pendiente${pl?'s':''} de atención`;
+    else if(t.includes('revisi')) frase=`se encuentra${pl?'n':''} en revisión`;
+    else if(t.startsWith('observ')) frase=`observado${pl?'s':''}`;
+    else frase=t.startsWith('en ')?esc(t):'en '+esc(t);
+    return `<b>${n} ${frase}</b>`;
   });
 
   const sec2 = bugs.length ? `
@@ -4009,7 +4019,7 @@ function infHtml(d){
     ${totalAb?'':'<p class="inf-nota" style="margin-top:4px">No hay bugs abiertos: el gráfico muestra los bugs registrados (todos cerrados) por entregable.</p>'}
     <p class="inf-p">Se tienen <b>${bugs.length} bug${bugs.length===1?'':'s'} registrado${bugs.length===1?'':'s'}</b>, de los cuales
       <b>${cerr} ${cerr===1?'está cerrado':'están cerrados'}</b> y <b>${totalAb} abierto${totalAb===1?'':'s'}</b>${prioTxt.length?': '+unir(prioTxt):''}.
-      ${estTxt.length?`De los abiertos, ${unir(estTxt)}.`:''}</p>`
+      ${estTxt.length?`De los abiertos, ${unir(estTxt)}.`:'No hay bugs pendientes de atención.'}</p>`
     : '<div class="mt-empty" style="padding:18px 0">El proyecto no tiene bugs registrados.</div>';
 
   // ── 3. Horas invertidas ──────────────────────────────────
