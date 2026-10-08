@@ -3775,109 +3775,308 @@ function mtDona(items, total, centro, fmtV, centroTxt, sinValor){
 }
 
 // ═══════════════════════════════════════════════════════════
-//  INFORME EJECUTIVO — estado de proyectos para dirección TI
-//  Gestión por excepción: solo lo que exige decisión.
+//  INFORME POR PROYECTO — estatus de una épica
+//  1. Avance por entregable · 2. Bugs abiertos · 3. Horas invertidas
+//  Entregables = historias de la épica con el campo Entregable = Sí.
 // ═══════════════════════════════════════════════════════════
-const INF_ESTADOS_ACTIVOS = ['desarrollo','pruebas'];
+const INF_LS_KEY = 'pmo.informe.epica';      // último proyecto consultado
+// % de avance: 100% = en producción. Sin bugs abiertos en UAT = 95%.
+// Con bugs abiertos se parte de INF_BASE_OBS y se descuenta por prioridad.
+const INF_BASE_OBS = 90;
+const INF_DESC_PRIO = { highest:5, high:5, medium:3, low:1, lowest:1 };
+const INF_TOPE_DESARROLLO = 85;              // avance por horas antes de QA
+// Las horas de estas áreas no se cuentan como horas del proyecto (QA/gestión)
+const INF_AREAS_SIN_HORAS = ['PM','PMO'];
+const INF_MAX_DONA = 10;                     // porciones; el resto va a "Otros"
+const INF_COLORES = ['#1f6feb','#58a6ff','#f0883e','#F5B800','#3fb950','#a371f7',
+                     '#ef4444','#39c5cf','#db61a2','#d29922'];
+const INF_COLOR_OTROS = '#6e7681';
+const INF_SIN_KEY = '_sin';                  // fila "Sin entregable asignado"
+
+let infProyectos = null;     // [{key, summary, entregables}]
+let infSel = null;           // épica seleccionada
+const infCache = {};         // epicKey → respuesta de la API
+
+function infLeerUltimo(){ try{ return localStorage.getItem(INF_LS_KEY); }catch(e){ return null; } }
+function infGuardarUltimo(k){ try{ localStorage.setItem(INF_LS_KEY,k); }catch(e){} }
+
+function infFmtH(seg){
+  const min=Math.round((seg||0)/60), h=Math.floor(min/60), m=min%60;
+  if(!h) return `${m} min`;
+  return m ? `${h} h ${String(m).padStart(2,'0')} min` : `${h} h`;
+}
+function infBugAbierto(b){ return b.estadoCat!=='done' && !esEstadoCerrado(b.estado); }
+
+// Estado y % de avance de un entregable
+function infAvance(e, abiertos){
+  const s=ganttNorm(e.estado);
+  if(s.includes('produccion')||e.estadoCat==='done')
+    return { pct:100, lbl:'En producción', c:'#3fb950', ord:1 };
+  if(abiertos.length){
+    const desc=abiertos.reduce((a,b)=>a+(INF_DESC_PRIO[(b.prioridad||'').toLowerCase()]??1),0);
+    return { pct:Math.max(0,INF_BASE_OBS-desc), lbl:'En levantamiento de observaciones', c:'#f0883e', ord:4 };
+  }
+  if(s.includes('uat')) return { pct:95, lbl:'Pendiente de validación usuario', c:'#a371f7', ord:2 };
+  if(s.includes('qa'))  return { pct:INF_BASE_OBS, lbl:'En pruebas QA', c:'#58a6ff', ord:3 };
+  // Antes de QA el avance sale de horas registradas / horas estimadas
+  const ratio = e.horasEstimadas>0 ? (e.segRegistrados/3600)/e.horasEstimadas : 0;
+  const pct = Math.min(INF_TOPE_DESARROLLO, Math.round(ratio*100));
+  if(s.includes('desarrollo')) return { pct, lbl:'Desarrollo', c:'#39c5cf', ord:5 };
+  if(s.includes('analisis'))   return { pct, lbl:'Análisis', c:'#8b949e', ord:6 };
+  if(s.includes('blocked')||s.includes('bloque')) return { pct, lbl:'Bloqueado', c:'#ef4444', ord:7 };
+  return { pct, lbl:'Pendiente', c:'#8b949e', ord:8 };
+}
 
 async function renderInforme(){
   const cont=document.getElementById('inf-contenido');
-  if(!epics||!epics.length){ cont.innerHTML='<div class="mt-empty">Aún no se cargó el portafolio.</div>'; return; }
-  cont.innerHTML='<div class="mt-empty">Generando informe…</div>';
-
-  // Bugs: se reutiliza lo ya cargado; si no hay, se pide una vez
-  if(!bugsData){ try{ await cargarBugsSilencioso(); }catch(e){} }
-
-  const hoy=new Date(); hoy.setHours(0,0,0,0);
-  const dias=f=>f?Math.round((new Date(f+'T00:00:00')-hoy)/86400000):null;
-
-  const act=epics.filter(e=>INF_ESTADOS_ACTIVOS.includes((e.status||'').toLowerCase())
-                         && !SPECIAL_EPIC_KEYS.includes(e.key));
-  const enPruebas=act.filter(e=>(e.status||'').toLowerCase()==='pruebas').length;
-  const enDes=act.length-enPruebas;
-  const sinFecha=act.filter(e=>!e.duedate);
-  const conFecha=act.filter(e=>e.duedate).map(e=>({...e,d:dias(e.duedate)}));
-  const vencidos=conFecha.filter(e=>e.d<0).sort((a,b)=>a.d-b.d);
-  const semana=conFecha.filter(e=>e.d>=0&&e.d<=8).sort((a,b)=>a.d-b.d);
-
-  // Excepción: vencido, o vence en ≤7 días con avance < 60%
-  const excep=[...vencidos, ...semana.filter(e=>e.d<=7&&(e.realPct||0)<0.6)]
-    .filter((v,i,a)=>a.findIndex(x=>x.key===v.key)===i);
-
-  const bugs=bugsRows||[];
-  const bugsAb=bugs.filter(b=>b.grupo!=='Cerrado');
-  const bugsSinF=bugsAb.filter(b=>!b.fin);
-  const porProy={}; bugsAb.forEach(b=>{porProy[b.proyecto]=(porProy[b.proyecto]||0)+1;});
-  const topProy=Object.entries(porProy).sort((a,b)=>b[1]-a[1])[0];
-
-  const actD=act.map(e=>({...e,d:dias(e.duedate)}));
-  const conEstado=actD.filter(e=>e.estadoProyecto)
-    // Del inicio más antiguo al más reciente; sin fecha de inicio, al final
-    .sort((a,b)=>{
-      if(!a.fechaInicio) return 1;
-      if(!b.fechaInicio) return -1;
-      return a.fechaInicio.localeCompare(b.fechaInicio);
-    });
-  const sinEstado=actD.filter(e=>!e.estadoProyecto);
-  // Los indicadores se calculan solo sobre los proyectos listados en la tabla
-  const lista=conEstado;
-  const lPruebas=lista.filter(e=>(e.status||'').toLowerCase()==='pruebas').length;
-  const lDes=lista.length-lPruebas;
-  const lSinFecha=lista.filter(e=>!e.duedate).length;
-  const lVencidos=lista.filter(e=>e.d!=null&&e.d<0).length;
-  const lSemana=lista.filter(e=>e.d!=null&&e.d>=0&&e.d<=8).length;
-  const pct=v=>v==null?'—':Math.round(v*100)+'%';
-  const kpi=(l,v,c,sub)=>`<div class="mt-kpi"><div class="mt-kpi-lbl">${l}</div>
-    <div class="mt-kpi-val" style="color:${c||'var(--text-primary)'}">${v}</div>
-    ${sub?`<div class="mt-kpi-sub">${sub}</div>`:''}</div>`;
+  if(!infProyectos){
+    cont.innerHTML='<div class="mt-empty">Cargando proyectos…</div>';
+    try{
+      const r=await Sesion.pedir('/api/jira',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({type:'informeProyectos'})});
+      const j=await r.json();
+      if(!r.ok) throw new Error(j.error||'Error de API');
+      infProyectos=(j.proyectos||[]).filter(p=>!SPECIAL_EPIC_KEYS.includes(p.key));
+    }catch(e){
+      cont.innerHTML=`<div class="mt-empty">No se pudo cargar la lista de proyectos.<br>
+        <span style="font-size:11px">${esc(e.message)}</span></div>`;
+      return;
+    }
+  }
+  if(!infSel){
+    const ult=infLeerUltimo();
+    if(ult && infProyectos.some(p=>p.key===ult)) infSel=ult;
+  }
+  const codigoDe=k=>(epics||[]).find(e=>e.key===k)?.codigo||'';
+  const opciones=infProyectos.map(p=>{
+    const cod=codigoDe(p.key);
+    return `<option value="${esc(p.key)}"${p.key===infSel?' selected':''}>${esc((cod?cod+' · ':'')+p.summary)} (${p.entregables} entregable${p.entregables===1?'':'s'})</option>`;
+  }).join('');
 
   cont.innerHTML=`
-    <div style="border-bottom:1px solid var(--border);padding-bottom:14px;margin-bottom:16px">
-      <div style="font-size:10px;color:var(--text-muted);letter-spacing:.06em">INFORME DE ESTADO · PMO TI EFLETEXIA · ${fmtD(hoy.toISOString().slice(0,10))}</div>
+    <div class="inf-barra">
+      <label class="inf-barra-l" for="inf-proy">PROYECTO</label>
+      <select id="inf-proy" class="filter-input inf-select">
+        <option value=""${infSel?'':' selected'}>Selecciona un proyecto</option>${opciones}
+      </select>
+      <button type="button" class="btn-limpiar" id="inf-actualizar" style="margin-left:0"${infSel?'':' disabled'}>Actualizar</button>
     </div>
+    <div id="inf-cuerpo"></div>`;
+  document.getElementById('inf-proy').addEventListener('change',ev=>{
+    infSel=ev.target.value||null;
+    document.getElementById('inf-actualizar').disabled=!infSel;
+    if(infSel){ infGuardarUltimo(infSel); infCargar(infSel); }
+    else infVacio();
+  });
+  document.getElementById('inf-actualizar').addEventListener('click',()=>{
+    if(!infSel) return;
+    delete infCache[infSel];
+    infCargar(infSel);
+  });
+  if(!infProyectos.length){
+    document.getElementById('inf-cuerpo').innerHTML='<div class="mt-empty">Ningún proyecto tiene historias marcadas como Entregable en Jira.</div>';
+    return;
+  }
+  if(infSel) infCargar(infSel); else infVacio();
+}
 
-    <div class="mt-kpis">
-      ${kpi('ACTIVOS',lista.length,null,`${lPruebas} pruebas · ${lDes} desarrollo`)}
-      ${kpi('VENCEN ≤8 DÍAS',lSemana,lSemana?'#F5B800':'var(--text-dim)')}
-      ${kpi('VENCIDOS',lVencidos,lVencidos?'#ef4444':'#3fb950')}
+function infVacio(){
+  const c=document.getElementById('inf-cuerpo');
+  if(c) c.innerHTML='<div class="mt-empty">Selecciona un proyecto para generar el informe.</div>';
+}
+
+async function infCargar(epicKey){
+  const cuerpo=document.getElementById('inf-cuerpo');
+  if(!infCache[epicKey]){
+    cuerpo.innerHTML='<div class="mt-empty">Generando informe…</div>';
+    try{
+      const r=await Sesion.pedir('/api/jira',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({type:'informe',epicKey})});
+      const j=await r.json();
+      if(!r.ok) throw new Error(j.error||'Error de API');
+      infCache[epicKey]=j;
+    }catch(e){
+      cuerpo.innerHTML=`<div class="mt-empty">No se pudo generar el informe.<br>
+        <span style="font-size:11px">${esc(e.message)}</span></div>`;
+      return;
+    }
+  }
+  if(infSel!==epicKey) return;              // el usuario cambió de proyecto mientras cargaba
+  cuerpo.innerHTML=infHtml(infCache[epicKey]);
+}
+
+function infHtml(d){
+  const hoy=new Date().toISOString().slice(0,10);
+  const bugs=d.bugs||[];
+  const abiertosDe=k=>bugs.filter(b=>b.entregable===k && infBugAbierto(b));
+
+  // ── 1. Avance por entregable ────────────────────────────
+  const filas=(d.entregables||[]).map(e=>{
+    const ab=abiertosDe(e.key);
+    const resp=(e.respDesarrollo&&e.respDesarrollo.length?e.respDesarrollo:(e.asignado?[e.asignado]:[]))
+      .map(n=>resolveNombreDesdeJira(n)?.nombre||n);
+    return { ...e, abiertos:ab.length, av:infAvance(e,ab), resp:resp.length?resp.join(', '):'Sin asignar' };
+  }).sort((a,b)=>b.av.pct-a.av.pct || a.av.ord-b.av.ord || a.summary.localeCompare(b.summary,'es'));
+  filas.forEach((f,i)=>{ f.clave='E'+String(i+1).padStart(2,'0'); });
+
+  const sinAb=abiertosDe(null);
+  const sinTiene=bugs.some(b=>!b.entregable) || (d.sinEntregable?.segRegistrados||0)>0;
+  const totalAb=bugs.filter(infBugAbierto).length;
+
+  const td='class="inf-td"';
+  const filasHtml=filas.map(f=>`<tr>
+      <td ${td} style="color:var(--text-muted);font-size:10.5px;white-space:nowrap">${f.clave}</td>
+      <td ${td}><a class="jlink" href="${JIRA_BASE}${f.key}" target="_blank" title="${esc(f.key)}">${esc(f.summary)}</a></td>
+      <td ${td} style="white-space:nowrap"><span style="color:${f.av.c};font-weight:600">${esc(f.av.lbl)}</span></td>
+      <td ${td} style="text-align:center;font-weight:700">${f.av.pct}%</td>
+      <td ${td} style="white-space:nowrap">${esc(f.resp)}</td>
+      <td ${td} style="text-align:center;font-weight:${f.abiertos?700:400};color:${f.abiertos?'var(--text-primary)':'var(--text-dim)'}">${f.abiertos}</td>
+    </tr>`).join('') + (sinTiene ? `<tr class="inf-fila-sin">
+      <td ${td} style="color:var(--text-muted)">—</td>
+      <td ${td}>Sin entregable asignado <span style="color:var(--text-muted);font-size:10.5px">(cuelga de la épica o de historias no entregables)</span></td>
+      <td ${td} style="color:var(--text-muted)">—</td>
+      <td ${td} style="text-align:center;color:var(--text-muted)">—</td>
+      <td ${td} style="color:var(--text-muted)">—</td>
+      <td ${td} style="text-align:center;font-weight:${sinAb.length?700:400};color:${sinAb.length?'var(--text-primary)':'var(--text-dim)'}">${sinAb.length}</td>
+    </tr>` : '');
+
+  const porEstado={};
+  filas.forEach(f=>{ porEstado[f.av.lbl]=(porEstado[f.av.lbl]||{n:0,ord:f.av.ord}); porEstado[f.av.lbl].n++; });
+  // Frase del resumen según el estado (con plural cuando corresponde)
+  const fraseEst=(l,n)=>{
+    const pl=n===1?'':'s';
+    return ({'En producción':'en producción',
+      'Pendiente de validación usuario':`pendiente${pl} de validación usuario`,
+      'En levantamiento de observaciones':'en levantamiento de observaciones',
+      'En pruebas QA':'en pruebas QA','Desarrollo':'en desarrollo','Análisis':'en análisis',
+      'Bloqueado':`bloqueado${pl}`,'Pendiente':`pendiente${pl}`})[l]||l.toLowerCase();
+  };
+  const resumenEst=Object.entries(porEstado).sort((a,b)=>a[1].ord-b[1].ord)
+    .map(([l,v])=>`${v.n} ${fraseEst(l,v.n)}`);
+  const unir=a=>a.length<=1?a.join(''):a.slice(0,-1).join(', ')+' y '+a[a.length-1];
+
+  const sec1 = filas.length ? `
+    <div class="inf-tabla-wrap"><table class="inf-tabla inf-tabla-av">
+      <thead><tr><th>CLAVE</th><th>ENTREGABLE</th><th>ESTADO</th><th style="text-align:center">% AVANCE</th>
+        <th>RESPONSABLE</th><th style="text-align:center">BUGS ABIERTOS</th></tr></thead>
+      <tbody>${filasHtml}
+        <tr class="inf-fila-total"><td colspan="5" style="text-align:right">Total</td>
+          <td style="text-align:center">${totalAb}</td></tr>
+      </tbody></table></div>
+    <p class="inf-nota">% avance: 100% corresponde al pase a producción. Sin bugs abiertos en Pruebas UAT, 95%; en Pruebas QA, ${INF_BASE_OBS}%.
+      Con bugs abiertos se parte de ${INF_BASE_OBS}% y se descuenta 5% por bug de prioridad alta, 3% por media y 1% por baja
+      (los bugs en revisión cuentan como abiertos hasta su cierre). Antes de QA, horas registradas sobre horas estimadas (máximo ${INF_TOPE_DESARROLLO}%).</p>
+    <p class="inf-p">De los ${filas.length} entregable${filas.length===1?'':'s'}, ${unir(resumenEst)}.</p>`
+    : `<div class="mt-empty" style="padding:24px 0">El proyecto no tiene historias marcadas como Entregable.</div>
+       ${sinTiene?`<p class="inf-p">Hay ${sinAb.length} bug${sinAb.length===1?'':'s'} abierto${sinAb.length===1?'':'s'} sin entregable asignado.</p>`:''}`;
+
+  // ── 2. Observaciones de pruebas (bugs) ──────────────────
+  const porEnt={};
+  bugs.filter(infBugAbierto).forEach(b=>{ const k=b.entregable||INF_SIN_KEY; porEnt[k]=(porEnt[k]||0)+1; });
+  const nombreEnt=k=>k===INF_SIN_KEY?'Sin entregable asignado':((d.entregables||[]).find(e=>e.key===k)?.summary||k);
+  let porciones=Object.entries(porEnt).map(([k,v])=>({k,lbl:nombreEnt(k),v})).sort((a,b)=>b.v-a.v||a.lbl.localeCompare(b.lbl,'es'));
+  if(porciones.length>INF_MAX_DONA){
+    const resto=porciones.slice(INF_MAX_DONA-1);
+    porciones=porciones.slice(0,INF_MAX_DONA-1)
+      .concat([{k:'_otros',lbl:`Otros (${resto.length} entregables)`,v:resto.reduce((a,x)=>a+x.v,0)}]);
+  }
+  porciones.forEach((p,i)=>{ p.c=p.k==='_otros'?INF_COLOR_OTROS:INF_COLORES[i%INF_COLORES.length]; });
+
+  const cerr=bugs.length-totalAb;
+  const prioCnt={alta:0,media:0,baja:0,sin:0};
+  const estCnt={};
+  bugs.filter(infBugAbierto).forEach(b=>{
+    const p=(b.prioridad||'').toLowerCase();
+    if(p==='highest'||p==='high') prioCnt.alta++; else if(p==='medium') prioCnt.media++;
+    else if(p==='low'||p==='lowest') prioCnt.baja++; else prioCnt.sin++;
+    estCnt[b.estado||'Sin estado']=(estCnt[b.estado||'Sin estado']||0)+1;
+  });
+  const prioTxt=[prioCnt.alta&&`${prioCnt.alta} de prioridad alta`,prioCnt.media&&`${prioCnt.media} media`,
+                 prioCnt.baja&&`${prioCnt.baja} baja`,prioCnt.sin&&`${prioCnt.sin} sin prioridad`].filter(Boolean);
+  const estTxt=Object.entries(estCnt).sort((a,b)=>b[1]-a[1]).map(([e,n])=>{
+    const t=e.toLowerCase();
+    return `<b>${n}</b> ${t.startsWith('en ')?esc(t):'en '+esc(t)}`;
+  });
+
+  const sec2 = bugs.length ? `
+    ${totalAb?infDona(porciones,totalAb):'<div class="mt-empty" style="padding:18px 0">No hay bugs abiertos.</div>'}
+    <p class="inf-p">Se tienen <b>${bugs.length} bug${bugs.length===1?'':'s'} registrado${bugs.length===1?'':'s'}</b>, de los cuales
+      <b>${cerr} ${cerr===1?'está cerrado':'están cerrados'}</b> y <b>${totalAb} abierto${totalAb===1?'':'s'}</b>${prioTxt.length?': '+unir(prioTxt):''}.
+      ${estTxt.length?`De los abiertos, ${unir(estTxt)}.`:''}</p>`
+    : '<div class="mt-empty" style="padding:18px 0">El proyecto no tiene bugs registrados.</div>';
+
+  // ── 3. Horas invertidas ──────────────────────────────────
+  const cuenta=a=>{ const r=resolveNombreDesdeJira(a); return !(r && INF_AREAS_SIN_HORAS.includes(r.area)); };
+  const nomAutor=a=>resolveNombreDesdeJira(a)?.nombre||a;
+  const horas=(d.horas||[]).filter(h=>cuenta(h.autor)).map(h=>({...h,autor:nomAutor(h.autor)}));
+  const porAutor={};
+  horas.forEach(h=>{ porAutor[h.autor]=(porAutor[h.autor]||0)+h.seg; });
+  const autores=Object.entries(porAutor).sort((a,b)=>b[1]-a[1]).map(([a])=>a);
+  const colAutor={}; autores.forEach((a,i)=>{ colAutor[a]=INF_COLORES[(i+1)%INF_COLORES.length]; });
+  const totalSeg=Object.values(porAutor).reduce((a,b)=>a+b,0);
+
+  const filasH=filas.map(f=>({k:f.key,lbl:f.summary}));
+  if(horas.some(h=>!h.entregable)) filasH.push({k:null,lbl:'Sin entregable asignado'});
+  filasH.forEach(r=>{
+    r.porAutor={};
+    horas.filter(h=>(h.entregable||null)===r.k).forEach(h=>{ r.porAutor[h.autor]=(r.porAutor[h.autor]||0)+h.seg; });
+    r.seg=Object.values(r.porAutor).reduce((a,b)=>a+b,0);
+  });
+  filasH.sort((a,b)=>b.seg-a.seg);
+  const maxSeg=Math.max(1,...filasH.map(r=>r.seg));
+  const ANCHO=320;
+  const barras=filasH.map(r=>{
+    if(!r.seg) return `<div class="inf-hrow"><div class="inf-hlbl" title="${esc(r.lbl)}">${esc(r.lbl)}</div>
+      <div class="inf-hsin">Sin horas registradas</div></div>`;
+    const segs=autores.filter(a=>r.porAutor[a]).map(a=>
+      `<span class="inf-hseg" style="width:${Math.max(3,Math.round(r.porAutor[a]/maxSeg*ANCHO))}px;background:${colAutor[a]}" title="${esc(a)}: ${infFmtH(r.porAutor[a])}"></span>`).join('');
+    return `<div class="inf-hrow"><div class="inf-hlbl" title="${esc(r.lbl)}">${esc(r.lbl)}</div>
+      <div class="inf-hbar">${segs}</div><div class="inf-hval">${infFmtH(r.seg)}</div></div>`;
+  }).join('');
+  const segEnt=filasH.filter(r=>r.k).reduce((a,r)=>a+r.seg,0), segSin=totalSeg-segEnt;
+
+  const sec3 = totalSeg ? `
+    <p class="inf-p" style="margin-top:0">A la fecha se han registrado <b>${infFmtH(totalSeg)}</b> en el proyecto: ${
+      unir(autores.map(a=>`<b>${esc(a)} ${infFmtH(porAutor[a])}</b>`))}. Por entregable, las horas se distribuyen así:</p>
+    <div class="inf-leyenda">${autores.map(a=>`<span><i style="background:${colAutor[a]}"></i>${esc(a)}</span>`).join('')}</div>
+    <div class="inf-horas">${barras}</div>
+    <p class="inf-p">Entregables: <b>${infFmtH(segEnt)}</b>${segSin?` · Sin entregable asignado: <b>${infFmtH(segSin)}</b>`:''} · Total: <b>${infFmtH(totalSeg)}</b></p>
+    <p class="inf-nota">Incluye las horas registradas en las historias, subtareas y bugs de cada entregable. No incluye horas de QA ni de gestión (áreas ${INF_AREAS_SIN_HORAS.join(', ')}).</p>`
+    : '<div class="mt-empty" style="padding:18px 0">El proyecto no tiene horas registradas.</div>';
+
+  return `
+    <div class="inf-cab">
+      <div class="inf-cab-t">${esc(d.epica.codigo?d.epica.codigo+' · ':'')}${esc(d.epica.summary)}</div>
+      <div class="inf-cab-s">INFORME DE ESTADO · <a class="jlink" href="${JIRA_BASE}${d.epica.key}" target="_blank">${esc(d.epica.key)}</a> · ${esc(d.epica.estado)} · Corte ${fmtD(hoy)}</div>
     </div>
+    <div class="mt-card"><div class="inf-sec">1. Avance por entregable</div>${sec1}</div>
+    <div class="mt-card"><div class="inf-sec">2. Observaciones de pruebas (bugs)</div>${sec2}</div>
+    <div class="mt-card"><div class="inf-sec">3. Horas invertidas</div>${sec3}</div>
+    ${d.campoEntregable?'':'<p class="inf-nota">No se encontró el campo "Entregable" en Jira.</p>'}`;
+}
 
-    <div class="mt-card">
-      <div class="mt-card-t">ESTADO DE LOS PROYECTOS ACTIVOS · ${conEstado.length}</div>
-      <div style="overflow-x:auto"><table class="inf-tabla">
-        <thead><tr>
-          <th>CÓDIGO</th><th>PROYECTO</th><th>INICIO</th><th>FIN</th>
-          <th style="text-align:right">PLAN</th><th style="text-align:right">REAL</th><th style="text-align:right">DESVÍO</th>
-          <th>ESTADO</th><th>SPONSOR</th><th>STATUS</th><th>PRÓXIMOS PASOS</th>
-        </tr></thead>
-        <tbody>${conEstado.map(e=>{
-          // Desvío en puntos porcentuales: Real % − Plan %
-          const dv = (e.planPct!=null&&e.realPct!=null)
-            ? Math.round(e.realPct*100) - Math.round(e.planPct*100) : null;
-          const adv = dv==null?null:Math.abs(dv);
-          const cDv = adv==null ? 'var(--text-dim)'
-            : adv<=5  ? '#3fb950'      // 0–5 %   verde
-            : adv<=10 ? '#F5B800'      // >5–10 % amarillo
-            : adv<=20 ? '#f0883e'      // >10–20% anaranjado
-            :           '#ef4444';     // >20 %   rojo
-          return `<tr>
-            <td style="font-weight:600;white-space:nowrap"><a class="jlink" href="${JIRA_BASE}${e.key}" target="_blank">${esc(e.codigo||e.key)}</a></td>
-            <td class="inf-td-proy" title="${esc(e.summary)}">${esc(e.summary)}</td>
-            <td style="white-space:nowrap">${e.fechaInicio?fmtD(e.fechaInicio):'—'}</td>
-            <td style="white-space:nowrap;color:${e.d!=null&&e.d<0?'#ef4444':'var(--text-primary)'}">${e.duedate?fmtD(e.duedate):'—'}</td>
-            <td style="text-align:right">${pct(e.planPct)}</td>
-            <td style="text-align:right">${pct(e.realPct)}</td>
-            <td style="text-align:right;font-weight:600;color:${cDv}">${dv==null?'—':dv+'%'}</td>
-            <td style="white-space:nowrap">${esc(e.status)}</td>
-            <td style="white-space:nowrap">${esc(e.sponsor||'—')}</td>
-            <td class="inf-td-txt">${esc(e.estadoProyecto)}</td>
-            <td class="inf-td-txt">${esc(e.proximosPasos||'—')}</td>
-          </tr>`;}).join('')}</tbody>
-      </table></div>
-
-    </div>
-
-`;
+// Dona de bugs abiertos con leyenda a la derecha (cantidad y %)
+function infDona(items, total){
+  const S=200, cx=100, cy=100, R=88, r=56;
+  let ang=-Math.PI/2, paths='';
+  const p=(rad,a)=>`${(cx+rad*Math.cos(a)).toFixed(2)} ${(cy+rad*Math.sin(a)).toFixed(2)}`;
+  items.forEach(it=>{
+    const a2=ang+Math.min(it.v/total,0.9999)*Math.PI*2, large=(a2-ang)>Math.PI?1:0;
+    paths+=`<path d="M${p(R,ang)} A${R} ${R} 0 ${large} 1 ${p(R,a2)} L${p(r,a2)} A${r} ${r} 0 ${large} 0 ${p(r,ang)} Z"
+      fill="${it.c}" stroke="var(--bg-surface)" stroke-width="2"><title>${esc(it.lbl)}: ${it.v}</title></path>`;
+    ang=a2;
+  });
+  const leyenda=items.map(it=>`<div class="inf-ley-row">
+      <i style="background:${it.c}"></i><span class="inf-ley-n" title="${esc(it.lbl)}">${esc(it.lbl)}</span>
+      <b>${it.v}</b><span class="inf-ley-p">${Math.round(it.v/total*100)}%</span></div>`).join('');
+  return `<div class="inf-dona">
+    <svg viewBox="0 0 ${S} ${S}" width="210" height="210" role="img" aria-label="${total} bugs abiertos">
+      ${paths}
+      <text x="${cx}" y="${cy+4}" text-anchor="middle" font-size="30" font-weight="700" fill="var(--text-primary)">${total}</text>
+      <text x="${cx}" y="${cy+24}" text-anchor="middle" font-size="11" fill="var(--text-muted)">bugs abiertos</text>
+    </svg>
+    <div class="inf-ley">${leyenda}</div>
+  </div>`;
 }
 
 // Carga de bugs sin tocar el panel del módulo de gestión
