@@ -934,35 +934,17 @@ async function fetchAllEpics(){
   return resp.json();
 }
 
-// ── VERSIÓN DESPLEGADA ─────────────────────────────────────
-// Al pulsar "Actualizar" se compara la versión publicada del dashboard (HTML y JS)
-// con la que está cargada; si hay un despliegue nuevo, se recarga la página para
-// mostrar los cambios de diseño y lógica, conservando la pestaña activa.
+// ── ACTUALIZAR ─────────────────────────────────────────────
+// El botón "Actualizar" recarga el dashboard completo: trae la última versión
+// publicada (diseño y lógica) y vuelve a leer los datos de Jira, conservando la
+// pestaña activa.
 const PMO_ASSETS = ()=>[location.pathname||'/', '/app.js', '/costos.js', '/sesion.js'];
 const PMO_TAB_KEY = 'pmo.tabTrasRecarga';
-let pmoVersion = null;
-async function pmoHuella(){
-  const partes = await Promise.all(PMO_ASSETS().map(async u=>{
-    try{
-      let r = await fetch(u, {method:'HEAD', cache:'no-store'});
-      if(!r.ok) r = await fetch(u, {cache:'no-store'});
-      if(!r.ok) return u+':?';
-      const h = r.headers.get('etag') || r.headers.get('last-modified') || r.headers.get('content-length');
-      if(h) return u+':'+h;
-      const t = await r.text(); return u+':'+t.length;
-    }catch(e){ return u+':?'; }
-  }));
-  return partes.join('|');
-}
-async function pmoHayVersionNueva(){
-  if(!pmoVersion) return false;
-  const antes = pmoVersion.split('|'), ahora = (await pmoHuella()).split('|');
-  // Un archivo que no respondió ahora (error de red) no cuenta como cambio
-  return ahora.some((h,i)=>!h.endsWith(':?') && h!==antes[i]);
-}
-function pmoRecargar(){
+async function pmoRecargar(){
   const tab = document.querySelector('.tabs .tab.active')?.dataset.tab;
   try{ if(tab) sessionStorage.setItem(PMO_TAB_KEY, tab); }catch(e){}
+  // Renueva la caché del navegador para que la recarga tome los archivos nuevos
+  await Promise.all(PMO_ASSETS().map(u=>fetch(u,{cache:'reload'}).catch(()=>{})));
   location.reload();
 }
 function pmoRestaurarTab(){
@@ -979,7 +961,7 @@ async function loadData(manual=false){
   const refreshBtn = document.getElementById('btn-refresh');
   if(manual){
     refreshBtn.classList.add('spinning');
-    if(await pmoHayVersionNueva()){ pmoRecargar(); return; }
+    await pmoRecargar(); return;
   }
   else { loading.classList.remove('hidden'); errorScr.classList.add('hidden'); }
   document.getElementById('loading-text').textContent='Cargando épicas desde Jira...';
@@ -1022,7 +1004,6 @@ async function loadData(manual=false){
     if(manual) infInvalidar();
     else {
       pmoRestaurarTab();
-      if(!pmoVersion) pmoHuella().then(h=>{ pmoVersion=h; });
     }
   }catch(err){
     console.error(err);
