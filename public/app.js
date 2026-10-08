@@ -3915,11 +3915,12 @@ function infHtml(d){
     const ab=abiertosDe(e.key);
     const resp=(e.respDesarrollo&&e.respDesarrollo.length?e.respDesarrollo:(e.asignado?[e.asignado]:[]))
       .map(n=>resolveNombreDesdeJira(n)?.nombre||n);
-    return { ...e, abiertos:ab.length, av:infAvance(e,ab), resp:resp.length?resp.join(', '):'Sin asignar' };
+    return { ...e, abiertos:ab.length, totalBugs:bugs.filter(b=>b.entregable===e.key).length, av:infAvance(e,ab), resp:resp.length?resp.join(', '):'Sin asignar' };
   }).sort((a,b)=>b.av.pct-a.av.pct || a.av.ord-b.av.ord || a.summary.localeCompare(b.summary,'es'));
   filas.forEach((f,i)=>{ f.clave='E'+String(i+1).padStart(2,'0'); });
 
   const sinAb=abiertosDe(null);
+  const sinTot=bugs.filter(b=>!b.entregable).length;
   const sinTiene=bugs.some(b=>!b.entregable) || (d.sinEntregable?.segRegistrados||0)>0;
   const totalAb=bugs.filter(infBugAbierto).length;
 
@@ -3930,13 +3931,15 @@ function infHtml(d){
       <td ${td} style="white-space:nowrap"><span style="color:${f.av.c};font-weight:600">${esc(f.av.lbl)}</span></td>
       <td ${td} style="text-align:center;font-weight:700">${f.av.pct}%</td>
       <td ${td} style="white-space:nowrap">${esc(f.resp)}</td>
+      <td ${td} style="text-align:center;color:${f.totalBugs?'var(--text-primary)':'var(--text-dim)'}">${f.totalBugs}</td>
       <td ${td} style="text-align:center;font-weight:${f.abiertos?700:400};color:${f.abiertos?'var(--text-primary)':'var(--text-dim)'}">${f.abiertos}</td>
     </tr>`).join('') + (sinTiene ? `<tr class="inf-fila-sin">
       <td ${td} style="color:var(--text-muted)">—</td>
-      <td ${td}>Sin entregable asignado <span style="color:var(--text-muted);font-size:10.5px">(cuelga de la épica o de historias no entregables)</span></td>
+      <td ${td}>Sin entregable asignado <span style="color:var(--text-muted);font-size:10.5px">(para asignarlos, vincula el bug a la historia entregable en Jira)</span></td>
       <td ${td} style="color:var(--text-muted)">—</td>
       <td ${td} style="text-align:center;color:var(--text-muted)">—</td>
       <td ${td} style="color:var(--text-muted)">—</td>
+      <td ${td} style="text-align:center;color:var(--text-muted)">${sinTot}</td>
       <td ${td} style="text-align:center;font-weight:${sinAb.length?700:400};color:${sinAb.length?'var(--text-primary)':'var(--text-dim)'}">${sinAb.length}</td>
     </tr>` : '');
 
@@ -3958,13 +3961,14 @@ function infHtml(d){
   const sec1 = filas.length ? `
     <div class="inf-tabla-wrap"><table class="inf-tabla inf-tabla-av">
       <thead><tr><th>CLAVE</th><th>ENTREGABLE</th><th>ESTADO</th><th style="text-align:center">% AVANCE</th>
-        <th>RESPONSABLE</th><th style="text-align:center">BUGS ABIERTOS</th></tr></thead>
+        <th>RESPONSABLE</th><th style="text-align:center">BUGS REGISTRADOS</th><th style="text-align:center">BUGS ABIERTOS</th></tr></thead>
       <tbody>${filasHtml}
         <tr class="inf-fila-total"><td colspan="5" style="text-align:right">Total</td>
+          <td style="text-align:center">${bugs.length}</td>
           <td style="text-align:center">${totalAb}</td></tr>
       </tbody></table></div>
     <p class="inf-nota">% avance: 100% corresponde al pase a producción. Un entregable sin bugs abiertos, pendiente de validación usuario y pase a producción, se considera al 95%; con observaciones parte de 90% y se descuenta 5% por bug abierto de prioridad alta, 3% por media y 1% por baja (los bugs en revisión cuentan como abiertos hasta su cierre). Los entregables no tienen fecha de vencimiento registrada en Jira, por lo que no se calcula desviación.</p>
-    <p class="inf-p">De los ${filas.length} entregable${filas.length===1?'':'s'}, ${unir(resumenEst)}.</p>`
+    <p class="inf-p">${filas.length===1?'El único entregable está':`De los ${filas.length} entregables,`} ${filas.length===1?resumenEst[0].replace(/^1 /,''):unir(resumenEst)}.</p>`
     : `<div class="mt-empty" style="padding:24px 0">El proyecto no tiene historias marcadas como Entregable.</div>
        ${sinTiene?`<p class="inf-p">Hay ${sinAb.length} bug${sinAb.length===1?'':'s'} abierto${sinAb.length===1?'':'s'} sin entregable asignado.</p>`:''}`;
 
@@ -4000,7 +4004,8 @@ function infHtml(d){
     ${totalAb?infDona(porciones,totalAb):'<div class="mt-empty" style="padding:18px 0">No hay bugs abiertos.</div>'}
     <p class="inf-p">Se tienen <b>${bugs.length} bug${bugs.length===1?'':'s'} registrado${bugs.length===1?'':'s'}</b>, de los cuales
       <b>${cerr} ${cerr===1?'está cerrado':'están cerrados'}</b> y <b>${totalAb} abierto${totalAb===1?'':'s'}</b>${prioTxt.length?': '+unir(prioTxt):''}.
-      ${estTxt.length?`De los abiertos, ${unir(estTxt)}.`:''}</p>`
+      ${estTxt.length?`De los abiertos, ${unir(estTxt)}.`:''}</p>
+    ${infListaBugs(bugs,nombreEnt)}`
     : '<div class="mt-empty" style="padding:18px 0">El proyecto no tiene bugs registrados.</div>';
 
   // ── 3. Horas invertidas ──────────────────────────────────
@@ -4051,6 +4056,26 @@ function infHtml(d){
     <div class="mt-card"><div class="inf-sec">2. Observaciones de pruebas (bugs)</div>${sec2}</div>
     <div class="mt-card"><div class="inf-sec">3. Horas invertidas</div>${sec3}</div>
     ${d.campoEntregable?'':'<p class="inf-nota">No se encontró el campo "Entregable" en Jira.</p>'}`;
+}
+
+// Detalle de bugs del proyecto: abiertos primero, luego cerrados
+function infListaBugs(bugs, nombreEnt){
+  const ordPrio=p=>({highest:1,high:2,medium:3,low:4,lowest:4})[(p||'').toLowerCase()]||5;
+  const filas=bugs.slice().sort((a,b)=>(infBugAbierto(b)-infBugAbierto(a))||ordPrio(a.prioridad)-ordPrio(b.prioridad)||a.key.localeCompare(b.key,'es',{numeric:true}))
+    .map(b=>{
+      const ab=infBugAbierto(b), pr=bgPrio(b.prioridad);
+      return `<tr${ab?'':' class="inf-bug-cerrado"'}>
+        <td class="inf-td" style="white-space:nowrap"><a class="jlink" href="${JIRA_BASE}${b.key}" target="_blank">${esc(b.key)}</a></td>
+        <td class="inf-td">${esc(b.summary)}</td>
+        <td class="inf-td">${esc(nombreEnt(b.entregable||INF_SIN_KEY))}</td>
+        <td class="inf-td" style="white-space:nowrap;color:${pr.c}">${esc(pr.lbl)}</td>
+        <td class="inf-td" style="white-space:nowrap;color:${ab?'var(--text-primary)':'#3fb950'}">${esc(b.estado)}</td>
+      </tr>`;}).join('');
+  return `<details class="inf-bugs"${bugs.length<=15?' open':''}>
+    <summary>Detalle de bugs (${bugs.length})</summary>
+    <div class="inf-tabla-wrap"><table class="inf-tabla inf-tabla-av">
+      <thead><tr><th>CLAVE</th><th>BUG</th><th>ENTREGABLE</th><th>PRIORIDAD</th><th>ESTADO</th></tr></thead>
+      <tbody>${filas}</tbody></table></div></details>`;
 }
 
 // Dona de bugs abiertos con leyenda a la derecha (cantidad y %)
