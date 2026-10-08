@@ -557,7 +557,7 @@ module.exports = async function handler(req, res) {
       }
       let CF_ENT = await idCampoEntregable(auth, JIRA_CLOUD, epicKey);
       const CAMPOS = ['summary', 'status', 'issuetype', 'parent', 'assignee', 'priority',
-                      'timespent', 'duedate',
+                      'timespent', 'duedate', 'issuelinks',
                       'customfield_10934',   // Código
                       'customfield_11136',   // Horas estimadas (enteras)
                       'customfield_11451'];  // Resp. Desarrollo (selección múltiple)
@@ -596,7 +596,7 @@ module.exports = async function handler(req, res) {
       };
       const entregableKeys = new Set(lista.filter(esHistoriaEntregable).map(i => i.key));
       // Entregable al que pertenece cada incidencia: se sube por los padres
-      const entregableDe = i => {
+      const entregablePorPadres = i => {
         let actual = i;
         for (let n = 0; n < 4 && actual; n++) {
           if (entregableKeys.has(actual.key)) return actual.key;
@@ -605,6 +605,58 @@ module.exports = async function handler(req, res) {
           actual = todos[pk];
         }
         return null;
+      };
+      // Lo que cuelga directo de la épica (p. ej. bugs registrados en la épica):
+      //  1. si está vinculado a una incidencia del proyecto, va al entregable de esa
+      //     incidencia (o queda "sin entregable" si esa incidencia no es de un entregable);
+      //  2. si su resumen menciona el nombre de un entregable, va a ese entregable;
+      //  3. si la épica tiene una sola historia y es el entregable, va a ese entregable;
+      //  4. si no, queda como "sin entregable".
+      const historiasEpica = lista.filter(i => {
+        const t = i.fields.issuetype || {};
+        return i.fields.parent?.key === epicKey && !t.subtask && t.hierarchyLevel !== 1 && !esBug(i);
+      });
+      const unicoEntregable = entregableKeys.size === 1 && historiasEpica.length === 1
+        ? [...entregableKeys][0] : null;
+      const STOP = new Set(['de', 'del', 'la', 'las', 'el', 'los', 'en', 'y', 'o', 'a', 'al',
+        'para', 'por', 'con', 'sin', 'desde', 'que', 'un', 'una', 'opcion']);
+      const tokens = txt => String(txt || '').toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/^\s*\d+\s*[.\-)]\s*/, '')
+        .split(/[^a-z0-9]+/).filter(w => w.length > 1 && !STOP.has(w));
+      const tokEnt = [...entregableKeys].map(k => ({ k, t: [...new Set(tokens(todos[k]?.fields.summary))] }))
+        .filter(e => e.t.length >= 2);
+      const entregablePorNombre = resumen => {
+        const tb = new Set(tokens(resumen));
+        let mejor = null, mejorScore = 0, empate = false;
+        tokEnt.forEach(e => {
+          const score = e.t.filter(w => tb.has(w)).length / e.t.length;
+          if (score > mejorScore) { mejor = e.k; mejorScore = score; empate = false; }
+          else if (score === mejorScore) empate = true;
+        });
+        return mejorScore >= 0.75 && !empate ? mejor : null;
+      };
+      const entregableDe = i => {
+        const porPadres = entregablePorPadres(i);
+        if (porPadres) return porPadres;
+        // Sube hasta el elemento que cuelga directo de la épica
+        let raiz = i;
+        for (let n = 0; n < 4 && raiz; n++) {
+          const pk = raiz.fields.parent?.key;
+          if (!pk || pk === epicKey) break;
+          raiz = todos[pk];
+        }
+        if (!raiz || raiz.fields.parent?.key !== epicKey) return null;
+        const t = raiz.fields.issuetype || {};
+        const esHistoria = !t.subtask && !esBug(raiz) && t.hierarchyLevel !== 1;
+        if (esHistoria) return null;          // historia no entregable: no se reasigna
+        const enlazados = (raiz.fields.issuelinks || [])
+          .map(l => (l.inwardIssue || l.outwardIssue)?.key).filter(k => k && todos[k]);
+        const vinculados = enlazados.map(k => entregablePorPadres(todos[k])).filter(Boolean);
+        if (vinculados.length) return vinculados[0];
+        // Vinculado a una historia/tarea del proyecto que no es entregable
+        if (enlazados.some(k => !esBug(todos[k]))) return null;
+        return entregablePorNombre(raiz.fields.summary) || unicoEntregable;
       };
 
       // Horas estimadas y registradas por entregable (historia + todo lo que cuelga)
