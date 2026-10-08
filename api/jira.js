@@ -564,7 +564,8 @@ module.exports = async function handler(req, res) {
       if (CF_ENT) CAMPOS.push(CF_ENT);
 
       const epicaRes = await fetchAllPages(auth, JIRA_CLOUD, `key = ${epicKey}`,
-        ['summary', 'status', 'customfield_10934', 'issuetype']);
+        ['summary', 'status', 'customfield_10934', 'issuetype',
+         'customfield_10862']);   // Próximos pasos (texto enriquecido)
       const epica = epicaRes[0];
       if (!epica) return res.status(404).json({ error: 'No se encontró el proyecto' });
 
@@ -726,7 +727,8 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({
         type: 'informe',
         epica: { key: epica.key, summary: epica.fields?.summary || epica.key,
-                 codigo: epica.fields?.customfield_10934 || '', estado: epica.fields?.status?.name || '' },
+                 codigo: epica.fields?.customfield_10934 || '', estado: epica.fields?.status?.name || '',
+                 proximosPasos: epica.fields?.customfield_10862 || null },
         campoEntregable: CF_ENT || null,
         entregables, bugs, horas,
         sinEntregable: { horasEstimadas: estPor._sin || 0, segRegistrados: segPor._sin || 0 },
