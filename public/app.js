@@ -977,6 +977,7 @@ async function loadData(manual=false){
     renderTable(mainEpics);
     updateKpis(mainEpics);
     renderSpecialSections();
+    if(manual) infInvalidar();
   }catch(err){
     console.error(err);
     loading.classList.add('hidden');
@@ -3797,6 +3798,13 @@ let infProyectos = null;     // [{key, summary, entregables}]
 let infSel = null;           // épica seleccionada
 const infCache = {};         // epicKey → respuesta de la API
 
+// El botón "Actualizar" general del dashboard también refresca el informe
+function infInvalidar(){
+  infProyectos=null;
+  Object.keys(infCache).forEach(k=>delete infCache[k]);
+  if(document.getElementById('panel-informe')?.classList.contains('active')) renderInforme();
+}
+
 function infLeerUltimo(){ try{ return localStorage.getItem(INF_LS_KEY); }catch(e){ return null; } }
 function infGuardarUltimo(k){ try{ localStorage.setItem(INF_LS_KEY,k); }catch(e){} }
 
@@ -3859,19 +3867,12 @@ async function renderInforme(){
       <select id="inf-proy" class="filter-input inf-select">
         <option value=""${infSel?'':' selected'}>Selecciona un proyecto</option>${opciones}
       </select>
-      <button type="button" class="btn-limpiar" id="inf-actualizar" style="margin-left:0"${infSel?'':' disabled'}>Actualizar</button>
     </div>
     <div id="inf-cuerpo"></div>`;
   document.getElementById('inf-proy').addEventListener('change',ev=>{
     infSel=ev.target.value||null;
-    document.getElementById('inf-actualizar').disabled=!infSel;
     if(infSel){ infGuardarUltimo(infSel); infCargar(infSel); }
     else infVacio();
-  });
-  document.getElementById('inf-actualizar').addEventListener('click',()=>{
-    if(!infSel) return;
-    delete infCache[infSel];
-    infCargar(infSel);
   });
   if(!infProyectos.length){
     document.getElementById('inf-cuerpo').innerHTML='<div class="mt-empty">Ningún proyecto tiene historias marcadas como Entregable en Jira.</div>';
@@ -4008,8 +4009,7 @@ function infHtml(d){
     ${totalAb?'':'<p class="inf-nota" style="margin-top:4px">No hay bugs abiertos: el gráfico muestra los bugs registrados (todos cerrados) por entregable.</p>'}
     <p class="inf-p">Se tienen <b>${bugs.length} bug${bugs.length===1?'':'s'} registrado${bugs.length===1?'':'s'}</b>, de los cuales
       <b>${cerr} ${cerr===1?'está cerrado':'están cerrados'}</b> y <b>${totalAb} abierto${totalAb===1?'':'s'}</b>${prioTxt.length?': '+unir(prioTxt):''}.
-      ${estTxt.length?`De los abiertos, ${unir(estTxt)}.`:''}</p>
-    ${infListaBugs(bugs,nombreEnt)}`
+      ${estTxt.length?`De los abiertos, ${unir(estTxt)}.`:''}</p>`
     : '<div class="mt-empty" style="padding:18px 0">El proyecto no tiene bugs registrados.</div>';
 
   // ── 3. Horas invertidas ──────────────────────────────────
@@ -4111,26 +4111,6 @@ function infProximosHtml(v){
   };
   const html=nodo(v);
   return html.replace(/<[^>]+>|\s|&nbsp;/g,'')?`<div class="inf-prox">${html}</div>`:'';
-}
-
-// Detalle de bugs del proyecto: abiertos primero, luego cerrados
-function infListaBugs(bugs, nombreEnt){
-  const ordPrio=p=>({highest:1,high:2,medium:3,low:4,lowest:4})[(p||'').toLowerCase()]||5;
-  const filas=bugs.slice().sort((a,b)=>(infBugAbierto(b)-infBugAbierto(a))||ordPrio(a.prioridad)-ordPrio(b.prioridad)||a.key.localeCompare(b.key,'es',{numeric:true}))
-    .map(b=>{
-      const ab=infBugAbierto(b), pr=bgPrio(b.prioridad);
-      return `<tr${ab?'':' class="inf-bug-cerrado"'}>
-        <td class="inf-td" style="white-space:nowrap"><a class="jlink" href="${JIRA_BASE}${b.key}" target="_blank">${esc(b.key)}</a></td>
-        <td class="inf-td">${esc(b.summary)}</td>
-        <td class="inf-td">${esc(nombreEnt(b.entregable||INF_SIN_KEY))}</td>
-        <td class="inf-td" style="white-space:nowrap;color:${pr.c}">${esc(pr.lbl)}</td>
-        <td class="inf-td" style="white-space:nowrap;color:${ab?'var(--text-primary)':'#3fb950'}">${esc(b.estado)}</td>
-      </tr>`;}).join('');
-  return `<details class="inf-bugs">
-    <summary>Detalle de bugs (${bugs.length})</summary>
-    <div class="inf-tabla-wrap"><table class="inf-tabla inf-tabla-av">
-      <thead><tr><th>CLAVE</th><th>BUG</th><th>ENTREGABLE</th><th>PRIORIDAD</th><th>ESTADO</th></tr></thead>
-      <tbody>${filas}</tbody></table></div></details>`;
 }
 
 // Dona de bugs con leyenda a la derecha (cantidad y %)
