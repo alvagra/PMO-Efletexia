@@ -934,11 +934,53 @@ async function fetchAllEpics(){
   return resp.json();
 }
 
+// ── VERSIÓN DESPLEGADA ─────────────────────────────────────
+// Al pulsar "Actualizar" se compara la versión publicada del dashboard (HTML y JS)
+// con la que está cargada; si hay un despliegue nuevo, se recarga la página para
+// mostrar los cambios de diseño y lógica, conservando la pestaña activa.
+const PMO_ASSETS = ()=>[location.pathname||'/', '/app.js', '/costos.js', '/sesion.js'];
+const PMO_TAB_KEY = 'pmo.tabTrasRecarga';
+let pmoVersion = null;
+async function pmoHuella(){
+  const partes = await Promise.all(PMO_ASSETS().map(async u=>{
+    try{
+      let r = await fetch(u, {method:'HEAD', cache:'no-store'});
+      if(!r.ok) r = await fetch(u, {cache:'no-store'});
+      if(!r.ok) return u+':?';
+      const h = r.headers.get('etag') || r.headers.get('last-modified') || r.headers.get('content-length');
+      if(h) return u+':'+h;
+      const t = await r.text(); return u+':'+t.length;
+    }catch(e){ return u+':?'; }
+  }));
+  return partes.join('|');
+}
+async function pmoHayVersionNueva(){
+  if(!pmoVersion) return false;
+  const antes = pmoVersion.split('|'), ahora = (await pmoHuella()).split('|');
+  // Un archivo que no respondió ahora (error de red) no cuenta como cambio
+  return ahora.some((h,i)=>!h.endsWith(':?') && h!==antes[i]);
+}
+function pmoRecargar(){
+  const tab = document.querySelector('.tabs .tab.active')?.dataset.tab;
+  try{ if(tab) sessionStorage.setItem(PMO_TAB_KEY, tab); }catch(e){}
+  location.reload();
+}
+function pmoRestaurarTab(){
+  let tab=null;
+  try{ tab = sessionStorage.getItem(PMO_TAB_KEY); sessionStorage.removeItem(PMO_TAB_KEY); }catch(e){}
+  if(!tab) return;
+  const el = document.querySelector(`.tabs .tab[data-tab="${tab}"]`);
+  if(el && !el.classList.contains('active') && el.offsetParent!==null) el.click();
+}
+
 async function loadData(manual=false){
   const loading    = document.getElementById('loading-screen');
   const errorScr   = document.getElementById('error-screen');
   const refreshBtn = document.getElementById('btn-refresh');
-  if(manual){ refreshBtn.classList.add('spinning'); }
+  if(manual){
+    refreshBtn.classList.add('spinning');
+    if(await pmoHayVersionNueva()){ pmoRecargar(); return; }
+  }
   else { loading.classList.remove('hidden'); errorScr.classList.add('hidden'); }
   document.getElementById('loading-text').textContent='Cargando épicas desde Jira...';
   try{
@@ -978,6 +1020,10 @@ async function loadData(manual=false){
     updateKpis(mainEpics);
     renderSpecialSections();
     if(manual) infInvalidar();
+    else {
+      pmoRestaurarTab();
+      if(!pmoVersion) pmoHuella().then(h=>{ pmoVersion=h; });
+    }
   }catch(err){
     console.error(err);
     loading.classList.add('hidden');
