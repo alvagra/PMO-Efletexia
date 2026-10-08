@@ -518,6 +518,168 @@ module.exports = async function handler(req, res) {
         campoEntregable: CF_ENT || null, campoInicio: CF_INI || null,
         campoFin: CF_FIN || null, type: 'seguimiento' });
 
+    } else if (type === 'informeProyectos') {
+      // Lista para el filtro de la pestaña Informe: épicas que tienen al menos
+      // una historia con Entregable = Sí. Las subtareas no cuentan.
+      let CF_ENT = await idCampoEntregable(auth, JIRA_CLOUD);
+      const CAMPOS = ['summary', 'parent', 'issuetype'];
+      if (CF_ENT) CAMPOS.push(CF_ENT);
+      const JQL = CF_ENT
+        ? `project = PTS AND issuetype not in subTaskIssueTypes() AND cf[${CF_ENT.replace('customfield_', '')}] IS NOT EMPTY`
+        : 'project = PTS AND issuetype not in subTaskIssueTypes() AND "Entregable" IS NOT EMPTY';
+      let items = await fetchAllPages(auth, JIRA_CLOUD, JQL, CAMPOS);
+      if (!CF_ENT && items.length) {
+        CF_ENT = await idCampoEntregable(auth, JIRA_CLOUD, items[0].key);
+        if (CF_ENT) { CAMPOS.push(CF_ENT); items = await fetchAllPages(auth, JIRA_CLOUD, JQL, CAMPOS); }
+      }
+      const porEpica = {};
+      items.forEach(it => {
+        const t = it.fields.issuetype || {};
+        if (t.subtask || t.hierarchyLevel === 1 || t.name === 'Epic' || t.name === 'Error') return;
+        if (!CF_ENT || !esEntregable(it.fields[CF_ENT])) return;
+        const p = it.fields.parent;
+        if (!p?.key) return;
+        if (!porEpica[p.key]) porEpica[p.key] = { key: p.key, summary: p.fields?.summary || p.key, entregables: 0 };
+        porEpica[p.key].entregables += 1;
+      });
+      const proyectos = Object.values(porEpica).sort((a, b) => a.summary.localeCompare(b.summary, 'es'));
+      return res.status(200).json({ proyectos, campoEntregable: CF_ENT || null, type: 'informeProyectos' });
+
+    } else if (type === 'informe') {
+      // Informe individual de un proyecto (épica):
+      //  · Entregables = historias de la épica con Entregable = Sí.
+      //  · Bugs, subtareas y horas se asignan al entregable del que cuelgan
+      //    (directo o a través de un bug/subtarea intermedia). Lo que cuelga de
+      //    la épica o de una historia no entregable queda "sin entregable".
+      const { epicKey } = req.body || {};
+      if (!epicKey || !/^[A-Z][A-Z0-9]*-\d+$/.test(String(epicKey))) {
+        return res.status(400).json({ error: 'epicKey inválido' });
+      }
+      let CF_ENT = await idCampoEntregable(auth, JIRA_CLOUD, epicKey);
+      const CAMPOS = ['summary', 'status', 'issuetype', 'parent', 'assignee', 'priority',
+                      'timespent', 'duedate',
+                      'customfield_10934',   // Código
+                      'customfield_11136',   // Horas estimadas (enteras)
+                      'customfield_11451'];  // Resp. Desarrollo (selección múltiple)
+      if (CF_ENT) CAMPOS.push(CF_ENT);
+
+      const epicaRes = await fetchAllPages(auth, JIRA_CLOUD, `key = ${epicKey}`,
+        ['summary', 'status', 'customfield_10934', 'issuetype']);
+      const epica = epicaRes[0];
+      if (!epica) return res.status(404).json({ error: 'No se encontró el proyecto' });
+
+      // Descendientes por niveles: hijos de la épica, nietos y bisnietos
+      // (p. ej. Épica → Historia → Bug → Subtarea del bug).
+      const todos = {};
+      let nivel = await fetchAllPages(auth, JIRA_CLOUD,
+        `project = PTS AND parent = ${epicKey} ORDER BY created ASC`, CAMPOS);
+      for (let profundidad = 0; profundidad < 3 && nivel.length; profundidad++) {
+        nivel.forEach(i => { todos[i.key] = i; });
+        if (profundidad === 2) break;
+        const keys = nivel.map(i => i.key);
+        let siguiente = [];
+        for (let i = 0; i < keys.length; i += 50) {
+          const chunk = keys.slice(i, i + 50);
+          const hijos = await fetchAllPages(auth, JIRA_CLOUD,
+            `project = PTS AND parent in (${chunk.join(',')}) ORDER BY created ASC`, CAMPOS);
+          siguiente = siguiente.concat(hijos);
+        }
+        nivel = siguiente.filter(i => !todos[i.key]);
+      }
+      const lista = Object.values(todos);
+
+      const esBug = i => i.fields.issuetype?.name === 'Error';
+      const esHistoriaEntregable = i => {
+        const t = i.fields.issuetype || {};
+        if (t.subtask || t.hierarchyLevel === 1 || t.name === 'Epic' || esBug(i)) return false;
+        return i.fields.parent?.key === epicKey && !!CF_ENT && esEntregable(i.fields[CF_ENT]);
+      };
+      const entregableKeys = new Set(lista.filter(esHistoriaEntregable).map(i => i.key));
+      // Entregable al que pertenece cada incidencia: se sube por los padres
+      const entregableDe = i => {
+        let actual = i;
+        for (let n = 0; n < 4 && actual; n++) {
+          if (entregableKeys.has(actual.key)) return actual.key;
+          const pk = actual.fields.parent?.key;
+          if (!pk || pk === epicKey) return null;
+          actual = todos[pk];
+        }
+        return null;
+      };
+
+      // Horas estimadas y registradas por entregable (historia + todo lo que cuelga)
+      const estPor = {}, segPor = {};
+      lista.forEach(i => {
+        const ek = entregableDe(i) || '_sin';
+        estPor[ek] = (estPor[ek] || 0) + (Number(i.fields.customfield_11136) || 0);
+        segPor[ek] = (segPor[ek] || 0) + (i.fields.timespent || 0);
+      });
+
+      const respDe = f => (Array.isArray(f.customfield_11451) ? f.customfield_11451 : [])
+        .map(o => (o && (o.value || o.name || o.displayName)) || '').filter(Boolean);
+      const entregables = lista.filter(i => entregableKeys.has(i.key)).map(i => ({
+        key: i.key,
+        summary: i.fields.summary || i.key,
+        estado: i.fields.status?.name || '',
+        estadoCat: i.fields.status?.statusCategory?.key || '',
+        respDesarrollo: respDe(i.fields),
+        asignado: i.fields.assignee?.displayName || null,
+        vence: i.fields.duedate || null,
+        horasEstimadas: estPor[i.key] || 0,
+        segRegistrados: segPor[i.key] || 0,
+      }));
+      const bugs = lista.filter(esBug).map(i => ({
+        key: i.key,
+        summary: i.fields.summary || i.key,
+        estado: i.fields.status?.name || '',
+        estadoCat: i.fields.status?.statusCategory?.key || '',
+        prioridad: i.fields.priority?.name || null,
+        asignado: i.fields.assignee?.displayName || null,
+        entregable: entregableDe(i),
+      }));
+
+      // Horas por persona y entregable, desde el registro de actividad (worklogs)
+      const traerWorklogs = async key => {
+        let startAt = 0, todosW = [];
+        for (let vuelta = 0; vuelta < 20; vuelta++) {
+          const r = await jiraGet(auth, JIRA_CLOUD,
+            `/rest/api/3/issue/${key}/worklog?startAt=${startAt}&maxResults=1000`);
+          if (r.status !== 200) break;
+          const w = r.body.worklogs || [];
+          todosW = todosW.concat(w);
+          startAt += w.length;
+          if (!w.length || startAt >= (r.body.total || 0)) break;
+        }
+        return todosW;
+      };
+      const conHoras = lista.filter(i => (i.fields.timespent || 0) > 0);
+      const acum = {};   // "entregable|autor" → segundos
+      for (let i = 0; i < conHoras.length; i += 10) {
+        const lote = conHoras.slice(i, i + 10);
+        const logs = await Promise.all(lote.map(x => traerWorklogs(x.key).catch(() => [])));
+        lote.forEach((x, idx) => {
+          const ek = entregableDe(x) || '';
+          logs[idx].forEach(w => {
+            const autor = w.author?.displayName || 'Sin autor';
+            const k = `${ek}|${autor}`;
+            acum[k] = (acum[k] || 0) + (w.timeSpentSeconds || 0);
+          });
+        });
+      }
+      const horas = Object.entries(acum).map(([k, seg]) => {
+        const [ek, autor] = k.split('|');
+        return { entregable: ek || null, autor, seg };
+      });
+
+      return res.status(200).json({
+        type: 'informe',
+        epica: { key: epica.key, summary: epica.fields?.summary || epica.key,
+                 codigo: epica.fields?.customfield_10934 || '', estado: epica.fields?.status?.name || '' },
+        campoEntregable: CF_ENT || null,
+        entregables, bugs, horas,
+        sinEntregable: { horasEstimadas: estPor._sin || 0, segRegistrados: segPor._sin || 0 },
+      });
+
     } else if (type === 'bugs') {
       // Módulo de gestión de bugs: todos los Errores del proyecto con su épica,
       // fechas, horas estimadas y horas registradas (propias + de sus subtareas).
