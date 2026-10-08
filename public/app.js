@@ -3963,9 +3963,7 @@ function infHtml(d){
         <tr class="inf-fila-total"><td colspan="5" style="text-align:right">Total</td>
           <td style="text-align:center">${totalAb}</td></tr>
       </tbody></table></div>
-    <p class="inf-nota">% avance: 100% corresponde al pase a producción. Sin bugs abiertos en Pruebas UAT, 95%; en Pruebas QA, ${INF_BASE_OBS}%.
-      Con bugs abiertos se parte de ${INF_BASE_OBS}% y se descuenta 5% por bug de prioridad alta, 3% por media y 1% por baja
-      (los bugs en revisión cuentan como abiertos hasta su cierre). Antes de QA, horas registradas sobre horas estimadas (máximo ${INF_TOPE_DESARROLLO}%).</p>
+    <p class="inf-nota">% avance: 100% corresponde al pase a producción. Un entregable sin bugs abiertos, pendiente de validación usuario y pase a producción, se considera al 95%; con observaciones parte de 90% y se descuenta 5% por bug abierto de prioridad alta, 3% por media y 1% por baja (los bugs en revisión cuentan como abiertos hasta su cierre). Los entregables no tienen fecha de vencimiento registrada en Jira, por lo que no se calcula desviación.</p>
     <p class="inf-p">De los ${filas.length} entregable${filas.length===1?'':'s'}, ${unir(resumenEst)}.</p>`
     : `<div class="mt-empty" style="padding:24px 0">El proyecto no tiene historias marcadas como Entregable.</div>
        ${sinTiene?`<p class="inf-p">Hay ${sinAb.length} bug${sinAb.length===1?'':'s'} abierto${sinAb.length===1?'':'s'} sin entregable asignado.</p>`:''}`;
