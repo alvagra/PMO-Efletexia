@@ -3973,8 +3973,11 @@ function infHtml(d){
        ${sinTiene?`<p class="inf-p">Hay ${sinAb.length} bug${sinAb.length===1?'':'s'} abierto${sinAb.length===1?'':'s'} sin entregable asignado.</p>`:''}`;
 
   // ── 2. Observaciones de pruebas (bugs) ──────────────────
+  // La dona muestra los bugs abiertos; si no hay abiertos, muestra los registrados
+  const bugsDona=totalAb?bugs.filter(infBugAbierto):bugs;
+  const totalDona=bugsDona.length;
   const porEnt={};
-  bugs.filter(infBugAbierto).forEach(b=>{ const k=b.entregable||INF_SIN_KEY; porEnt[k]=(porEnt[k]||0)+1; });
+  bugsDona.forEach(b=>{ const k=b.entregable||INF_SIN_KEY; porEnt[k]=(porEnt[k]||0)+1; });
   const nombreEnt=k=>k===INF_SIN_KEY?'Sin entregable asignado':((d.entregables||[]).find(e=>e.key===k)?.summary||k);
   let porciones=Object.entries(porEnt).map(([k,v])=>({k,lbl:nombreEnt(k),v})).sort((a,b)=>b.v-a.v||a.lbl.localeCompare(b.lbl,'es'));
   if(porciones.length>INF_MAX_DONA){
@@ -4001,7 +4004,8 @@ function infHtml(d){
   });
 
   const sec2 = bugs.length ? `
-    ${totalAb?infDona(porciones,totalAb):'<div class="mt-empty" style="padding:18px 0">No hay bugs abiertos.</div>'}
+    ${infDona(porciones,totalDona,totalAb?'bugs abiertos':`bug${totalDona===1?'':'s'} registrado${totalDona===1?'':'s'}`)}
+    ${totalAb?'':'<p class="inf-nota" style="margin-top:4px">No hay bugs abiertos: el gráfico muestra los bugs registrados (todos cerrados) por entregable.</p>'}
     <p class="inf-p">Se tienen <b>${bugs.length} bug${bugs.length===1?'':'s'} registrado${bugs.length===1?'':'s'}</b>, de los cuales
       <b>${cerr} ${cerr===1?'está cerrado':'están cerrados'}</b> y <b>${totalAb} abierto${totalAb===1?'':'s'}</b>${prioTxt.length?': '+unir(prioTxt):''}.
       ${estTxt.length?`De los abiertos, ${unir(estTxt)}.`:''}</p>
@@ -4055,7 +4059,58 @@ function infHtml(d){
     <div class="mt-card"><div class="inf-sec">1. Avance por entregable</div>${sec1}</div>
     <div class="mt-card"><div class="inf-sec">2. Observaciones de pruebas (bugs)</div>${sec2}</div>
     <div class="mt-card"><div class="inf-sec">3. Horas invertidas</div>${sec3}</div>
+    <div class="mt-card"><div class="inf-sec">4. Próximos pasos</div>${
+      infProximosHtml(d.epica.proximosPasos)||`<div class="mt-empty" style="padding:18px 0">El proyecto no tiene próximos pasos registrados en Jira.</div>`}</div>
     ${d.campoEntregable?'':'<p class="inf-nota">No se encontró el campo "Entregable" en Jira.</p>'}`;
+}
+
+// Próximos pasos de la épica (campo "Próximos pasos", ADF o texto) → HTML
+function infProximosHtml(v){
+  if(!v) return '';
+  if(typeof v==='string'){
+    const lineas=v.split(/\r?\n/).map(l=>l.trimEnd()).filter(l=>l.trim());
+    if(!lineas.length) return '';
+    let html='', enLista=false;
+    const inline=t=>esc(t).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>');
+    lineas.forEach(l=>{
+      const m=l.match(/^\s*(?:[*\-•]|\d+[.)])\s+(.*)$/);
+      if(m){ if(!enLista){html+='<ul>';enLista=true;} html+=`<li>${inline(m[1])}</li>`; }
+      else { if(enLista){html+='</ul>';enLista=false;} html+=`<p>${inline(l)}</p>`; }
+    });
+    if(enLista) html+='</ul>';
+    return `<div class="inf-prox">${html}</div>`;
+  }
+  const nodo=n=>{
+    if(!n) return '';
+    const hijos=()=>(n.content||[]).map(nodo).join('');
+    switch(n.type){
+      case 'doc': return hijos();
+      case 'paragraph': return `<p>${hijos()}</p>`;
+      case 'heading': return `<p><b>${hijos()}</b></p>`;
+      case 'bulletList': return `<ul>${hijos()}</ul>`;
+      case 'orderedList': return `<ol>${hijos()}</ol>`;
+      case 'listItem': return `<li>${hijos()}</li>`;
+      case 'hardBreak': return '<br>';
+      case 'mention': return `<b>${esc((n.attrs?.text||'').startsWith('@')?n.attrs.text:'@'+(n.attrs?.text||''))}</b>`;
+      case 'emoji': return esc(n.attrs?.text||n.attrs?.shortName||'');
+      case 'inlineCard': case 'blockCard': {
+        const u=n.attrs?.url||''; return /^https?:\/\//.test(u)?`<a class="jlink" href="${esc(u)}" target="_blank">${esc(u)}</a>`:'';
+      }
+      case 'text': {
+        let t=esc(n.text||'');
+        (n.marks||[]).forEach(m=>{
+          if(m.type==='strong') t=`<b>${t}</b>`;
+          else if(m.type==='em') t=`<i>${t}</i>`;
+          else if(m.type==='underline') t=`<u>${t}</u>`;
+          else if(m.type==='link'&&/^https?:\/\//.test(m.attrs?.href||'')) t=`<a class="jlink" href="${esc(m.attrs.href)}" target="_blank">${t}</a>`;
+        });
+        return t;
+      }
+      default: return hijos();
+    }
+  };
+  const html=nodo(v);
+  return html.replace(/<[^>]+>|\s|&nbsp;/g,'')?`<div class="inf-prox">${html}</div>`:'';
 }
 
 // Detalle de bugs del proyecto: abiertos primero, luego cerrados
@@ -4071,19 +4126,21 @@ function infListaBugs(bugs, nombreEnt){
         <td class="inf-td" style="white-space:nowrap;color:${pr.c}">${esc(pr.lbl)}</td>
         <td class="inf-td" style="white-space:nowrap;color:${ab?'var(--text-primary)':'#3fb950'}">${esc(b.estado)}</td>
       </tr>`;}).join('');
-  return `<details class="inf-bugs"${bugs.length<=15?' open':''}>
+  return `<details class="inf-bugs">
     <summary>Detalle de bugs (${bugs.length})</summary>
     <div class="inf-tabla-wrap"><table class="inf-tabla inf-tabla-av">
       <thead><tr><th>CLAVE</th><th>BUG</th><th>ENTREGABLE</th><th>PRIORIDAD</th><th>ESTADO</th></tr></thead>
       <tbody>${filas}</tbody></table></div></details>`;
 }
 
-// Dona de bugs abiertos con leyenda a la derecha (cantidad y %)
-function infDona(items, total){
+// Dona de bugs con leyenda a la derecha (cantidad y %)
+function infDona(items, total, subtitulo='bugs abiertos'){
   const S=200, cx=100, cy=100, R=88, r=56;
   let ang=-Math.PI/2, paths='';
   const p=(rad,a)=>`${(cx+rad*Math.cos(a)).toFixed(2)} ${(cy+rad*Math.sin(a)).toFixed(2)}`;
-  items.forEach(it=>{
+  if(items.length===1) paths=`<circle cx="${cx}" cy="${cy}" r="${(R+r)/2}" fill="none" stroke="${items[0].c}"
+      stroke-width="${R-r}"><title>${esc(items[0].lbl)}: ${items[0].v}</title></circle>`;
+  else items.forEach(it=>{
     const a2=ang+Math.min(it.v/total,0.9999)*Math.PI*2, large=(a2-ang)>Math.PI?1:0;
     paths+=`<path d="M${p(R,ang)} A${R} ${R} 0 ${large} 1 ${p(R,a2)} L${p(r,a2)} A${r} ${r} 0 ${large} 0 ${p(r,ang)} Z"
       fill="${it.c}" stroke="var(--bg-surface)" stroke-width="2"><title>${esc(it.lbl)}: ${it.v}</title></path>`;
@@ -4093,10 +4150,10 @@ function infDona(items, total){
       <i style="background:${it.c}"></i><span class="inf-ley-n" title="${esc(it.lbl)}">${esc(it.lbl)}</span>
       <b>${it.v}</b><span class="inf-ley-p">${Math.round(it.v/total*100)}%</span></div>`).join('');
   return `<div class="inf-dona">
-    <svg viewBox="0 0 ${S} ${S}" width="210" height="210" role="img" aria-label="${total} bugs abiertos">
+    <svg viewBox="0 0 ${S} ${S}" width="210" height="210" role="img" aria-label="${total} ${subtitulo}">
       ${paths}
       <text x="${cx}" y="${cy+4}" text-anchor="middle" font-size="30" font-weight="700" fill="var(--text-primary)">${total}</text>
-      <text x="${cx}" y="${cy+24}" text-anchor="middle" font-size="11" fill="var(--text-muted)">bugs abiertos</text>
+      <text x="${cx}" y="${cy+24}" text-anchor="middle" font-size="11" fill="var(--text-muted)">${subtitulo}</text>
     </svg>
     <div class="inf-ley">${leyenda}</div>
   </div>`;
