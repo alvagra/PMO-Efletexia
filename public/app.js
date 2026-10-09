@@ -3874,6 +3874,39 @@ function infEstadoJira(e){
   return { lbl, c:'#8b949e', ord:8 };
 }
 
+// Especificación del entregable según el estado de su historia y los bugs del proyecto
+// (documento "Informe - PMO Dashboard"). resp = campo de Jira del que sale el responsable.
+//  Backlog/creada → Pendiente · Análisis → En análisis (Resp. Análisis)
+//  Desarrollo → En desarrollo (Resp. Desarrollo) · Pruebas QA → Validación QA (Resp. QA)
+//  Pruebas UAT → Validación de usuario (Resp. UAT)
+//  Pruebas QA/UAT con algún bug del proyecto en Tareas por hacer, En curso u Observado
+//    → Corrección de observaciones (Resp. Desarrollo)
+//  Pruebas QA/UAT con todos los bugs no cerrados En revisión → En revisión de observaciones (Resp. QA)
+//  Producción → En producción (Resp. Producción)
+//  Marcha blanca → Soporte y seguimiento, medición en operación
+function infEspecificacion(e, bugsProyecto){
+  const s=ganttNorm(e.estado);
+  if(s.includes('marcha blanca')) return { lbl:'Soporte y seguimiento, medición en operación', c:'#3fb950', resp:null };
+  if(s.includes('produccion')) return { lbl:'En producción', c:'#3fb950', resp:'respProduccion' };
+  const enQA=s.includes('qa'), enUAT=s.includes('uat');
+  if(enQA||enUAT){
+    const noCerrados=(bugsProyecto||[]).filter(infBugAbierto);
+    const enCorreccion=noCerrados.some(b=>{
+      const t=ganttNorm(b.estado);
+      return t==='tareas por hacer'||t==='en curso'||t.startsWith('observ');
+    });
+    if(enCorreccion) return { lbl:'Corrección de observaciones', c:'#f0883e', resp:'respDesarrollo' };
+    if(noCerrados.length && noCerrados.every(b=>ganttNorm(b.estado).includes('revision')))
+      return { lbl:'En revisión de observaciones', c:'#d29922', resp:'respQA' };
+    return enUAT ? { lbl:'Validación de usuario', c:'#a371f7', resp:'respUAT' }
+                 : { lbl:'Validación QA', c:'#58a6ff', resp:'respQA' };
+  }
+  if(s.includes('desarrollo')) return { lbl:'En desarrollo', c:'#39c5cf', resp:'respDesarrollo' };
+  if(s.includes('analisis'))   return { lbl:'En análisis', c:'#d29922', resp:'respAnalisis' };
+  if(s.includes('blocked')||s.includes('bloque')) return { lbl:'Bloqueado', c:'#ef4444', resp:null };
+  return { lbl:'Pendiente', c:'#8b949e', resp:null };
+}
+
 async function renderInforme(){
   const cont=document.getElementById('inf-contenido');
   if(!infProyectos){
@@ -3953,9 +3986,13 @@ function infHtml(d){
   // ── 1. Avance por entregable ────────────────────────────
   const filas=(d.entregables||[]).map(e=>{
     const ab=abiertosDe(e.key);
-    const resp=(e.respDesarrollo&&e.respDesarrollo.length?e.respDesarrollo:(e.asignado?[e.asignado]:[]))
+    const esp=infEspecificacion(e,bugs);
+    // Responsable: el campo de Jira que corresponde a la especificación;
+    // en etapas sin campo (Pendiente, Bloqueado, Marcha blanca) se mantiene Resp. Desarrollo o el asignado
+    const resp=(esp.resp ? (e[esp.resp]||[])
+      : (e.respDesarrollo&&e.respDesarrollo.length?e.respDesarrollo:(e.asignado?[e.asignado]:[])))
       .map(n=>resolveNombreDesdeJira(n)?.nombre||n);
-    return { ...e, abiertos:ab.length, totalBugs:bugs.filter(b=>b.entregable===e.key).length, av:infAvance(e,ab), est:infEstadoJira(e), resp:resp.length?resp.join(', '):'Sin asignar' };
+    return { ...e, abiertos:ab.length, totalBugs:bugs.filter(b=>b.entregable===e.key).length, av:infAvance(e,ab), est:infEstadoJira(e), esp, resp:resp.length?resp.join(', '):'Sin asignar' };
   }).sort((a,b)=>(a.vence?0:1)-(b.vence?0:1) || (a.vence||'').localeCompare(b.vence||'')
                  || b.av.pct-a.av.pct || a.summary.localeCompare(b.summary,'es'));
 
@@ -3980,6 +4017,7 @@ function infHtml(d){
       <td ${td} style="white-space:nowrap"><a class="jlink" href="${JIRA_BASE}${f.key}" target="_blank">${esc(f.key)}</a></td>
       <td ${td}>${esc(f.summary)}</td>
       <td ${td} style="white-space:nowrap"><span style="color:${f.est.c};font-weight:600">${esc(f.est.lbl)}</span></td>
+      <td ${td}><span style="color:${f.esp.c};font-weight:600">${esc(f.esp.lbl)}</span></td>
       <td ${td} style="text-align:center;font-weight:700">${f.av.pct}%</td>
       <td ${td} style="white-space:nowrap">${esc(f.resp)}</td>
       <td ${td} style="text-align:center;white-space:nowrap">${f.vence?fmtVence(f.vence):'–'}</td>
@@ -4003,7 +4041,7 @@ function infHtml(d){
 
   const sec1 = filas.length ? `
     <div class="inf-tabla-wrap"><table class="inf-tabla inf-tabla-av inf-tabla-ent">
-      <thead><tr><th>Clave</th><th>Entregable</th><th>Estado</th><th style="text-align:center">% Avance</th>
+      <thead><tr><th>Clave</th><th>Entregable</th><th>Estado</th><th>Especificación</th><th style="text-align:center">% Avance</th>
         <th>Responsable</th><th style="text-align:center">Vence</th><th style="text-align:center">Desviación</th></tr></thead>
       <tbody>${filasHtml}</tbody></table></div>
     <p class="inf-nota">% avance: 100% corresponde al pase a producción. Un entregable sin bugs abiertos, pendiente de validación usuario y pase a producción, se considera al 95%; con observaciones parte de 90% y se descuenta 5% por bug abierto de prioridad alta, 3% por media y 1% por baja (los bugs en revisión cuentan como abiertos hasta su cierre). ${hayFechas?'Desviación: días entre la fecha de vencimiento del entregable en Jira y la fecha de corte (negativo = vencido).':'Los entregables no tienen fecha de vencimiento registrada en Jira, por lo que no se calcula desviación.'}</p>
