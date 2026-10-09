@@ -562,6 +562,18 @@ module.exports = async function handler(req, res) {
                       'customfield_11136',   // Horas estimadas (enteras)
                       'customfield_11451'];  // Resp. Desarrollo (selección múltiple)
       if (CF_ENT) CAMPOS.push(CF_ENT);
+      // Responsables por etapa del entregable (se resuelven por nombre del campo)
+      const idPrimero = async nombres => {
+        for (const n of nombres) { const id = await idCampoPorNombre(auth, JIRA_CLOUD, n); if (id) return id; }
+        return null;
+      };
+      const CF_RESP = {
+        analisis:   await idPrimero(['Resp. Análisis', 'Resp Análisis', 'Responsable Análisis']),
+        qa:         await idPrimero(['Resp. QA', 'Resp QA', 'Responsable QA']),
+        uat:        await idPrimero(['Resp. UAT', 'Resp UAT', 'Responsable UAT']),
+        produccion: await idPrimero(['Resp. Producción', 'Resp Producción', 'Responsable Producción']),
+      };
+      Object.values(CF_RESP).forEach(id => { if (id && !CAMPOS.includes(id)) CAMPOS.push(id); });
 
       const epicaRes = await fetchAllPages(auth, JIRA_CLOUD, `key = ${epicKey}`,
         ['summary', 'status', 'customfield_10934', 'issuetype',
@@ -668,14 +680,22 @@ module.exports = async function handler(req, res) {
         segPor[ek] = (segPor[ek] || 0) + (i.fields.timespent || 0);
       });
 
-      const respDe = f => (Array.isArray(f.customfield_11451) ? f.customfield_11451 : [])
-        .map(o => (o && (o.value || o.name || o.displayName)) || '').filter(Boolean);
+      // Nombres de un campo de responsable: lista, opción única, usuario o texto
+      const nombresDe = v => (Array.isArray(v) ? v : (v ? [v] : []))
+        .map(o => (typeof o === 'string' ? o : (o && (o.value || o.name || o.displayName))) || '')
+        .map(t => String(t).trim()).filter(Boolean);
+      const respDe = f => nombresDe(f.customfield_11451);
+      const respCampo = (f, id) => (id ? nombresDe(f[id]) : []);
       const entregables = lista.filter(i => entregableKeys.has(i.key)).map(i => ({
         key: i.key,
         summary: i.fields.summary || i.key,
         estado: i.fields.status?.name || '',
         estadoCat: i.fields.status?.statusCategory?.key || '',
         respDesarrollo: respDe(i.fields),
+        respAnalisis: respCampo(i.fields, CF_RESP.analisis),
+        respQA: respCampo(i.fields, CF_RESP.qa),
+        respUAT: respCampo(i.fields, CF_RESP.uat),
+        respProduccion: respCampo(i.fields, CF_RESP.produccion),
         asignado: i.fields.assignee?.displayName || null,
         vence: i.fields.duedate || null,
         horasEstimadas: estPor[i.key] || 0,
@@ -730,6 +750,7 @@ module.exports = async function handler(req, res) {
                  codigo: epica.fields?.customfield_10934 || '', estado: epica.fields?.status?.name || '',
                  proximosPasos: epica.fields?.customfield_10862 || null },
         campoEntregable: CF_ENT || null,
+        camposResponsable: CF_RESP,
         entregables, bugs, horas,
         sinEntregable: { horasEstimadas: estPor._sin || 0, segRegistrados: segPor._sin || 0 },
       });
