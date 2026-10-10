@@ -3946,7 +3946,12 @@ function avLineal(v,f){
   const tot=avHabiles(a,b);
   return tot ? Math.min(100, avHabiles(a,f)/tot*100) : 100;
 }
-const avEsSubPruebas = st => /\[(qa|uat)\]/i.test(st.summary||'');
+// Subtareas de fase (no son trabajo de desarrollo): "Análisis …", "Pruebas QA …",
+// "Pruebas UAT …", "Pase a producción …", o con [QA]/[UAT] en el nombre
+const avEsSubPruebas = st => {
+  const t=ganttNorm(st.summary);
+  return /\[(qa|uat)\]/.test(t) || /^(analisis|pruebas? (de )?(qa|uat)|pase a produccion)\b/.test(t);
+};
 const avSubDev = e => (e.subtareas||[]).filter(st=>!avEsSubPruebas(st));
 const avSubCerrada = st => st.estadoCat==='done' || esEstadoCerrado(st.estado);
 
