@@ -574,6 +574,17 @@ module.exports = async function handler(req, res) {
         produccion: await idPrimero(['Resp. Producción', 'Resp Producción', 'Responsable Producción']),
       };
       Object.values(CF_RESP).forEach(id => { if (id && !CAMPOS.includes(id)) CAMPOS.push(id); });
+      // Campos del % de avance por fase (se resuelven por nombre; pueden no existir aún)
+      const CF_AV = {
+        analisis:     await idPrimero(['Entregables de análisis', 'Entregables de analisis']),
+        qaTotal:      await idPrimero(['Casos QA total', 'Casos QA totales']),
+        qaConformes:  await idPrimero(['Casos QA conformes']),
+        uatTotal:     await idPrimero(['Casos UAT total', 'Casos UAT totales']),
+        uatConformes: await idPrimero(['Casos UAT conformes']),
+        finQA:        await idPrimero(['Fecha fin QA']),
+      };
+      ['customfield_10015'].concat(Object.values(CF_AV))   // 10015 = Fecha de inicio
+        .forEach(id => { if (id && !CAMPOS.includes(id)) CAMPOS.push(id); });
 
       const epicaRes = await fetchAllPages(auth, JIRA_CLOUD, `key = ${epicKey}`,
         ['summary', 'status', 'customfield_10934', 'issuetype',
@@ -686,6 +697,17 @@ module.exports = async function handler(req, res) {
         .map(t => String(t).trim()).filter(Boolean);
       const respDe = f => nombresDe(f.customfield_11451);
       const respCampo = (f, id) => (id ? nombresDe(f[id]) : []);
+      // Subtareas directas de cada entregable (para % Desarrollo y plan)
+      const subtareasDe = k => lista.filter(x => x.fields.issuetype?.subtask && x.fields.parent?.key === k)
+        .map(x => ({
+          key: x.key,
+          summary: x.fields.summary || x.key,
+          estado: x.fields.status?.name || '',
+          estadoCat: x.fields.status?.statusCategory?.key || '',
+          inicio: x.fields.customfield_10015 || null,
+          vence: x.fields.duedate || null,
+        }));
+      const num = v => (v === null || v === undefined || v === '' ? null : Number(v));
       const entregables = lista.filter(i => entregableKeys.has(i.key)).map(i => ({
         key: i.key,
         summary: i.fields.summary || i.key,
@@ -696,6 +718,15 @@ module.exports = async function handler(req, res) {
         respQA: respCampo(i.fields, CF_RESP.qa),
         respUAT: respCampo(i.fields, CF_RESP.uat),
         respProduccion: respCampo(i.fields, CF_RESP.produccion),
+        // Avance por fases
+        inicio: i.fields.customfield_10015 || null,
+        finQA: CF_AV.finQA ? (i.fields[CF_AV.finQA] || null) : null,
+        analisis: CF_AV.analisis ? nombresDe(i.fields[CF_AV.analisis]) : null,   // null = campo no existe
+        casosQA:  { total: CF_AV.qaTotal ? num(i.fields[CF_AV.qaTotal]) : null,
+                    conformes: CF_AV.qaConformes ? num(i.fields[CF_AV.qaConformes]) : null },
+        casosUAT: { total: CF_AV.uatTotal ? num(i.fields[CF_AV.uatTotal]) : null,
+                    conformes: CF_AV.uatConformes ? num(i.fields[CF_AV.uatConformes]) : null },
+        subtareas: subtareasDe(i.key),
         asignado: i.fields.assignee?.displayName || null,
         vence: i.fields.duedate || null,
         horasEstimadas: estPor[i.key] || 0,
@@ -751,6 +782,7 @@ module.exports = async function handler(req, res) {
                  proximosPasos: epica.fields?.customfield_10862 || null },
         campoEntregable: CF_ENT || null,
         camposResponsable: CF_RESP,
+        camposAvance: CF_AV,
         entregables, bugs, horas,
         sinEntregable: { horasEstimadas: estPor._sin || 0, segRegistrados: segPor._sin || 0 },
       });
