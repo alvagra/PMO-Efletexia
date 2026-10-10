@@ -3907,6 +3907,170 @@ function infEspecificacion(e, bugsProyecto){
   return { lbl:'Pendiente', c:'#8b949e', resp:null };
 }
 
+// ═══════════════════════════════════════════════════════════
+//  % DE AVANCE POR FASES — historia y proyecto
+//  Historia = 15% Análisis + 50% Desarrollo + 20% Pruebas QA + 15% Pruebas UAT
+//   · Análisis: Documento de análisis 40% + Estimación de tiempos 30% + Matriz de casos 30%
+//   · Desarrollo: subtareas de desarrollo cerradas ÷ total (sin subtareas [QA]/[UAT])
+//   · QA / UAT: casos conformes ÷ total de casos
+//   · Producción y Marcha blanca = 100% · Pendiente = 0% · Bloqueado mantiene lo medido
+//  Plan a una fecha: mismas fases y pesos, con las ventanas de fechas:
+//   Análisis: inicio historia → día previo a la 1.ª subtarea · Desarrollo: subtareas
+//   vencidas ÷ total · QA: fin desarrollo → Fecha fin QA · UAT: → vencimiento historia
+//   (sin Fecha fin QA, el tramo QA+UAT se reparte 20:15). Días sin domingos.
+//  Proyecto: promedio simple de sus historias entregables.
+// ═══════════════════════════════════════════════════════════
+const AV_PESOS = { analisis:15, desarrollo:50, qa:20, uat:15 };
+const AV_FASES = ['analisis','desarrollo','qa','uat'];
+const AV_ANALISIS = [ {k:'documento', p:40}, {k:'estimacion', p:30}, {k:'matriz', p:30} ];
+
+const avD = s => new Date(s+'T00:00:00');
+const avISO = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const avSumar = (s,n) => { const d=avD(s); d.setDate(d.getDate()+n); return avISO(d); };
+// Días sin domingo entre a y b, ambos incluidos
+function avHabiles(a,b){
+  if(!a||!b||b<a) return 0;
+  let n=0; for(let d=avD(a), f=avD(b); d<=f; d.setDate(d.getDate()+1)) if(d.getDay()!==0) n++;
+  return n;
+}
+// Avanza n días hábiles (sin domingos) desde una fecha
+function avSumarHabiles(s,n){
+  let d=avD(s); while(n>0){ d.setDate(d.getDate()+1); if(d.getDay()!==0) n--; } return avISO(d);
+}
+// % lineal de una ventana [a,b] a la fecha f
+function avLineal(v,f){
+  if(!v) return null;
+  const [a,b]=v;
+  if(f<a) return 0;
+  if(f>=b) return 100;
+  const tot=avHabiles(a,b);
+  return tot ? Math.min(100, avHabiles(a,f)/tot*100) : 100;
+}
+const avEsSubPruebas = st => /\[(qa|uat)\]/i.test(st.summary||'');
+const avSubDev = e => (e.subtareas||[]).filter(st=>!avEsSubPruebas(st));
+const avSubCerrada = st => st.estadoCat==='done' || esEstadoCerrado(st.estado);
+
+// Fase actual según el estado de la historia: 0 Pendiente · 1 Análisis · 2 Desarrollo
+// 3 QA · 4 UAT · 5 Producción/Marcha blanca · -1 Bloqueado
+function avFase(e){
+  const s=ganttNorm(e.estado);
+  if(s.includes('marcha blanca')||s.includes('produccion')||e.estadoCat==='done') return 5;
+  if(s.includes('blocked')||s.includes('bloque')) return -1;
+  if(s.includes('uat')) return 4;
+  if(s.includes('qa')||s.includes('prueba')) return 3;
+  if(s.includes('desarrollo')) return 2;
+  if(s.includes('analisis')) return 1;
+  return 0;
+}
+
+// Avance real de una historia: { pct, fases:{...}, fase, avisos:[] }
+function avReal(e){
+  const f=avFase(e), avisos=[];
+  const fases={ analisis:0, desarrollo:0, qa:0, uat:0 };
+  if(f===5){ AV_FASES.forEach(k=>fases[k]=100); return { pct:100, fases, fase:f, avisos }; }
+
+  // Medido en Jira (null = sin datos)
+  let mAn=null;
+  if(Array.isArray(e.analisis)){
+    const sel=e.analisis.map(ganttNorm);
+    mAn=AV_ANALISIS.reduce((a,x)=>a+(sel.some(t=>t.includes(x.k))?x.p:0),0);
+  }
+  const dev=avSubDev(e);
+  const mDev=dev.length ? dev.filter(avSubCerrada).length/dev.length*100 : null;
+  const casos=c=>(c&&c.total>0&&c.conformes!==null) ? Math.min(100,Math.max(0,c.conformes/c.total*100)) : null;
+  const mQA=casos(e.casosQA), mUAT=casos(e.casosUAT);
+
+  // Fase ya superada: vale lo medido (si falta algo se avisa); sin datos se asume completa
+  const pasada=(n,m,lbl)=>{
+    if(m===null) return 100;
+    if(m<100) avisos.push(`Pasó ${lbl} sin completarla (${Math.round(m)}%)`);
+    return m;
+  };
+  if(f===-1){
+    fases.analisis=mAn??0; fases.desarrollo=mDev??0; fases.qa=mQA??0; fases.uat=mUAT??0;
+  } else {
+    fases.analisis = f>1 ? pasada(1,mAn,'Análisis') : (f===1 ? (mAn??0) : 0);
+    fases.desarrollo = f>2 ? pasada(2,mDev,'Desarrollo') : (mDev??0);
+    fases.qa = f>3 ? pasada(3,mQA,'Pruebas QA') : (f===3 ? (mQA??0) : 0);
+    fases.uat = f===4 ? (mUAT??0) : 0;
+    if(f===2 && mDev===null) avisos.push('En Desarrollo sin subtareas');
+    if(f===3 && mQA===null)  avisos.push('En Pruebas QA sin casos de prueba registrados');
+    if(f===4 && mUAT===null) avisos.push('En Pruebas UAT sin casos de prueba registrados');
+  }
+  const pct=AV_FASES.reduce((a,k)=>a+AV_PESOS[k]*fases[k]/100,0);
+  return { pct, fases, fase:f, avisos };
+}
+
+// Ventanas de plan de una historia (null si no hay fechas suficientes)
+function avVentanas(e){
+  const dev=avSubDev(e).filter(st=>st.vence);
+  if(!dev.length || !e.vence) return null;
+  const devIni=dev.map(st=>st.inicio||st.vence).sort()[0];
+  const devFin=dev.map(st=>st.vence).sort().slice(-1)[0];
+  const an = e.inicio && e.inicio<devIni ? [e.inicio, avSumar(devIni,-1)] : null;
+  const pruIni=avSumar(devFin,1), fin=e.vence;
+  let qa, uat, estimado=false;
+  if(e.finQA && e.finQA>=pruIni && e.finQA<=fin){
+    qa=[pruIni, e.finQA]; uat=[avSumar(e.finQA,1), fin];
+  } else {
+    // Sin Fecha fin QA: el tramo QA+UAT se reparte según los pesos (20:15)
+    estimado=true;
+    const tot=avHabiles(pruIni,fin);
+    const nQA=Math.max(1,Math.round(tot*AV_PESOS.qa/(AV_PESOS.qa+AV_PESOS.uat)));
+    const finQA=tot>1?avSumarHabiles(avSumar(pruIni,-1),nQA):fin;
+    qa=[pruIni, finQA]; uat=[avSumar(finQA,1), fin];
+  }
+  if(uat[0]>uat[1]) uat=[uat[1],uat[1]];
+  return { an, devIni, vences:dev.map(st=>st.vence), qa, uat, fin, estimado };
+}
+// Plan de una historia a la fecha f
+function avPlanEn(v,f){
+  if(!v) return null;
+  const an = v.an ? avLineal(v.an,f) : (f>=v.devIni?100:0);
+  const dv = v.vences.filter(x=>x<=f).length/v.vences.length*100;
+  const qa = avLineal(v.qa,f), uat = avLineal(v.uat,f);
+  return (AV_PESOS.analisis*an + AV_PESOS.desarrollo*dv + AV_PESOS.qa*qa + AV_PESOS.uat*uat)/100;
+}
+
+// Indicadores del proyecto a partir de sus historias entregables
+function avProyecto(hist, hoy){
+  const vivas=hist.filter(h=>!/desestim|cancel/.test(ganttNorm(h.estado)));
+  if(!vivas.length) return null;
+  const prom=a=>a.reduce((x,y)=>x+y,0)/a.length;
+  const fases={}; AV_FASES.forEach(k=>fases[k]=prom(vivas.map(h=>h.real.fases[k])));
+  const real=prom(vivas.map(h=>h.real.pct));
+  const pruebas=(AV_PESOS.qa*fases.qa+AV_PESOS.uat*fases.uat)/(AV_PESOS.qa+AV_PESOS.uat);
+  const conPlan=vivas.filter(h=>h.vent);
+  const r={ n:vivas.length, real, fases, pruebas,
+    devTerminado:vivas.filter(h=>h.real.fase>=3).length,
+    enProduccion:vivas.filter(h=>h.real.fase===5).length,
+    sinPlan:vivas.length-conPlan.length, plan:null };
+  if(!conPlan.length) return r;
+  const planEn=f=>prom(conPlan.map(h=>avPlanEn(h.vent,f)));
+  const realSub=prom(conPlan.map(h=>h.real.pct));
+  r.plan=planEn(hoy); r.realSub=realSub;
+  r.desvio=realSub-r.plan;
+  r.indice=r.plan>0?realSub/r.plan:null;
+  r.semaforo=r.desvio>=-5?'#3fb950':r.desvio>=-17?'#F5B800':'#ef4444';
+  // Atraso en días: hoy − fecha en que el plan alcanzaba el % real actual
+  r.atraso=0;
+  if(realSub<r.plan-0.05){
+    let f=hoy;
+    for(let i=0;i<500;i++){ f=avSumar(f,-1); if(planEn(f)<=realSub+0.05) break; }
+    r.atraso=avHabiles(avSumar(f,1),hoy);
+    r.fechaEquivalente=f;
+  }
+  // Término estimado al ritmo actual
+  r.finPlan=conPlan.map(h=>h.vent.fin).sort().slice(-1)[0];
+  if(realSub>=99.95) r.termino=null;
+  else if(r.finPlan<=hoy) r.vencido=true;
+  else if(r.indice>0){
+    const resta=avHabiles(avSumar(hoy,1),r.finPlan);
+    r.termino=avSumarHabiles(hoy,Math.ceil(resta/Math.min(1,r.indice)));
+  }
+  return r;
+}
+
 async function renderInforme(){
   const cont=document.getElementById('inf-contenido');
   if(!infProyectos){
@@ -3992,7 +4156,10 @@ function infHtml(d){
     const resp=(esp.resp ? (e[esp.resp]||[])
       : (e.respDesarrollo&&e.respDesarrollo.length?e.respDesarrollo:(e.asignado?[e.asignado]:[])))
       .map(n=>resolveNombreDesdeJira(n)?.nombre||n);
-    return { ...e, abiertos:ab.length, totalBugs:bugs.filter(b=>b.entregable===e.key).length, av:infAvance(e,ab), est:infEstadoJira(e), esp, resp:resp.length?resp.join(', '):'Sin asignar' };
+    const real=avReal(e), vent=avVentanas(e);
+    const plan=avPlanEn(vent,hoy);
+    return { ...e, abiertos:ab.length, totalBugs:bugs.filter(b=>b.entregable===e.key).length,
+      real, vent, plan, av:{pct:Math.round(real.pct)}, est:infEstadoJira(e), esp, resp:resp.length?resp.join(', '):'Sin asignar' };
   }).sort((a,b)=>(a.vence?0:1)-(b.vence?0:1) || (a.vence||'').localeCompare(b.vence||'')
                  || b.av.pct-a.av.pct || a.summary.localeCompare(b.summary,'es'));
 
@@ -4018,7 +4185,9 @@ function infHtml(d){
       <td ${td}>${esc(f.summary)}</td>
       <td ${td} style="white-space:nowrap"><span style="color:${f.est.c};font-weight:600">${esc(f.est.lbl)}</span></td>
       <td ${td}><span style="color:${f.esp.c};font-weight:600">${esc(f.esp.lbl)}</span></td>
-      <td ${td} style="text-align:center;font-weight:700">${f.av.pct}%</td>
+      <td ${td} style="text-align:center;font-weight:700" title="${
+        `Análisis ${Math.round(f.real.fases.analisis)}% · Desarrollo ${Math.round(f.real.fases.desarrollo)}% · QA ${Math.round(f.real.fases.qa)}% · UAT ${Math.round(f.real.fases.uat)}%`}">${f.av.pct}%</td>
+      <td ${td} style="text-align:center;color:var(--text-muted)">${f.plan===null?'–':Math.round(f.plan)+'%'}</td>
       <td ${td} style="white-space:nowrap">${esc(f.resp)}</td>
       <td ${td} style="text-align:center;white-space:nowrap">${f.vence?fmtVence(f.vence):'–'}</td>
       <td ${td} style="text-align:center;white-space:nowrap;color:${dv.c}">${dv.t}</td>
@@ -4039,12 +4208,48 @@ function infHtml(d){
     .map(([l,v])=>`${v.n} ${fraseEst(l,v.n)}`);
   const unir=a=>a.length<=1?a.join(''):a.slice(0,-1).join(', ')+' y '+a[a.length-1];
 
-  const sec1 = filas.length ? `
+  const pr=avProyecto(filas,hoy);
+  const MESES2=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  const fCorta=v=>{ const [y,m,dd]=v.split('-'); return `${dd}-${MESES2[+m-1]}`; };
+  const pctTxt=v=>v===null||v===undefined?'–':`${Math.round(v*10)/10}`.replace('.',',')+'%';
+  const kpiAv=(l,v,c,sub)=>`<div class="mt-kpi"><div class="mt-kpi-lbl">${l}</div>
+    <div class="mt-kpi-val" style="color:${c||'var(--text-primary)'}">${v}</div>${sub?`<div class="mt-kpi-sub">${sub}</div>`:''}</div>`;
+  const bloqueProy = pr ? `<div class="mt-kpis" style="margin-bottom:12px">
+      ${kpiAv('AVANCE REAL',pctTxt(pr.real),null,`${pr.n} entregable${pr.n===1?'':'s'}`)}
+      ${kpiAv('AVANCE PLAN',pctTxt(pr.plan),null,pr.sinPlan?`${pr.sinPlan} sin fechas, excluido${pr.sinPlan===1?'':'s'}`:'a la fecha de corte')}
+      ${kpiAv('DESVÍO',pr.plan===null?'–':`${pr.desvio>=0?'+':'−'}${pctTxt(Math.abs(pr.desvio)).replace('%','')} pts`,pr.semaforo,
+        pr.indice?`cumplimiento ${(Math.round(pr.indice*100)/100).toFixed(2).replace('.',',')}`:'')}
+      ${kpiAv('ATRASO',pr.plan===null?'–':pr.atraso?`${pr.atraso} día${pr.atraso===1?'':'s'}`:'Al día',pr.atraso?pr.semaforo:'#3fb950',
+        pr.atraso&&pr.fechaEquivalente?`plan equivalente al ${fCorta(pr.fechaEquivalente)}`:'')}
+      ${kpiAv('TÉRMINO ESTIMADO',pr.plan===null?'–':pr.real>=99.95?'Terminado':pr.vencido?'Vencido':pr.termino?fCorta(pr.termino):'–',
+        pr.vencido?'#ef4444':null, pr.finPlan?`plan ${fCorta(pr.finPlan)}`:'')}
+      ${kpiAv('ANÁLISIS',pctTxt(pr.fases.analisis))}
+      ${kpiAv('DESARROLLO',pctTxt(pr.fases.desarrollo),null,`terminado en ${pr.devTerminado} de ${pr.n}`)}
+      ${kpiAv('PRUEBAS',pctTxt(pr.pruebas),null,`QA ${pctTxt(pr.fases.qa)} · UAT ${pctTxt(pr.fases.uat)}`)}
+      ${kpiAv('EN PRODUCCIÓN',`${pr.enProduccion} de ${pr.n}`)}
+    </div>` : '';
+  const avisos=[];
+  filas.forEach(f=>{
+    f.real.avisos.forEach(a=>avisos.push(`<b>${esc(f.key)}</b>: ${esc(a)}`));
+    if(!f.vent) avisos.push(`<b>${esc(f.key)}</b>: sin fechas para el plan (subtareas con vencimiento y fecha de vencimiento de la historia)`);
+    else if(f.vent.estimado && f.real.fase<5) avisos.push(`<b>${esc(f.key)}</b>: sin Fecha fin QA, plan de QA/UAT estimado (20:15)`);
+    if(f.vent && avSubDev(f).some(st=>st.vence && st.vence>f.vent.fin))
+      avisos.push(`<b>${esc(f.key)}</b>: hay subtareas que vencen después que la historia`);
+  });
+  const camposAv=d.camposAvance||{};
+  const faltan=[['analisis','Entregables de análisis'],['qaTotal','Casos QA total'],['qaConformes','Casos QA conformes'],
+    ['uatTotal','Casos UAT total'],['uatConformes','Casos UAT conformes'],['finQA','Fecha fin QA']]
+    .filter(([k])=>!camposAv[k]).map(([,n])=>n);
+  const calidad = (avisos.length||faltan.length) ? `<details class="inf-nota" style="margin-top:8px"><summary>Calidad de datos (${avisos.length+(faltan.length?1:0)})</summary>
+      ${faltan.length?`<div>Campos no encontrados en Jira: ${faltan.map(esc).join(', ')}. Mientras no existan, las fases ya superadas se consideran completas.</div>`:''}
+      ${avisos.map(a=>`<div>${a}</div>`).join('')}</details>` : '';
+
+  const sec1 = filas.length ? `${bloqueProy}
     <div class="inf-tabla-wrap"><table class="inf-tabla inf-tabla-av inf-tabla-ent">
-      <thead><tr><th>Clave</th><th>Entregable</th><th>Estado</th><th>Especificación</th><th style="text-align:center">% Avance</th>
+      <thead><tr><th>Clave</th><th>Entregable</th><th>Estado</th><th>Especificación</th><th style="text-align:center">% Real</th><th style="text-align:center">% Plan</th>
         <th>Responsable</th><th style="text-align:center">Vence</th><th style="text-align:center">Desviación</th></tr></thead>
       <tbody>${filasHtml}</tbody></table></div>
-    <p class="inf-nota">% avance: 100% corresponde al pase a producción. Un entregable sin bugs abiertos, pendiente de validación usuario y pase a producción, se considera al 95%; con observaciones parte de 90% y se descuenta 5% por bug abierto de prioridad alta, 3% por media y 1% por baja (los bugs en revisión cuentan como abiertos hasta su cierre). ${hayFechas?'Desviación: días entre la fecha de vencimiento del entregable en Jira y la fecha de corte (negativo = vencido).':'Los entregables no tienen fecha de vencimiento registrada en Jira, por lo que no se calcula desviación.'}</p>
+    <p class="inf-nota">% Real = 15% Análisis (documento 40%, estimación 30%, matriz de casos 30%) + 50% Desarrollo (subtareas cerradas ÷ total) + 20% Pruebas QA + 15% Pruebas UAT (casos conformes ÷ total). Producción = 100%. % Plan: lo que debería estar hecho a la fecha de corte según las fechas de la historia y sus subtareas (días sin domingos). El avance del proyecto es el promedio de sus entregables; desvío verde ≥ −5 pts, amarillo hasta −17, rojo por debajo. ${hayFechas?'Desviación: días entre la fecha de vencimiento del entregable en Jira y la fecha de corte (negativo = vencido).':'Los entregables no tienen fecha de vencimiento registrada en Jira, por lo que no se calcula desviación.'}</p>${calidad}
     <p class="inf-p">${filas.length===1?'El único entregable está':`De los ${filas.length} entregables,`} ${filas.length===1?resumenEst[0].replace(/^1 /,''):unir(resumenEst)}.</p>`
     : `<div class="mt-empty" style="padding:24px 0">El proyecto no tiene historias marcadas como Entregable.</div>
        ${sinTiene?`<p class="inf-p">Hay ${sinAb.length} bug${sinAb.length===1?'':'s'} abierto${sinAb.length===1?'':'s'} sin entregable asignado.</p>`:''}`;
