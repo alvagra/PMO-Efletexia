@@ -581,7 +581,7 @@ module.exports = async function handler(req, res) {
         qaConformes:  await idPrimero(['Casos QA conformes']),
         uatTotal:     await idPrimero(['Casos UAT total', 'Casos UAT totales']),
         uatConformes: await idPrimero(['Casos UAT conformes']),
-        finQA:        await idPrimero(['Fecha fin QA']),
+        finQA:        await idPrimero(['Fecha fin plan QA', 'Fecha fin QA']),
       };
       ['customfield_10015'].concat(Object.values(CF_AV))   // 10015 = Fecha de inicio
         .forEach(id => { if (id && !CAMPOS.includes(id)) CAMPOS.push(id); });
