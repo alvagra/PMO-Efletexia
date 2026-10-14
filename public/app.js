@@ -445,7 +445,7 @@ function toggleBugDetalle(k){
 
 // Paleta propia para el donut: cada estado con color distinto
 const BG_EST_COLOR = {
-  'tareas por hacer':'#8b949e', 'to do':'#8b949e', 'backlog':'#6e7681',
+  'tareas por hacer':'#8b949e', 'pendiente':'#8b949e', 'to do':'#8b949e', 'backlog':'#6e7681',
   'en curso':'#F5B800', 'in progress':'#F5B800',
   'en revision':'#58a6ff', 'in review':'#58a6ff',
   'observado':'#bc8cff',
@@ -572,7 +572,8 @@ async function cargarBugs(){
         key:b.key,
         resumen:f.summary||b.key,
         prioridad:bgPrio(f.priority?.name).lbl,
-        estado:f.status?.name||'—',
+        // En la bitácora, "Tareas por hacer" se muestra como "Pendiente"
+        estado:(f.status?.name==='Tareas por hacer'?'Pendiente':f.status?.name)||'—',
         grupo:bgEstadoCls(f.status?.name).g,
         responsable:f.assignee?.displayName ? (resolveNombreDesdeJira(f.assignee.displayName)?.nombre||f.assignee.displayName) : '—',
         proyKey:ep?.key||'SIN-EPICA',
