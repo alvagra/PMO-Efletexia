@@ -1590,7 +1590,8 @@ function recomputeRecursos(){
       if(!isDone) p.epicasMap[epicaKey].pendientes++;
       const tareaParentKey = f._tareaParent?.key || null;
       const responsable = f.assignee ? (findNomenclaturaByNombre(f.assignee.displayName)?.nombre || f.assignee.displayName) : null;
-      p.epicasMap[epicaKey].tareas.push({key:h.key,nombre:f.summary||h.key,status,isDone,horasEst,horasPend,fechaInicio:f.customfield_10015||null,fechaFin:f.duedate||null,fecha:f.customfield_10015||f.duedate||null,updated:f.updated||null,tareaParentKey,responsable,esBug:!!f._esBug});
+      p.epicasMap[epicaKey].tareas.push({key:h.key,nombre:f.summary||h.key,status,isDone,horasEst,horasPend,fechaInicio:f.customfield_10015||null,fechaFin:f.duedate||null,fecha:f.customfield_10015||f.duedate||null,updated:f.updated||null,tareaParentKey,responsable,esBug:!!f._esBug,
+        regMin:Math.round((f.timespent||0)/60)});   // horas del Registro de actividad de Jira, en minutos
     }
   });
 
@@ -1775,7 +1776,7 @@ function renderRecursos(){
               <td>${t.responsable?`<a href="#" onclick="verRecurso('${esc(t.responsable)}');return false" style="color:var(--blue);text-decoration:none">${esc(t.responsable)}</a>`:'—'}</td>
               <td>${fmtD(t.fechaInicio)||'—'}</td>
               <td>${fmtD(t.fechaFin)||'—'}</td>
-              <td>${t.horasEst}h</td>
+              <td>${t.regMin?fmtHM(t.regMin):'—'}</td>
               <td><span class="det-badge det-badge-${st.cls}">${esc(t.status||st.label)}</span></td>
             </tr>`;
           }).join('');
