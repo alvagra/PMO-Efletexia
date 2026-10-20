@@ -1759,7 +1759,7 @@ function renderRecursos(){
           return `<div class="rec-chart-row">
             <span class="rec-chart-label" title="${esc(x.r.nombre)}">${esc(x.r.nombre)}</span>
             <div class="rec-chart-track"><div class="rec-chart-fill" style="width:${pct}%;background:${color}"></div></div>
-            <span class="rec-chart-val">${fmtHoras(x.horas)}h / ${fmtHoras(cap)}h</span>
+            <span class="rec-chart-val" style="white-space:nowrap;flex-shrink:0;min-width:max-content">${fmtHoras(x.horas)}h / ${fmtHoras(cap)}h</span>
           </div>`;
         }).join('');
     }
