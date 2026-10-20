@@ -1710,8 +1710,10 @@ function renderRecursos(){
 
   const recursosConHoras = filtered.map(r=>{
     const tareas = tareasDeRecursoFiltradas(r);
-    const horas = +tareas.reduce((s,t)=>s+(t.horasEst||0),0).toFixed(1);
-    return { r, tareas, horas };
+    // Horas del Registro de actividad de Jira (misma fuente que la columna Horas de las tareas)
+    const regMin = tareas.reduce((s,t)=>s+(t.regMin||0),0);
+    const horas = +(regMin/60).toFixed(1);
+    return { r, tareas, horas, regMin };
   }).sort((a,b)=>b.horas-a.horas);
 
   // ── Bloque 1: gráfico "Ocupabilidad de recurso (horas)" ──
@@ -1735,7 +1737,7 @@ function renderRecursos(){
           return `<div class="rec-chart-row">
             <span class="rec-chart-label" title="${esc(x.r.nombre)}">${esc(x.r.nombre)}</span>
             <div class="rec-chart-track"><div class="rec-chart-fill" style="width:${pct}%;background:${color}"></div></div>
-            <span class="rec-chart-val">${x.horas}h / ${CAP_SEMANA}h</span>
+            <span class="rec-chart-val">${fmtHM(x.regMin)} / ${CAP_SEMANA}h</span>
           </div>`;
         }).join('');
     }
