@@ -174,6 +174,7 @@ module.exports = async function handler(req, res) {
         'customfield_11003', // Bloqueante
         'customfield_11136', // Horas Estimadas
         'customfield_11137', // Horas Pendientes
+        'timespent',         // Horas registradas (Registro de actividad), en segundos
       ];
       // No se filtra por nombre de tipo ('Subtarea') porque el proyecto puede tener
       // variantes (Subtask, Sub-tarea, Subtarea) y esas subtareas quedaban fuera.
