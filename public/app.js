@@ -1722,22 +1722,44 @@ function renderRecursos(){
     if(!filtered.length){
       chartWrap.innerHTML = '';
     } else {
-      const CAP_SEMANA = 40;
+      // Tope = días hábiles del rango × 8h (sin fines de semana, feriados del país ni vacaciones).
+      // Sin rango, se usa el mes de la fecha de corte.
+      const mesIni = `${recAnioActual}-${String(recMesActual+1).padStart(2,'0')}-01`;
+      const mesFin = `${recAnioActual}-${String(recMesActual+1).padStart(2,'0')}-${String(new Date(recAnioActual,recMesActual+1,0).getDate()).padStart(2,'0')}`;
+      let capDesde = rangoDesde || (rangoHasta ? rangoHasta.slice(0,8)+'01' : mesIni);
+      let capHasta = rangoHasta;
+      if(!capHasta){
+        const [yy,mm] = (rangoDesde || mesIni).split('-').map(Number);
+        capHasta = rangoDesde ? `${yy}-${String(mm).padStart(2,'0')}-${String(new Date(yy,mm,0).getDate()).padStart(2,'0')}` : mesFin;
+      }
+      const capacidadDe = r => {
+        if(capHasta < capDesde) return 0;
+        let dias = 0;
+        let [y,m] = capDesde.split('-').map(Number); m--;
+        const [yF,mF] = capHasta.split('-').map(Number);
+        while(y < yF || (y === yF && m <= mF-1)){
+          dias += diasLaborablesDelMes(y, m, r.pais, r.nombre).filter(iso => iso >= capDesde && iso <= capHasta).length;
+          m++; if(m > 11){ m = 0; y++; }
+        }
+        return dias * 8;
+      };
+      const fmtHoras = h => (Math.round(h*10)/10).toLocaleString('es-PE',{maximumFractionDigits:1});
       const CHART_PERSONAS = ['Steven Díaz','Javier Carrillo','Daniel Valencia','Alexander Romero','Henry Salazar','Andrés Medina','Eric Cacho'];
       const conHoras = recursosConHoras.filter(x=>CHART_PERSONAS.includes(x.r.nombre));
 
-      function colorPorHoras(h){
-        return h >= CAP_SEMANA ? '#2ecc71' : '#f1c40f';
+      function colorPorHoras(h, cap){
+        return h >= cap ? '#2ecc71' : '#f1c40f';
       }
 
       chartWrap.innerHTML = `<div class="rec-chart-title">Ocupabilidad de recurso (horas)</div>` +
         conHoras.map(x=>{
-          const pct = Math.min(100, Math.round(x.horas / CAP_SEMANA * 100));
-          const color = colorPorHoras(x.horas);
+          const cap = capacidadDe(x.r);
+          const pct = cap ? Math.min(100, Math.round(x.horas / cap * 100)) : 0;
+          const color = colorPorHoras(x.horas, cap);
           return `<div class="rec-chart-row">
             <span class="rec-chart-label" title="${esc(x.r.nombre)}">${esc(x.r.nombre)}</span>
             <div class="rec-chart-track"><div class="rec-chart-fill" style="width:${pct}%;background:${color}"></div></div>
-            <span class="rec-chart-val">${fmtHM(x.regMin)} / ${CAP_SEMANA}h</span>
+            <span class="rec-chart-val">${fmtHoras(x.horas)}h / ${fmtHoras(cap)}h</span>
           </div>`;
         }).join('');
     }
