@@ -380,11 +380,13 @@ module.exports = async function handler(req, res) {
       let CF_ENT = await idCampoEntregable(auth, JIRA_CLOUD);
       const CF_INI = await idCampoPorNombre(auth, JIRA_CLOUD, 'Fecha inicio desarrollo');
       const CF_FIN = await idCampoPorNombre(auth, JIRA_CLOUD, 'Fecha fin desarrollo');
+      // Responsable de QA de la historia (se resuelve por nombre del campo)
+      const CF_RESP_QA  = await idCampoPorNombre(auth, JIRA_CLOUD, 'Resp. QA');
 
       const CAMPOS = ['summary', 'status', 'assignee', 'parent', 'duedate',
                       'customfield_10015', 'issuetype',
                       'customfield_11451'];   // Resp. Desarrollo (selección múltiple)
-      [CF_ENT, CF_INI, CF_FIN].forEach(c => { if (c && !CAMPOS.includes(c)) CAMPOS.push(c); });
+      [CF_ENT, CF_INI, CF_FIN, CF_RESP_QA].forEach(c => { if (c && !CAMPOS.includes(c)) CAMPOS.push(c); });
 
       const JQL = 'project = PTS AND issuetype not in subTaskIssueTypes() ORDER BY duedate ASC';
       let items = await fetchAllPages(auth, JIRA_CLOUD, JQL, CAMPOS);
@@ -504,6 +506,21 @@ module.exports = async function handler(req, res) {
           const fins = candidatas.map(su => su.fields.duedate).filter(Boolean);
           it.fields._ini = inis.length ? inis.reduce((a, b) => a < b ? a : b) : null;
           it.fields._fin = fins.length ? fins.reduce((a, b) => a > b ? a : b) : null;
+        }
+
+        // Pruebas QA → "Resp. QA" · Pruebas UAT → "Resp. Desarrollo" de la historia.
+        // Si el campo está vacío, se deriva de las subtareas de la fase como antes.
+        const cfFase = fase === 'qa' ? CF_RESP_QA : fase === 'uat' ? 'customfield_11451' : null;
+        if (cfFase) {
+          const v = it.fields[cfFase];
+          const nombres = (Array.isArray(v) ? v : (v ? [v] : []))
+            .map(o => (typeof o === 'string' ? o : (o && (o.value || o.name || o.displayName))) || '')
+            .map(t => String(t).trim()).filter(Boolean);
+          if (nombres.length) {
+            it.fields._respFase = nombres;
+            it.fields._respFaseCampo = fase === 'qa' ? 'Resp. QA' : 'Resp. Desarrollo';
+            return;
+          }
         }
 
         const top = Object.entries(conteo).sort((a, b) => b[1] - a[1])[0];
