@@ -381,8 +381,12 @@ module.exports = async function handler(req, res) {
       const CF_INI = await idCampoPorNombre(auth, JIRA_CLOUD, 'Fecha inicio desarrollo');
       const CF_FIN = await idCampoPorNombre(auth, JIRA_CLOUD, 'Fecha fin desarrollo');
       // Responsables de QA y UAT de la historia (se resuelven por nombre del campo)
-      const CF_RESP_QA  = await idCampoPorNombre(auth, JIRA_CLOUD, 'Resp. QA');
-      const CF_RESP_UAT = await idCampoPorNombre(auth, JIRA_CLOUD, 'Resp. UAT');
+      const idDe = async nombres => {
+        for (const n of nombres) { const id = await idCampoPorNombre(auth, JIRA_CLOUD, n); if (id) return id; }
+        return null;
+      };
+      const CF_RESP_QA  = await idDe(['Resp. QA', 'Resp QA', 'Responsable QA']);
+      const CF_RESP_UAT = await idDe(['Resp. UAT', 'Resp UAT', 'Responsable UAT']);
 
       const CAMPOS = ['summary', 'status', 'assignee', 'parent', 'duedate',
                       'customfield_10015', 'issuetype',
@@ -482,6 +486,9 @@ module.exports = async function handler(req, res) {
           const rd = (Array.isArray(it.fields.customfield_11451) ? it.fields.customfield_11451 : [])
             .map(o => (o && (o.value || o.name || o.displayName)) || '').filter(Boolean);
           if (rd.length) { it.fields._respDesarrollo = rd; return; }
+          // En Desarrollo, con Resp. Desarrollo vacío se muestra "Sin asignar"
+          // (no se toma la persona asignada ni las subtareas)
+          if (fase === 'desarrollo') { it.fields._sinAsignar = true; return; }
         }
         // Sin fase en curso (Pendiente, Backlog, Blocked) el responsable se toma
         // de las subtareas de desarrollo: el trabajo ya está repartido aunque
@@ -510,10 +517,12 @@ module.exports = async function handler(req, res) {
         }
 
         // Pruebas QA → "Resp. QA" · Pruebas UAT → "Resp. UAT" de la historia.
-        // Si el campo está vacío, se deriva de las subtareas de la fase como antes.
+        // Si el campo está vacío, se muestra "Sin asignar".
         const cfFase = fase === 'qa' ? CF_RESP_QA : fase === 'uat' ? CF_RESP_UAT : null;
-        if (cfFase) {
-          const v = it.fields[cfFase];
+        // Se decide por la fase, no por si el campo se encontró: en QA y UAT
+        // nunca se usa la persona asignada ni las subtareas de desarrollo.
+        if (fase === 'qa' || fase === 'uat') {
+          const v = cfFase ? it.fields[cfFase] : null;
           const nombres = (Array.isArray(v) ? v : (v ? [v] : []))
             .map(o => (typeof o === 'string' ? o : (o && (o.value || o.name || o.displayName))) || '')
             .map(t => String(t).trim()).filter(Boolean);
@@ -522,6 +531,9 @@ module.exports = async function handler(req, res) {
             it.fields._respFaseCampo = fase === 'qa' ? 'Resp. QA' : 'Resp. UAT';
             return;
           }
+          // Campo vacío: "Sin asignar" (no se toma la persona asignada ni las subtareas)
+          it.fields._sinAsignar = true;
+          return;
         }
 
         const top = Object.entries(conteo).sort((a, b) => b[1] - a[1])[0];
