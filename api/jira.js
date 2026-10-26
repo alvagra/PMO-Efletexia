@@ -380,13 +380,14 @@ module.exports = async function handler(req, res) {
       let CF_ENT = await idCampoEntregable(auth, JIRA_CLOUD);
       const CF_INI = await idCampoPorNombre(auth, JIRA_CLOUD, 'Fecha inicio desarrollo');
       const CF_FIN = await idCampoPorNombre(auth, JIRA_CLOUD, 'Fecha fin desarrollo');
-      // Responsable de QA de la historia (se resuelve por nombre del campo)
+      // Responsables de QA y UAT de la historia (se resuelven por nombre del campo)
       const CF_RESP_QA  = await idCampoPorNombre(auth, JIRA_CLOUD, 'Resp. QA');
+      const CF_RESP_UAT = await idCampoPorNombre(auth, JIRA_CLOUD, 'Resp. UAT');
 
       const CAMPOS = ['summary', 'status', 'assignee', 'parent', 'duedate',
                       'customfield_10015', 'issuetype',
                       'customfield_11451'];   // Resp. Desarrollo (selección múltiple)
-      [CF_ENT, CF_INI, CF_FIN, CF_RESP_QA].forEach(c => { if (c && !CAMPOS.includes(c)) CAMPOS.push(c); });
+      [CF_ENT, CF_INI, CF_FIN, CF_RESP_QA, CF_RESP_UAT].forEach(c => { if (c && !CAMPOS.includes(c)) CAMPOS.push(c); });
 
       const JQL = 'project = PTS AND issuetype not in subTaskIssueTypes() ORDER BY duedate ASC';
       let items = await fetchAllPages(auth, JIRA_CLOUD, JQL, CAMPOS);
@@ -508,9 +509,9 @@ module.exports = async function handler(req, res) {
           it.fields._fin = fins.length ? fins.reduce((a, b) => a > b ? a : b) : null;
         }
 
-        // Pruebas QA → "Resp. QA" · Pruebas UAT → "Resp. Desarrollo" de la historia.
+        // Pruebas QA → "Resp. QA" · Pruebas UAT → "Resp. UAT" de la historia.
         // Si el campo está vacío, se deriva de las subtareas de la fase como antes.
-        const cfFase = fase === 'qa' ? CF_RESP_QA : fase === 'uat' ? 'customfield_11451' : null;
+        const cfFase = fase === 'qa' ? CF_RESP_QA : fase === 'uat' ? CF_RESP_UAT : null;
         if (cfFase) {
           const v = it.fields[cfFase];
           const nombres = (Array.isArray(v) ? v : (v ? [v] : []))
@@ -518,7 +519,7 @@ module.exports = async function handler(req, res) {
             .map(t => String(t).trim()).filter(Boolean);
           if (nombres.length) {
             it.fields._respFase = nombres;
-            it.fields._respFaseCampo = fase === 'qa' ? 'Resp. QA' : 'Resp. Desarrollo';
+            it.fields._respFaseCampo = fase === 'qa' ? 'Resp. QA' : 'Resp. UAT';
             return;
           }
         }
