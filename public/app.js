@@ -4530,9 +4530,12 @@ async function loadSeguimiento(){
       const dn=f.assignee?.displayName||'';
       // Personas responsables: en Desarrollo, las de "Resp. Desarrollo"; si no, una sola
       const personas=(()=>{
-        if(Array.isArray(f._respDesarrollo)&&f._respDesarrollo.length)
-          return f._respDesarrollo.map(n=>({nombre:resolveNombreDesdeJira(n)?.nombre||n,
-                                             area:resolveNombreDesdeJira(n)?.area||'Sin área'}));
+        // Desarrollo → "Resp. Desarrollo" · Pruebas QA → "Resp. QA" · Pruebas UAT → "Resp. UAT"
+        const deCampo=Array.isArray(f._respDesarrollo)&&f._respDesarrollo.length ? f._respDesarrollo
+                     : Array.isArray(f._respFase)&&f._respFase.length ? f._respFase : null;
+        if(deCampo)
+          return deCampo.map(n=>({nombre:resolveNombreDesdeJira(n)?.nombre||n,
+                                  area:resolveNombreDesdeJira(n)?.area||'Sin área'}));
         if(f._sinAsignar) return [];
         const n=f._responsableFase||dn;
         return n?[{nombre:resolveNombreDesdeJira(n)?.nombre||n, area:resolveNombreDesdeJira(n)?.area||'Sin área'}]:[];
@@ -4552,7 +4555,8 @@ async function loadSeguimiento(){
         areas:areasP.length?areasP:['Sin área'],
         fase:f._fase||null,
         respDesarrollo:!!(f._respDesarrollo&&f._respDesarrollo.length),
-        derivado:!!f._responsableFase||!!f._sinAsignar||!!(f._respDesarrollo&&f._respDesarrollo.length),
+        respCampo:(f._respDesarrollo&&f._respDesarrollo.length)?'Resp. Desarrollo':(f._respFaseCampo||null),
+        derivado:!!f._responsableFase||!!f._sinAsignar||!!(f._respDesarrollo&&f._respDesarrollo.length)||!!f._respFaseCampo,
         inicio:f._ini||null,
         vence:f._fin||null
       };
@@ -4694,7 +4698,7 @@ function renderSeguimientoTabla(){
       <td style="font-weight:500;white-space:nowrap">${r.epicaKey?`<a class="jlink" href="${JIRA_BASE}${r.epicaKey}" target="_blank">${esc(r.codigo)}</a>`:esc(r.codigo)}</td>
       <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.proyecto)}">${esc(r.proyecto)}</td>
       <td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.subtarea)}">${esc(r.subtarea)}</td>
-      <td style="white-space:nowrap" title="${r.respDesarrollo?'Resp. Desarrollo de la historia':r.derivado?'Responsable de la fase '+esc(r.fase||''):'Asignado de la historia'}">${esc(r.responsable)}${
+      <td style="white-space:nowrap" title="${r.respCampo?esc(r.respCampo)+' de la historia':r.derivado?'Responsable de la fase '+esc(r.fase||''):'Asignado de la historia'}">${esc(r.responsable)}${
         r.derivado?'':'<span style="color:var(--text-dim);font-size:10px"> ·</span>'}</td>
       <td><span class="det-badge det-badge-${st.cls}">${esc(r.estado)}</span></td>
       <td style="white-space:nowrap;color:var(--text-muted)">${r.inicio?fmtD(r.inicio):'—'}</td>
