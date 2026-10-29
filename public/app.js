@@ -4064,7 +4064,7 @@ function avPlanEn(v,f){
 }
 
 // Indicadores del proyecto a partir de sus historias entregables
-function avProyecto(hist, hoy){
+function avProyecto(hist, hoy, venceProyecto){
   const vivas=hist.filter(h=>!/desestim|cancel/.test(ganttNorm(h.estado)));
   if(!vivas.length) return null;
   const prom=a=>a.reduce((x,y)=>x+y,0)/a.length;
@@ -4093,7 +4093,8 @@ function avProyecto(hist, hoy){
     r.fechaEquivalente=f;
   }
   // Término estimado al ritmo actual
-  r.finPlan=conPlan.map(h=>h.vent.fin).sort().slice(-1)[0];
+  // Fin del proyecto: Fecha de vencimiento de la épica; si no tiene, el último vencimiento de sus entregables
+  r.finPlan=venceProyecto||conPlan.map(h=>h.vent.fin).sort().slice(-1)[0];
   if(realSub>=99.95) r.termino=null;
   else if(r.finPlan<=hoy) r.vencido=true;
   else if(r.indice>0){
@@ -4240,7 +4241,7 @@ function infHtml(d){
     .map(([l,v])=>`${v.n} ${fraseEst(l,v.n)}`);
   const unir=a=>a.length<=1?a.join(''):a.slice(0,-1).join(', ')+' y '+a[a.length-1];
 
-  const pr=avProyecto(filas,hoy);
+  const pr=avProyecto(filas,hoy,d.epica?.vence||null);
   const MESES2=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
   const fCorta=v=>{ const [y,m,dd]=v.split('-'); return `${dd}-${MESES2[+m-1]}`; };
   const pctTxt=v=>v===null||v===undefined?'–':`${Math.round(v*10)/10}`.replace('.',',')+'%';
@@ -4253,8 +4254,8 @@ function infHtml(d){
         pr.indice?`cumplimiento ${(Math.round(pr.indice*100)/100).toFixed(2).replace('.',',')}`:'')}
       ${kpiAv('ATRASO',pr.plan===null?'–':pr.atraso?`${pr.atraso} día${pr.atraso===1?'':'s'}`:'Al día',pr.atraso?pr.semaforo:'#3fb950',
         pr.atraso&&pr.fechaEquivalente?`plan equivalente al ${fCorta(pr.fechaEquivalente)}`:'')}
-      ${kpiAv('TÉRMINO ESTIMADO',pr.plan===null?'–':pr.real>=99.95?'Terminado':pr.vencido?'Vencido':pr.termino?fCorta(pr.termino):'–',
-        pr.vencido?'#ef4444':null, pr.finPlan?`plan ${fCorta(pr.finPlan)}`:'')}
+      ${kpiAv('TÉRMINO ESTIMADO',d.epica?.vence?fCorta(d.epica.vence):'–',
+        null, d.epica?.vence?'fecha de vencimiento de la épica':'la épica no tiene fecha de vencimiento')}
       ${kpiAv('ANÁLISIS',pctTxt(pr.fases.analisis))}
       ${kpiAv('DESARROLLO',pctTxt(pr.fases.desarrollo),null,`terminado en ${pr.devTerminado} de ${pr.n}`)}
       ${kpiAv('PRUEBAS QA',pctTxt(pr.fases.qa),null,`terminado en ${pr.qaTerminado} de ${pr.n}`)}
