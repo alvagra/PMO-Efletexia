@@ -4074,6 +4074,7 @@ function avProyecto(hist, hoy){
   const conPlan=vivas.filter(h=>h.vent);
   const r={ n:vivas.length, real, fases, pruebas,
     devTerminado:vivas.filter(h=>h.real.fase>=3).length,
+    qaTerminado:vivas.filter(h=>h.real.fase>=4).length,
     enProduccion:vivas.filter(h=>h.real.fase===5).length,
     sinPlan:vivas.length-conPlan.length, plan:null };
   if(!conPlan.length) return r;
@@ -4256,7 +4257,8 @@ function infHtml(d){
         pr.vencido?'#ef4444':null, pr.finPlan?`plan ${fCorta(pr.finPlan)}`:'')}
       ${kpiAv('ANÁLISIS',pctTxt(pr.fases.analisis))}
       ${kpiAv('DESARROLLO',pctTxt(pr.fases.desarrollo),null,`terminado en ${pr.devTerminado} de ${pr.n}`)}
-      ${kpiAv('PRUEBAS',pctTxt(pr.pruebas),null,`QA ${pctTxt(pr.fases.qa)} · UAT ${pctTxt(pr.fases.uat)}`)}
+      ${kpiAv('PRUEBAS QA',pctTxt(pr.fases.qa),null,`terminado en ${pr.qaTerminado} de ${pr.n}`)}
+      ${kpiAv('PRUEBAS UAT',pctTxt(pr.fases.uat),null,`terminado en ${pr.enProduccion} de ${pr.n}`)}
       ${kpiAv('EN PRODUCCIÓN',`${pr.enProduccion} de ${pr.n}`)}
     </div>` : '';
   const avisos=[];
