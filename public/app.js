@@ -4158,6 +4158,8 @@ async function renderInforme(){
 // Se captura el informe tal como se ve en pantalla (mismo formato, colores y tamaño).
 // "Copiar" deja la imagen en el portapapeles para pegarla en Gmail/Outlook con Ctrl+V;
 // "Descargar" guarda un PNG en alta resolución para adjuntarlo o insertarlo.
+const INF_ANCHO_CORREO = 900;   // ancho de la imagen para correo (px): cabe sin barra horizontal
+
 function infCargarHtml2canvas(){
   if(window.html2canvas) return Promise.resolve(window.html2canvas);
   return new Promise((ok,err)=>{
@@ -4178,8 +4180,30 @@ async function infExportar(modo){
     // Fondo del informe: el del contenedor o, si es transparente, el de la página
     let fondo=getComputedStyle(cuerpo).backgroundColor;
     if(!fondo || fondo==='rgba(0, 0, 0, 0)' || fondo==='transparent') fondo=getComputedStyle(document.body).backgroundColor;
-    const canvas=await h2c(cuerpo,{ backgroundColor:fondo, scale: modo==='copiar'?1:2, useCORS:true, logging:false,
-      windowWidth: document.documentElement.scrollWidth });
+    // Se arma una copia del informe con ancho fijo apto para correo, fuera de la vista,
+    // para que la imagen no supere el ancho del correo (sin barra de desplazamiento horizontal).
+    const caja=document.createElement('div');
+    caja.style.cssText=`position:absolute;left:-20000px;top:0;width:${INF_ANCHO_CORREO}px;background:${fondo};padding:12px;box-sizing:border-box`;
+    const copia=cuerpo.cloneNode(true);
+    copia.removeAttribute('id');
+    copia.querySelectorAll('[id]').forEach(el=>el.removeAttribute('id'));
+    caja.className='inf-correo';
+    // Ajustes para el ancho de correo: las tablas se ajustan al ancho (el texto puede
+    // pasar a dos líneas) y las tarjetas de indicadores bajan de fila si no caben
+    caja.innerHTML=`<style>
+      .inf-correo .inf-tabla-wrap{overflow:visible!important}
+      .inf-correo table{width:100%!important;table-layout:auto}
+      .inf-correo td,.inf-correo th{white-space:normal!important}
+      .inf-correo .mt-kpis{display:flex!important;flex-wrap:wrap!important}
+      .inf-correo svg{max-width:100%}
+    </style>`;
+    caja.appendChild(copia);
+    cuerpo.parentNode.appendChild(caja);   // mismo contenedor, para conservar los estilos
+    let canvas;
+    try{
+      canvas=await h2c(caja,{ backgroundColor:fondo, scale: modo==='copiar'?1:2, useCORS:true, logging:false,
+        width:INF_ANCHO_CORREO, windowWidth:INF_ANCHO_CORREO });
+    } finally { caja.remove(); }
     const blob=await new Promise(r=>canvas.toBlob(r,'image/png'));
     const cod=(epics||[]).find(e=>e.key===infSel)?.codigo||infSel;
     const nombre=`Informe_${cod}_${new Date().toISOString().slice(0,10)}.png`;
