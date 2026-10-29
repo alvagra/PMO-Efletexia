@@ -4131,13 +4131,17 @@ async function renderInforme(){
   }).join('');
 
   cont.innerHTML=`
-    <div class="inf-barra">
+    <div class="inf-barra" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
       <label class="inf-barra-l" for="inf-proy">PROYECTO</label>
       <select id="inf-proy" class="filter-input inf-select">
         <option value=""${infSel?'':' selected'}>Selecciona un proyecto</option>${opciones}
       </select>
+      <button type="button" id="inf-copiar" style="margin-left:auto;padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg-elevated,#21262d);color:var(--text-primary);font-size:12px;cursor:pointer;white-space:nowrap" title="Copia el informe como imagen para pegarlo en un correo">📋 Copiar para correo</button>
+      <button type="button" id="inf-png" style="margin-left:8px;padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg-elevated,#21262d);color:var(--text-primary);font-size:12px;cursor:pointer;white-space:nowrap" title="Descarga el informe como imagen PNG">⬇ Descargar imagen</button>
     </div>
     <div id="inf-cuerpo"></div>`;
+  document.getElementById('inf-copiar').addEventListener('click',()=>infExportar('copiar'));
+  document.getElementById('inf-png').addEventListener('click',()=>infExportar('descargar'));
   document.getElementById('inf-proy').addEventListener('change',ev=>{
     infSel=ev.target.value||null;
     if(infSel){ infGuardarUltimo(infSel); infCargar(infSel); }
@@ -4148,6 +4152,53 @@ async function renderInforme(){
     return;
   }
   if(infSel) infCargar(infSel); else infVacio();
+}
+
+// ── Exportar el informe como imagen (para insertar en un correo) ──
+// Se captura el informe tal como se ve en pantalla (mismo formato, colores y tamaño).
+// "Copiar" deja la imagen en el portapapeles para pegarla en Gmail/Outlook con Ctrl+V;
+// "Descargar" guarda un PNG en alta resolución para adjuntarlo o insertarlo.
+function infCargarHtml2canvas(){
+  if(window.html2canvas) return Promise.resolve(window.html2canvas);
+  return new Promise((ok,err)=>{
+    const sc=document.createElement('script');
+    sc.src='https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+    sc.onload=()=>ok(window.html2canvas);
+    sc.onerror=()=>err(new Error('No se pudo cargar el generador de imágenes'));
+    document.head.appendChild(sc);
+  });
+}
+async function infExportar(modo){
+  const cuerpo=document.getElementById('inf-cuerpo');
+  const btn=document.getElementById(modo==='copiar'?'inf-copiar':'inf-png');
+  if(!cuerpo || !infSel || !infCache[infSel]){ alert('Primero selecciona un proyecto y espera a que se genere el informe.'); return; }
+  const txt=btn.textContent; btn.disabled=true; btn.textContent='Generando…';
+  try{
+    const h2c=await infCargarHtml2canvas();
+    // Fondo del informe: el del contenedor o, si es transparente, el de la página
+    let fondo=getComputedStyle(cuerpo).backgroundColor;
+    if(!fondo || fondo==='rgba(0, 0, 0, 0)' || fondo==='transparent') fondo=getComputedStyle(document.body).backgroundColor;
+    const canvas=await h2c(cuerpo,{ backgroundColor:fondo, scale: modo==='copiar'?1:2, useCORS:true, logging:false,
+      windowWidth: document.documentElement.scrollWidth });
+    const blob=await new Promise(r=>canvas.toBlob(r,'image/png'));
+    const cod=(epics||[]).find(e=>e.key===infSel)?.codigo||infSel;
+    const nombre=`Informe_${cod}_${new Date().toISOString().slice(0,10)}.png`;
+    let copiado=false;
+    if(modo==='copiar' && navigator.clipboard && window.ClipboardItem){
+      try{ await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]); copiado=true; }catch(_){}
+    }
+    if(copiado){
+      btn.textContent='✓ Copiado: pégalo en el correo (Ctrl+V)';
+      setTimeout(()=>{ btn.textContent=txt; },3500);
+    } else {
+      const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=nombre;
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+      btn.textContent = modo==='copiar' ? 'Descargado (el navegador no permite copiar imágenes)' : '✓ Descargado';
+      setTimeout(()=>{ btn.textContent=txt; },3500);
+    }
+  }catch(e){
+    btn.textContent=txt; alert('No se pudo generar la imagen del informe: '+e.message);
+  }finally{ btn.disabled=false; }
 }
 
 function infVacio(){
