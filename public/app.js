@@ -4241,7 +4241,11 @@ function infHtml(d){
     .map(([l,v])=>`${v.n} ${fraseEst(l,v.n)}`);
   const unir=a=>a.length<=1?a.join(''):a.slice(0,-1).join(', ')+' y '+a[a.length-1];
 
-  const pr=avProyecto(filas,hoy,d.epica?.vence||null);
+  // Fecha de vencimiento de la épica: la envía la API del informe; si no viene,
+  // se toma de la épica ya cargada en Portafolio (campo duedate)
+  const venceEpica = d.epica?.vence
+    || (Array.isArray(typeof epics!=='undefined'?epics:null) ? (epics.find(e=>e.key===d.epica?.key)?.duedate||null) : null);
+  const pr=avProyecto(filas,hoy,venceEpica);
   const MESES2=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
   const fCorta=v=>{ const [y,m,dd]=v.split('-'); return `${dd}-${MESES2[+m-1]}`; };
   const pctTxt=v=>v===null||v===undefined?'–':`${Math.round(v*10)/10}`.replace('.',',')+'%';
@@ -4254,8 +4258,8 @@ function infHtml(d){
         pr.indice?`cumplimiento ${(Math.round(pr.indice*100)/100).toFixed(2).replace('.',',')}`:'')}
       ${kpiAv('ATRASO',pr.plan===null?'–':pr.atraso?`${pr.atraso} día${pr.atraso===1?'':'s'}`:'Al día',pr.atraso?pr.semaforo:'#3fb950',
         pr.atraso&&pr.fechaEquivalente?`plan equivalente al ${fCorta(pr.fechaEquivalente)}`:'')}
-      ${kpiAv('TÉRMINO ESTIMADO',d.epica?.vence?fCorta(d.epica.vence):'–',
-        null, d.epica?.vence?'fecha de vencimiento de la épica':'la épica no tiene fecha de vencimiento')}
+      ${kpiAv('TÉRMINO ESTIMADO',venceEpica?fCorta(venceEpica):'–',
+        null, venceEpica?'fecha de vencimiento de la épica':'la épica no tiene fecha de vencimiento')}
       ${kpiAv('ANÁLISIS',pctTxt(pr.fases.analisis))}
       ${kpiAv('DESARROLLO',pctTxt(pr.fases.desarrollo),null,`terminado en ${pr.devTerminado} de ${pr.n}`)}
       ${kpiAv('PRUEBAS QA',pctTxt(pr.fases.qa),null,`terminado en ${pr.qaTerminado} de ${pr.n}`)}
