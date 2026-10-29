@@ -501,7 +501,7 @@ function bgDonut(items, total, k, tipo){
         fill="none" stroke="${x.c}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" opacity=".75"/>
       <circle cx="${xc.toFixed(1)}" cy="${x.y.toFixed(1)}" r="3.2" fill="${x.c}"/>
       <text x="${xt.toFixed(1)}" y="${(x.y-3).toFixed(1)}" text-anchor="${der?'start':'end'}" font-size="15" font-weight="700" fill="${x.c}">${x.n}<tspan font-size="13" font-weight="500" fill="var(--text-primary)"> ${esc(x.lbl)}</tspan></text>
-      <text x="${xt.toFixed(1)}" y="${(x.y+14).toFixed(1)}" text-anchor="${der?'start':'end'}" font-size="11" fill="var(--text-muted)">${x.est}h est · ${Math.round(x.reg*10)/10}h reg</text>
+      <text x="${xt.toFixed(1)}" y="${(x.y+14).toFixed(1)}" text-anchor="${der?'start':'end'}" font-size="11" fill="var(--text-muted)">${fmtHM(x.est*60)} est · ${fmtHM(x.regMin??x.reg*60)} reg</text>
     </g>`;
   }).join('');
 
@@ -600,7 +600,7 @@ async function cargarBugs(){
 function fmtHM(min){
   min=Math.round(min||0);
   const h=Math.floor(min/60), m=min%60;
-  return h&&m ? `${h}h ${m}m` : h ? `${h}h` : `${m}m`;
+  return h&&m ? `${h}h ${m}m` : h ? `${h}h` : m ? `${m}m` : '0h';
 }
 
 function bugsFiltrados(){
@@ -705,7 +705,7 @@ function renderBugsTabla(){
     kpi('CERRADO',cont.Cerrado,'#3fb950')+
     kpi('VENCIDOS',venc,venc?'#ef4444':'var(--text-dim)')+
     kpi('SIN FECHA',sinF,sinF?'#F5B800':'var(--text-dim)')+
-    kpi('HRS EST.',est+'h')+
+    kpi('HRS EST.',fmtHM(est*60))+
     kpi('HRS REG.',fmtHM(regMin),reg>est&&est>0?'#ef4444':'var(--text-primary)');
 
   const wrap=document.getElementById('bg-tabla-wrap');
@@ -733,7 +733,7 @@ function renderBugsTabla(){
         <td style="color:var(--text-muted);white-space:nowrap">${b.inicio?fmtD(b.inicio):'—'}</td>
         <td style="white-space:nowrap;color:${vencido?'#ef4444':(b.fin?'var(--text-muted)':'#F5B800')}">${b.fin?fmtD(b.fin):'sin fecha'}</td>
         <td style="color:var(--text-muted);white-space:nowrap">${(b.entrega&&fmtD(b.entrega))||'—'}</td>
-        <td style="text-align:right;color:${b.est?'var(--text-primary)':'var(--text-dim)'}">${b.est?b.est+'h':'—'}</td>
+        <td style="text-align:right;color:${b.est?'var(--text-primary)':'var(--text-dim)'}">${b.est?fmtHM(b.est*60):'—'}</td>
         <td style="text-align:right;color:${b.reg>b.est&&b.est>0?'#ef4444':'var(--text-primary)'}">${b.regMin?fmtHM(b.regMin):'—'}</td>
       </tr>`;
     }).join('');
@@ -753,8 +753,8 @@ function renderBugsTabla(){
         const m={}; let i=0;
         gd.forEach(b=>{
           const key=b[campo]||'—';
-          if(!m[key]) m[key]={lbl:key,n:0,est:0,reg:0,c:colorFn(key,i++)};
-          m[key].n++; m[key].est+=b.est; m[key].reg+=b.reg;
+          if(!m[key]) m[key]={lbl:key,n:0,est:0,reg:0,regMin:0,c:colorFn(key,i++)};
+          m[key].n++; m[key].est+=b.est; m[key].reg+=b.reg; m[key].regMin+=(b.regMin||0);
         });
         return Object.values(m).sort((a,b)=>b.n-a.n);
       };
@@ -777,7 +777,7 @@ function renderBugsTabla(){
     }
     return `<tr class="bg-grupo"><td colspan="10">
       ${esc(p.codigo?p.codigo+' · ':'')}${esc(p.proyecto)}
-      <span style="font-weight:400;color:var(--text-muted);margin-left:8px">${g.length} bug${g.length===1?'':'s'} · ${gAb} abierto${gAb===1?'':'s'} · ${gEst}h est. / ${fmtHM(gReg)} reg.</span>
+      <span style="font-weight:400;color:var(--text-muted);margin-left:8px">${g.length} bug${g.length===1?'':'s'} · ${gAb} abierto${gAb===1?'':'s'} · ${fmtHM(gEst*60)} est. / ${fmtHM(gReg)} reg.</span>
       <button class="bg-detalle-btn" type="button" onclick="toggleBugDetalle('${esc(k)}')">${abierto?'Ocultar':'Detalle'}</button>
     </td></tr>${detalle}${filas}`;
   }).join('');
