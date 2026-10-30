@@ -4187,6 +4187,9 @@ async function infExportar(modo){
     const copia=cuerpo.cloneNode(true);
     copia.removeAttribute('id');
     copia.querySelectorAll('[id]').forEach(el=>el.removeAttribute('id'));
+    // "Calidad de datos" es de uso interno y el generador de imágenes no respeta
+    // los desplegables cerrados (dibuja su contenido encimado): se quita de la imagen
+    copia.querySelectorAll('details').forEach(el=>el.remove());
     caja.className='inf-correo';
     // Ajustes para el ancho de correo: las tablas se ajustan al ancho (el texto puede
     // pasar a dos líneas) y las tarjetas de indicadores bajan de fila si no caben
