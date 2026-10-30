@@ -4111,7 +4111,10 @@ function avProyecto(hist, hoy, venceProyecto){
   r.plan=planEn(hoy); r.realSub=realSub;
   r.desvio=realSub-r.plan;
   r.indice=r.plan>0?realSub/r.plan:null;
-  r.semaforo=r.desvio>=-5?'#3fb950':r.desvio>=-17?'#F5B800':'#ef4444';
+  // Rangos de desviación: > 0% Adelantado · 0% a −5% En control (verde) ·
+  // −5% a −10% Alerta (ámbar) · < −10% Crítico (rojo)
+  r.semaforo = r.desvio>=-5 ? '#3fb950' : r.desvio>=-10 ? '#F5B800' : '#ef4444';
+  r.estadoDesvio = r.desvio>0 ? 'Adelantado' : r.desvio>=-5 ? 'En control' : r.desvio>=-10 ? 'Alerta' : 'Crítico';
   // Atraso en días: hoy − fecha en que el plan alcanzaba el % real actual
   r.atraso=0;
   if(realSub<r.plan-0.05){
@@ -4368,8 +4371,8 @@ function infHtml(d){
   const bloqueProy = pr ? `<div class="mt-kpis" style="margin-bottom:12px">
       ${kpiAv('AVANCE PLAN',pctTxt(pr.plan),null,pr.sinPlan?`${pr.sinPlan} sin fechas, excluido${pr.sinPlan===1?'':'s'}`:'a la fecha de corte')}
       ${kpiAv('AVANCE REAL',pctTxt(pr.real),null,`${pr.n} entregable${pr.n===1?'':'s'}`)}
-      ${kpiAv('DESVÍO',pr.plan===null?'–':`${pr.desvio>=0?'+':'−'}${pctTxt(Math.abs(pr.desvio)).replace('%','')} pts`,pr.semaforo,
-        pr.indice?`cumplimiento ${(Math.round(pr.indice*100)/100).toFixed(2).replace('.',',')}`:'')}
+      ${kpiAv('DESVÍO',pr.plan===null?'–':`${pr.desvio>=0?'+':'−'}${pctTxt(Math.abs(pr.desvio))}`,pr.semaforo,
+        pr.plan===null?'':`${pr.estadoDesvio}${pr.indice?` · cumplimiento ${(Math.round(pr.indice*100)/100).toFixed(2).replace('.',',')}`:''}`)}
       ${kpiAv('ATRASO',pr.plan===null?'–':pr.atraso?`${pr.atraso} día${pr.atraso===1?'':'s'}`:'Al día',pr.atraso?pr.semaforo:'#3fb950',
         pr.atraso&&pr.fechaEquivalente?`plan equivalente al ${fCorta(pr.fechaEquivalente)}`:'')}
       ${(()=>{
@@ -4414,7 +4417,7 @@ function infHtml(d){
       <thead><tr><th>Clave</th><th>Entregable</th><th>Estado</th><th>Especificación</th><th style="text-align:center">% Real</th><th style="text-align:center">% Plan</th>
         <th>Responsable</th><th style="text-align:center">Vence</th><th style="text-align:center">Desviación</th></tr></thead>
       <tbody>${filasHtml}</tbody></table></div>
-    <p class="inf-nota">% Real = 15% Análisis (documento 40%, estimación 30%, matriz de casos 30%) + 45% Desarrollo (subtareas cerradas ÷ total) + 20% Pruebas QA + 15% Pruebas UAT (casos conformes ÷ total; 100% con Conformidad = Sí) + 5% pase a Producción. % Plan: lo que debería estar hecho a la fecha de corte según las fechas de la historia y sus subtareas (días sin domingos). El avance del proyecto es el promedio de sus entregables; desvío verde ≥ −5 pts, amarillo hasta −17, rojo por debajo. ${hayFechas?'Desviación: días entre la fecha de vencimiento del entregable en Jira y la fecha de corte (negativo = vencido).':'Los entregables no tienen fecha de vencimiento registrada en Jira, por lo que no se calcula desviación.'}</p>${calidad}
+    <p class="inf-nota">% Real = 15% Análisis (documento 40%, estimación 30%, matriz de casos 30%) + 45% Desarrollo (subtareas cerradas ÷ total) + 20% Pruebas QA + 15% Pruebas UAT (casos conformes ÷ total; 100% con Conformidad = Sí) + 5% pase a Producción. % Plan: lo que debería estar hecho a la fecha de corte según las fechas de la historia y sus subtareas (días sin domingos). El avance del proyecto es el promedio de sus entregables; desvío (Real − Plan): de 0% a −5% en control (verde), de −5% a −10% alerta (ámbar), menor a −10% crítico (rojo); positivo = adelantado. ${hayFechas?'Desviación: días entre la fecha de vencimiento del entregable en Jira y la fecha de corte (negativo = vencido).':'Los entregables no tienen fecha de vencimiento registrada en Jira, por lo que no se calcula desviación.'}</p>${calidad}
     <p class="inf-p">${filas.length===1?'El único entregable está':`De los ${filas.length} entregables,`} ${filas.length===1?resumenEst[0].replace(/^1 /,''):unir(resumenEst)}.</p>`
     : `<div class="mt-empty" style="padding:24px 0">El proyecto no tiene historias marcadas como Entregable.</div>
        ${sinTiene?`<p class="inf-p">Hay ${sinAb.length} bug${sinAb.length===1?'':'s'} abierto${sinAb.length===1?'':'s'} sin entregable asignado.</p>`:''}`;
