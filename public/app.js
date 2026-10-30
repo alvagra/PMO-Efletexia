@@ -3935,7 +3935,7 @@ function infEspecificacion(e, bugsProyecto){
 
 // ═══════════════════════════════════════════════════════════
 //  % DE AVANCE POR FASES — historia y proyecto
-//  Historia = 15% Análisis + 50% Desarrollo + 20% Pruebas QA + 15% Pruebas UAT
+//  Historia = 15% Análisis + 45% Desarrollo + 20% Pruebas QA + 15% Pruebas UAT + 5% Producción
 //   · Análisis: Documento de análisis 40% + Estimación de tiempos 30% + Matriz de casos 30%
 //   · Desarrollo: subtareas de desarrollo cerradas ÷ total (sin subtareas [QA]/[UAT])
 //   · QA / UAT: casos conformes ÷ total de casos (UAT = 100% si "Conformidad" = Sí)
@@ -3946,8 +3946,9 @@ function infEspecificacion(e, bugsProyecto){
 //   (sin Fecha fin QA, el tramo QA+UAT se reparte 20:15). Días sin domingos.
 //  Proyecto: promedio simple de sus historias entregables.
 // ═══════════════════════════════════════════════════════════
-const AV_PESOS = { analisis:15, desarrollo:50, qa:20, uat:15 };
-const AV_FASES = ['analisis','desarrollo','qa','uat'];
+// Pesos por fase: el 5% del pase a producción hace que el 100% solo se alcance en Producción
+const AV_PESOS = { analisis:15, desarrollo:45, qa:20, uat:15, produccion:5 };
+const AV_FASES = ['analisis','desarrollo','qa','uat','produccion'];
 const AV_ANALISIS = [ {k:'documento', p:40}, {k:'estimacion', p:30}, {k:'matriz', p:30} ];
 
 const avD = s => new Date(s+'T00:00:00');
@@ -3997,7 +3998,7 @@ function avFase(e){
 // Avance real de una historia: { pct, fases:{...}, fase, avisos:[] }
 function avReal(e){
   const f=avFase(e), avisos=[];
-  const fases={ analisis:0, desarrollo:0, qa:0, uat:0 };
+  const fases={ analisis:0, desarrollo:0, qa:0, uat:0, produccion:0 };
   if(f===5){ AV_FASES.forEach(k=>fases[k]=100); return { pct:100, fases, fase:f, avisos }; }
 
   // Medido en Jira (null = sin datos)
@@ -4064,7 +4065,8 @@ function avPlanEn(v,f){
   const an = v.an ? avLineal(v.an,f) : (f>=v.devIni?100:0);
   const dv = v.vences.filter(x=>x<=f).length/v.vences.length*100;
   const qa = avLineal(v.qa,f), uat = avLineal(v.uat,f);
-  return (AV_PESOS.analisis*an + AV_PESOS.desarrollo*dv + AV_PESOS.qa*qa + AV_PESOS.uat*uat)/100;
+  const pr = f>=v.fin ? 100 : 0;   // pase a producción planificado para el vencimiento de la historia
+  return (AV_PESOS.analisis*an + AV_PESOS.desarrollo*dv + AV_PESOS.qa*qa + AV_PESOS.uat*uat + AV_PESOS.produccion*pr)/100;
 }
 
 // Indicadores del proyecto a partir de sus historias entregables
@@ -4079,6 +4081,7 @@ function avProyecto(hist, hoy, venceProyecto){
   const r={ n:vivas.length, real, fases, pruebas,
     devTerminado:vivas.filter(h=>h.real.fase>=3).length,
     qaTerminado:vivas.filter(h=>h.real.fase>=4).length,
+    uatTerminado:vivas.filter(h=>h.real.fases.uat>=99.95).length,   // UAT al 100% (casos o conformidad)
     enProduccion:vivas.filter(h=>h.real.fase===5).length,
     sinPlan:vivas.length-conPlan.length, plan:null };
   if(!conPlan.length) return r;
@@ -4265,13 +4268,17 @@ function infHtml(d){
   // ── 1. Avance por entregable ────────────────────────────
   const filas=(d.entregables||[]).map(e=>{
     const ab=abiertosDe(e.key);
-    const esp=infEspecificacion(e,bugs);
+    const real=avReal(e), vent=avVentanas(e);
+    let esp=infEspecificacion(e,bugs);
+    // En Pruebas UAT con UAT al 100% (casos conformes o Conformidad = Sí) y sin observaciones
+    // pendientes: listo para el pase a producción
+    if(esp.lbl==='Validación de usuario' && real.fases.uat>=99.95)
+      esp={ lbl:'Listo para producción', c:'#3fb950', resp:'respProduccion' };
     // Responsable: el campo de Jira que corresponde a la especificación;
     // en etapas sin campo (Pendiente, Bloqueado, Marcha blanca) se mantiene Resp. Desarrollo o el asignado
     const resp=(esp.resp ? (e[esp.resp]||[])
       : (e.respDesarrollo&&e.respDesarrollo.length?e.respDesarrollo:(e.asignado?[e.asignado]:[])))
       .map(n=>resolveNombreDesdeJira(n)?.nombre||n);
-    const real=avReal(e), vent=avVentanas(e);
     const plan=avPlanEn(vent,hoy);
     return { ...e, abiertos:ab.length, totalBugs:bugs.filter(b=>b.entregable===e.key).length,
       real, vent, plan, av:{pct:Math.round(real.pct)}, est:infEstadoJira(e), esp, resp:resp.length?resp.join(', '):'Sin asignar' };
@@ -4286,7 +4293,8 @@ function infHtml(d){
   const MESES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
   const fmtVence=v=>{ const [y,m,dd]=v.split('-'); return `${dd}-${MESES[+m-1]}`; };
   const desv=f=>{
-    if(f.av.pct>=100) return {t:'Entregado',c:'var(--text-muted)'};
+    // Entregado solo con pase a producción
+    if(f.real && f.real.fase===5) return {t:'Entregado',c:'var(--text-muted)'};
     if(!f.vence) return {t:'Sin fecha',c:'var(--text-muted)'};
     const n=Math.round((new Date(f.vence+'T00:00:00')-new Date(hoy+'T00:00:00'))/86400000);
     if(n===0) return {t:'Vence hoy',c:'#d29922'};
@@ -4334,8 +4342,8 @@ function infHtml(d){
   const kpiAv=(l,v,c,sub)=>`<div class="mt-kpi"><div class="mt-kpi-lbl">${l}</div>
     <div class="mt-kpi-val" style="color:${c||'var(--text-primary)'}">${v}</div>${sub?`<div class="mt-kpi-sub">${sub}</div>`:''}</div>`;
   const bloqueProy = pr ? `<div class="mt-kpis" style="margin-bottom:12px">
-      ${kpiAv('AVANCE REAL',pctTxt(pr.real),null,`${pr.n} entregable${pr.n===1?'':'s'}`)}
       ${kpiAv('AVANCE PLAN',pctTxt(pr.plan),null,pr.sinPlan?`${pr.sinPlan} sin fechas, excluido${pr.sinPlan===1?'':'s'}`:'a la fecha de corte')}
+      ${kpiAv('AVANCE REAL',pctTxt(pr.real),null,`${pr.n} entregable${pr.n===1?'':'s'}`)}
       ${kpiAv('DESVÍO',pr.plan===null?'–':`${pr.desvio>=0?'+':'−'}${pctTxt(Math.abs(pr.desvio)).replace('%','')} pts`,pr.semaforo,
         pr.indice?`cumplimiento ${(Math.round(pr.indice*100)/100).toFixed(2).replace('.',',')}`:'')}
       ${kpiAv('ATRASO',pr.plan===null?'–':pr.atraso?`${pr.atraso} día${pr.atraso===1?'':'s'}`:'Al día',pr.atraso?pr.semaforo:'#3fb950',
@@ -4345,7 +4353,7 @@ function infHtml(d){
       ${kpiAv('ANÁLISIS',pctTxt(pr.fases.analisis))}
       ${kpiAv('DESARROLLO',pctTxt(pr.fases.desarrollo),null,`terminado en ${pr.devTerminado} de ${pr.n}`)}
       ${kpiAv('PRUEBAS QA',pctTxt(pr.fases.qa),null,`terminado en ${pr.qaTerminado} de ${pr.n}`)}
-      ${kpiAv('PRUEBAS UAT',pctTxt(pr.fases.uat),null,`terminado en ${pr.enProduccion} de ${pr.n}`)}
+      ${kpiAv('PRUEBAS UAT',pctTxt(pr.fases.uat),null,`terminado en ${pr.uatTerminado} de ${pr.n}`)}
       ${kpiAv('EN PRODUCCIÓN',`${pr.enProduccion} de ${pr.n}`)}
     </div>` : '';
   const avisos=[];
@@ -4369,7 +4377,7 @@ function infHtml(d){
       <thead><tr><th>Clave</th><th>Entregable</th><th>Estado</th><th>Especificación</th><th style="text-align:center">% Real</th><th style="text-align:center">% Plan</th>
         <th>Responsable</th><th style="text-align:center">Vence</th><th style="text-align:center">Desviación</th></tr></thead>
       <tbody>${filasHtml}</tbody></table></div>
-    <p class="inf-nota">% Real = 15% Análisis (documento 40%, estimación 30%, matriz de casos 30%) + 50% Desarrollo (subtareas cerradas ÷ total) + 20% Pruebas QA + 15% Pruebas UAT (casos conformes ÷ total; 100% con Conformidad = Sí). Producción = 100%. % Plan: lo que debería estar hecho a la fecha de corte según las fechas de la historia y sus subtareas (días sin domingos). El avance del proyecto es el promedio de sus entregables; desvío verde ≥ −5 pts, amarillo hasta −17, rojo por debajo. ${hayFechas?'Desviación: días entre la fecha de vencimiento del entregable en Jira y la fecha de corte (negativo = vencido).':'Los entregables no tienen fecha de vencimiento registrada en Jira, por lo que no se calcula desviación.'}</p>${calidad}
+    <p class="inf-nota">% Real = 15% Análisis (documento 40%, estimación 30%, matriz de casos 30%) + 45% Desarrollo (subtareas cerradas ÷ total) + 20% Pruebas QA + 15% Pruebas UAT (casos conformes ÷ total; 100% con Conformidad = Sí) + 5% pase a Producción. % Plan: lo que debería estar hecho a la fecha de corte según las fechas de la historia y sus subtareas (días sin domingos). El avance del proyecto es el promedio de sus entregables; desvío verde ≥ −5 pts, amarillo hasta −17, rojo por debajo. ${hayFechas?'Desviación: días entre la fecha de vencimiento del entregable en Jira y la fecha de corte (negativo = vencido).':'Los entregables no tienen fecha de vencimiento registrada en Jira, por lo que no se calcula desviación.'}</p>${calidad}
     <p class="inf-p">${filas.length===1?'El único entregable está':`De los ${filas.length} entregables,`} ${filas.length===1?resumenEst[0].replace(/^1 /,''):unir(resumenEst)}.</p>`
     : `<div class="mt-empty" style="padding:24px 0">El proyecto no tiene historias marcadas como Entregable.</div>
        ${sinTiene?`<p class="inf-p">Hay ${sinAb.length} bug${sinAb.length===1?'':'s'} abierto${sinAb.length===1?'':'s'} sin entregable asignado.</p>`:''}`;
