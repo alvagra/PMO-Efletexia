@@ -3938,7 +3938,7 @@ function infEspecificacion(e, bugsProyecto){
 //  Historia = 15% Análisis + 50% Desarrollo + 20% Pruebas QA + 15% Pruebas UAT
 //   · Análisis: Documento de análisis 40% + Estimación de tiempos 30% + Matriz de casos 30%
 //   · Desarrollo: subtareas de desarrollo cerradas ÷ total (sin subtareas [QA]/[UAT])
-//   · QA / UAT: casos conformes ÷ total de casos
+//   · QA / UAT: casos conformes ÷ total de casos (UAT = 100% si "Conformidad" = Sí)
 //   · Producción y Marcha blanca = 100% · Pendiente = 0% · Bloqueado mantiene lo medido
 //  Plan a una fecha: mismas fases y pesos, con las ventanas de fechas:
 //   Análisis: inicio historia → día previo a la 1.ª subtarea · Desarrollo: subtareas
@@ -4009,7 +4009,11 @@ function avReal(e){
   const dev=avSubDev(e);
   const mDev=dev.length ? dev.filter(avSubCerrada).length/dev.length*100 : null;
   const casos=c=>(c&&c.total>0&&c.conformes!==null) ? Math.min(100,Math.max(0,c.conformes/c.total*100)) : null;
-  const mQA=casos(e.casosQA), mUAT=casos(e.casosUAT);
+  const mQA=casos(e.casosQA);
+  // Conformidad del usuario (campo "Conformidad" = Sí) → Pruebas UAT al 100%,
+  // aunque no haya casos de UAT registrados; si no, se calcula por casos
+  const conforme=(e.conformidad||[]).some(v=>['si','yes','true','conforme'].includes(ganttNorm(v)));
+  const mUAT=conforme ? 100 : casos(e.casosUAT);
 
   // Fase ya superada: vale lo medido (si falta algo se avisa); sin datos se asume completa
   const pasada=(n,m,lbl)=>{
@@ -4365,7 +4369,7 @@ function infHtml(d){
       <thead><tr><th>Clave</th><th>Entregable</th><th>Estado</th><th>Especificación</th><th style="text-align:center">% Real</th><th style="text-align:center">% Plan</th>
         <th>Responsable</th><th style="text-align:center">Vence</th><th style="text-align:center">Desviación</th></tr></thead>
       <tbody>${filasHtml}</tbody></table></div>
-    <p class="inf-nota">% Real = 15% Análisis (documento 40%, estimación 30%, matriz de casos 30%) + 50% Desarrollo (subtareas cerradas ÷ total) + 20% Pruebas QA + 15% Pruebas UAT (casos conformes ÷ total). Producción = 100%. % Plan: lo que debería estar hecho a la fecha de corte según las fechas de la historia y sus subtareas (días sin domingos). El avance del proyecto es el promedio de sus entregables; desvío verde ≥ −5 pts, amarillo hasta −17, rojo por debajo. ${hayFechas?'Desviación: días entre la fecha de vencimiento del entregable en Jira y la fecha de corte (negativo = vencido).':'Los entregables no tienen fecha de vencimiento registrada en Jira, por lo que no se calcula desviación.'}</p>${calidad}
+    <p class="inf-nota">% Real = 15% Análisis (documento 40%, estimación 30%, matriz de casos 30%) + 50% Desarrollo (subtareas cerradas ÷ total) + 20% Pruebas QA + 15% Pruebas UAT (casos conformes ÷ total; 100% con Conformidad = Sí). Producción = 100%. % Plan: lo que debería estar hecho a la fecha de corte según las fechas de la historia y sus subtareas (días sin domingos). El avance del proyecto es el promedio de sus entregables; desvío verde ≥ −5 pts, amarillo hasta −17, rojo por debajo. ${hayFechas?'Desviación: días entre la fecha de vencimiento del entregable en Jira y la fecha de corte (negativo = vencido).':'Los entregables no tienen fecha de vencimiento registrada en Jira, por lo que no se calcula desviación.'}</p>${calidad}
     <p class="inf-p">${filas.length===1?'El único entregable está':`De los ${filas.length} entregables,`} ${filas.length===1?resumenEst[0].replace(/^1 /,''):unir(resumenEst)}.</p>`
     : `<div class="mt-empty" style="padding:24px 0">El proyecto no tiene historias marcadas como Entregable.</div>
        ${sinTiene?`<p class="inf-p">Hay ${sinAb.length} bug${sinAb.length===1?'':'s'} abierto${sinAb.length===1?'':'s'} sin entregable asignado.</p>`:''}`;
