@@ -613,6 +613,7 @@ module.exports = async function handler(req, res) {
         uatTotal:     await idPrimero(['Casos UAT total', 'Casos UAT totales']),
         uatConformes: await idPrimero(['Casos UAT conformes']),
         finQA:        await idPrimero(['Fecha fin plan QA', 'Fecha fin QA']),
+        conformidad:  await idPrimero(['Conformidad', 'Conformidad UAT', 'Conformidad usuario']),
       };
       ['customfield_10015'].concat(Object.values(CF_AV))   // 10015 = Fecha de inicio
         .forEach(id => { if (id && !CAMPOS.includes(id)) CAMPOS.push(id); });
@@ -757,6 +758,7 @@ module.exports = async function handler(req, res) {
                     conformes: CF_AV.qaConformes ? num(i.fields[CF_AV.qaConformes]) : null },
         casosUAT: { total: CF_AV.uatTotal ? num(i.fields[CF_AV.uatTotal]) : null,
                     conformes: CF_AV.uatConformes ? num(i.fields[CF_AV.uatConformes]) : null },
+        conformidad: CF_AV.conformidad ? nombresDe(i.fields[CF_AV.conformidad]) : [],   // ["Sí"] = conformidad del usuario
         subtareas: subtareasDe(i.key),
         asignado: i.fields.assignee?.displayName || null,
         vence: i.fields.duedate || null,
