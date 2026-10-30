@@ -4038,13 +4038,33 @@ function avReal(e){
 }
 
 // Ventanas de plan de una historia (null si no hay fechas suficientes)
-function avVentanas(e){
-  const dev=avSubDev(e).filter(st=>st.vence);
-  if(!dev.length || !e.vence) return null;
+function avVentanas(e, ref){
+  // Fecha fin del plan: el vencimiento de la historia o, si no tiene, el Término estimado (épica)
+  const fin = e.vence || ref?.vence || null;
+  if(!fin) return null;
+  const finEpica = !e.vence;
+  const dev=avSubDev(e).filter(st=>st.vence && st.vence<=fin);
+  if(!dev.length){
+    // Sin fechas en las subtareas: las fases se reparten entre el inicio y la fecha fin
+    // según sus pesos (Análisis 15, Desarrollo 45, QA 20, UAT 15); producción en la fecha fin
+    const ini = e.inicio || ref?.inicio || null;
+    if(!ini || ini>fin) return null;
+    const tot=Math.max(1,avHabiles(ini,fin));
+    const pesos=[AV_PESOS.analisis,AV_PESOS.desarrollo,AV_PESOS.qa,AV_PESOS.uat];
+    const sum=pesos.reduce((a,b)=>a+b,0);
+    let cursor=ini, acum=0; const win=[];
+    pesos.forEach((w,k)=>{
+      acum+=w;
+      const hasta = k===pesos.length-1 ? fin : avSumarHabiles(avSumar(ini,-1), Math.max(1,Math.round(tot*acum/sum)));
+      const v=[cursor, hasta<cursor?cursor:(hasta>fin?fin:hasta)];
+      win.push(v); cursor=avSumar(v[1],1); if(cursor>fin) cursor=fin;
+    });
+    return { an:win[0], devWin:win[1], devIni:win[1][0], vences:null, qa:win[2], uat:win[3], fin, estimado:true, repartido:true, finEpica };
+  }
   const devIni=dev.map(st=>st.inicio||st.vence).sort()[0];
   const devFin=dev.map(st=>st.vence).sort().slice(-1)[0];
   const an = e.inicio && e.inicio<devIni ? [e.inicio, avSumar(devIni,-1)] : null;
-  const pruIni=avSumar(devFin,1), fin=e.vence;
+  const pruIni=avSumar(devFin,1);
   let qa, uat, estimado=false;
   if(e.finQA && e.finQA>=pruIni && e.finQA<=fin){
     qa=[pruIni, e.finQA]; uat=[avSumar(e.finQA,1), fin];
@@ -4056,14 +4076,15 @@ function avVentanas(e){
     const finQA=tot>1?avSumarHabiles(avSumar(pruIni,-1),nQA):fin;
     qa=[pruIni, finQA]; uat=[avSumar(finQA,1), fin];
   }
+  if(qa[0]>qa[1]) qa=[qa[1],qa[1]];
   if(uat[0]>uat[1]) uat=[uat[1],uat[1]];
-  return { an, devIni, vences:dev.map(st=>st.vence), qa, uat, fin, estimado };
+  return { an, devIni, vences:dev.map(st=>st.vence), qa, uat, fin, estimado, finEpica };
 }
 // Plan de una historia a la fecha f
 function avPlanEn(v,f){
   if(!v) return null;
   const an = v.an ? avLineal(v.an,f) : (f>=v.devIni?100:0);
-  const dv = v.vences.filter(x=>x<=f).length/v.vences.length*100;
+  const dv = v.vences ? v.vences.filter(x=>x<=f).length/v.vences.length*100 : avLineal(v.devWin,f);
   const qa = avLineal(v.qa,f), uat = avLineal(v.uat,f);
   const pr = f>=v.fin ? 100 : 0;   // pase a producción planificado para el vencimiento de la historia
   return (AV_PESOS.analisis*an + AV_PESOS.desarrollo*dv + AV_PESOS.qa*qa + AV_PESOS.uat*uat + AV_PESOS.produccion*pr)/100;
@@ -4265,10 +4286,17 @@ function infHtml(d){
   const bugs=d.bugs||[];
   const abiertosDe=k=>bugs.filter(b=>b.entregable===k && infBugAbierto(b));
 
+  // Fechas de la épica: vencimiento (Término estimado) e inicio. Las envía la API del informe;
+  // si no vienen, se toman de la épica ya cargada en Portafolio
+  const epPort = Array.isArray(typeof epics!=='undefined'?epics:null) ? epics.find(x=>x.key===d.epica?.key) : null;
+  const venceEpica = d.epica?.vence || epPort?.duedate || null;
+  const inicioEpica = d.epica?.inicio || epPort?.fechaInicio || null;
+  const refEpica = { vence:venceEpica, inicio:inicioEpica };
+
   // ── 1. Avance por entregable ────────────────────────────
   const filas=(d.entregables||[]).map(e=>{
     const ab=abiertosDe(e.key);
-    const real=avReal(e), vent=avVentanas(e);
+    const real=avReal(e), vent=avVentanas(e, refEpica);
     let esp=infEspecificacion(e,bugs);
     // En Pruebas UAT con UAT al 100% (casos conformes o Conformidad = Sí) y sin observaciones
     // pendientes: listo para el pase a producción
@@ -4331,10 +4359,6 @@ function infHtml(d){
     .map(([l,v])=>`${v.n} ${fraseEst(l,v.n)}`);
   const unir=a=>a.length<=1?a.join(''):a.slice(0,-1).join(', ')+' y '+a[a.length-1];
 
-  // Fecha de vencimiento de la épica: la envía la API del informe; si no viene,
-  // se toma de la épica ya cargada en Portafolio (campo duedate)
-  const venceEpica = d.epica?.vence
-    || (Array.isArray(typeof epics!=='undefined'?epics:null) ? (epics.find(e=>e.key===d.epica?.key)?.duedate||null) : null);
   const pr=avProyecto(filas,hoy,venceEpica);
   const MESES2=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
   const fCorta=v=>{ const [y,m,dd]=v.split('-'); return `${dd}-${MESES2[+m-1]}`; };
@@ -4348,8 +4372,17 @@ function infHtml(d){
         pr.indice?`cumplimiento ${(Math.round(pr.indice*100)/100).toFixed(2).replace('.',',')}`:'')}
       ${kpiAv('ATRASO',pr.plan===null?'–':pr.atraso?`${pr.atraso} día${pr.atraso===1?'':'s'}`:'Al día',pr.atraso?pr.semaforo:'#3fb950',
         pr.atraso&&pr.fechaEquivalente?`plan equivalente al ${fCorta(pr.fechaEquivalente)}`:'')}
-      ${kpiAv('TÉRMINO ESTIMADO',venceEpica?fCorta(venceEpica):'–',
-        null, venceEpica?'fecha de vencimiento de la épica':'la épica no tiene fecha de vencimiento')}
+      ${(()=>{
+        // Estado frente al Término estimado (vencimiento de la épica), en días sin domingos
+        if(!venceEpica) return kpiAv('TÉRMINO ESTIMADO','–',null,'la épica no tiene fecha de vencimiento');
+        const terminado = pr.real>=99.95;
+        let sub, color=null;
+        if(terminado) sub='proyecto terminado';
+        else if(hoy<venceEpica){ const n=avHabiles(avSumar(hoy,1),venceEpica); sub=`faltan ${n} día${n===1?'':'s'}`; }
+        else if(hoy===venceEpica){ sub='vence hoy'; color='#F5B800'; }
+        else { const n=avHabiles(avSumar(venceEpica,1),hoy); sub=`vencido hace ${n} día${n===1?'':'s'}`; color='#ef4444'; }
+        return kpiAv('TÉRMINO ESTIMADO',fCorta(venceEpica),color,sub);
+      })()}
       ${kpiAv('ANÁLISIS',pctTxt(pr.fases.analisis))}
       ${kpiAv('DESARROLLO',pctTxt(pr.fases.desarrollo),null,`terminado en ${pr.devTerminado} de ${pr.n}`)}
       ${kpiAv('PRUEBAS QA',pctTxt(pr.fases.qa),null,`terminado en ${pr.qaTerminado} de ${pr.n}`)}
@@ -4359,8 +4392,12 @@ function infHtml(d){
   const avisos=[];
   filas.forEach(f=>{
     f.real.avisos.forEach(a=>avisos.push(`<b>${esc(f.key)}</b>: ${esc(a)}`));
-    if(!f.vent) avisos.push(`<b>${esc(f.key)}</b>: sin fechas para el plan (subtareas con vencimiento y fecha de vencimiento de la historia)`);
-    else if(f.vent.estimado && f.real.fase<5) avisos.push(`<b>${esc(f.key)}</b>: sin Fecha fin QA, plan de QA/UAT estimado (20:15)`);
+    if(!f.vent) avisos.push(`<b>${esc(f.key)}</b>: sin fechas para el plan (ni la historia ni la épica tienen fecha de inicio y vencimiento)`);
+    else {
+      if(f.vent.finEpica) avisos.push(`<b>${esc(f.key)}</b>: sin fecha de vencimiento, el plan usa el Término estimado de la épica`);
+      if(f.vent.repartido && f.real.fase<5) avisos.push(`<b>${esc(f.key)}</b>: subtareas sin fechas, plan repartido entre inicio y fin según los pesos de cada fase`);
+      else if(f.vent.estimado && f.real.fase<5) avisos.push(`<b>${esc(f.key)}</b>: sin Fecha fin plan QA, plan de QA/UAT estimado (20:15)`);
+    }
     if(f.vent && avSubDev(f).some(st=>st.vence && st.vence>f.vent.fin))
       avisos.push(`<b>${esc(f.key)}</b>: hay subtareas que vencen después que la historia`);
   });
