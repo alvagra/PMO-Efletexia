@@ -602,7 +602,7 @@ module.exports = async function handler(req, res) {
         analisis:   await idPrimero(['Resp. Análisis', 'Resp Análisis', 'Responsable Análisis']),
         qa:         await idPrimero(['Resp. QA', 'Resp QA', 'Responsable QA']),
         uat:        await idPrimero(['Resp. UAT', 'Resp UAT', 'Responsable UAT']),
-        produccion: await idPrimero(['Resp. Producción', 'Resp Producción', 'Responsable Producción']),
+        produccion: await idPrimero(['Resp. PROD.', 'Resp. PROD', 'Resp PROD', 'Resp. Producción', 'Resp Producción', 'Responsable Producción']),
       };
       Object.values(CF_RESP).forEach(id => { if (id && !CAMPOS.includes(id)) CAMPOS.push(id); });
       // Campos del % de avance por fase (se resuelven por nombre; pueden no existir aún)
@@ -619,7 +619,7 @@ module.exports = async function handler(req, res) {
         .forEach(id => { if (id && !CAMPOS.includes(id)) CAMPOS.push(id); });
 
       const epicaRes = await fetchAllPages(auth, JIRA_CLOUD, `key = ${epicKey}`,
-        ['summary', 'status', 'customfield_10934', 'issuetype', 'duedate',
+        ['summary', 'status', 'customfield_10934', 'issuetype', 'duedate', 'customfield_10015',
          'customfield_10862']);   // Próximos pasos (texto enriquecido)
       const epica = epicaRes[0];
       if (!epica) return res.status(404).json({ error: 'No se encontró el proyecto' });
@@ -812,6 +812,7 @@ module.exports = async function handler(req, res) {
         type: 'informe',
         epica: { key: epica.key, summary: epica.fields?.summary || epica.key,
                  vence: epica.fields?.duedate || null,   // Fecha de vencimiento del proyecto
+                 inicio: epica.fields?.customfield_10015 || null,   // Fecha de inicio del proyecto
                  codigo: epica.fields?.customfield_10934 || '', estado: epica.fields?.status?.name || '',
                  proximosPasos: epica.fields?.customfield_10862 || null },
         campoEntregable: CF_ENT || null,
