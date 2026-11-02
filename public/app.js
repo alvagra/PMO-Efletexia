@@ -3515,9 +3515,9 @@ function renderMetricasCuerpo(){
   metHistRows=rows.filter(r=>r.tipo==='Historia');
   cuerpo.innerHTML = mtKpis(rows)
     + mtDonasHistorias()
-    + mtSeccion('HISTORIAS', metHistRows)
+    + `<div id="mt-sec-hist">${mtSeccion('HISTORIAS', mtHistPeriodo())}</div>`
     + (soloHistorias?'':`<div style="margin-top:22px">${mtDonasFila()}</div>`)
-    + mtSeccion('BUGS',      rows.filter(r=>r.tipo==='Bug'));
+    + `<div id="mt-sec-bugs">${mtSeccion('BUGS', mtBugsPeriodo(metBugRowsTabla=rows.filter(r=>r.tipo==='Bug')))}</div>`;
 }
 
 function mtPct(v){ return (Math.round(v*10)/10).toString().replace('.',',')+'%'; }
@@ -3765,11 +3765,39 @@ function mtDonasHistorias(){
 function mtRefrescarDonas(){
   const el=document.getElementById('mt-donas');
   if(el) el.outerHTML=mtDonasFila();
+  // La tabla de bugs usa el mismo periodo que las donas de bugs
+  const sb=document.getElementById('mt-sec-bugs');
+  if(sb) sb.innerHTML=mtSeccion('BUGS', mtBugsPeriodo(metBugRowsTabla));
+}
+
+// Bugs de la tabla en el periodo de las donas de bugs (mes de Vence = Fecha de vencimiento;
+// si no tiene, el de la Fecha cierre bug). Sin fecha: solo se muestran en "Últimos N meses".
+let metBugRowsTabla = [];
+function mtBugsPeriodo(lista){
+  const conMes=(lista||[]).map(r=>({ r, mes:(r.vence||r.entrega||'').slice(0,7)||null }));
+  if(metPeriodo) return conMes.filter(x=>x.mes===metPeriodo).map(x=>x.r);
+  const ult=mtMesesDisponibles().slice(-6);
+  if(!ult.length) return conMes.map(x=>x.r);
+  return conMes.filter(x=>!x.mes || ult.includes(x.mes)).map(x=>x.r);
 }
 
 function mtRefrescarDonasHist(){
   const eh=document.getElementById('mt-donas-hist');
   if(eh) eh.outerHTML=mtDonasHistorias();
+  // La tabla de historias usa el mismo periodo que las donas
+  const sh=document.getElementById('mt-sec-hist');
+  if(sh) sh.innerHTML=mtSeccion('HISTORIAS', mtHistPeriodo());
+}
+
+// Historias del periodo seleccionado (mes de Vence = Fecha fin plan desarrollo);
+// sin mes elegido, los últimos 6 meses con datos
+function mtHistPeriodo(){
+  const todas=(metHistRows||[]);
+  const meses=[...new Set(todas.filter(r=>r.vence).map(r=>r.vence.slice(0,7)))].sort();
+  if(metPeriodoHist && !meses.includes(metPeriodoHist)) metPeriodoHist='';
+  if(metPeriodoHist) return todas.filter(r=>r.vence && r.vence.slice(0,7)===metPeriodoHist);
+  const ult=meses.slice(-6);
+  return todas.filter(r=>!r.vence || ult.includes(r.vence.slice(0,7)));
 }
 
 function mtDonaCard(titulo, items, total, centro, fmtV, centroTxt, sinValor){
