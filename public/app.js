@@ -3411,14 +3411,18 @@ async function loadMetricas(){
 
     // Bugs por mes: universo completo de Errores, no solo los que ya tienen
     // cargada la fecha de entrega. El mes sale del vencimiento; si no hay
-    // vencimiento —o es anterior a la creación— se usa el mes de registro.
+    // vencimiento —o es anterior a la creación (bug registrado en Jira después
+    // de reportado)— se usa la Fecha de inicio (fecha de reporte) y, si
+    // tampoco la tiene, el mes de registro.
     try{
       const jb=await rb.json();
       metBugsMes=(jb.bugs||[]).map(b=>{
         const f=b.fields||{};
         const created=(f.created||'').slice(0,10);
         const due=f.duedate||null;
+        const ini=f.customfield_10015||null;
         const usaDue=!!(due && created && due>=created);
+        const usaIni=!usaDue && !!ini;
         const epKey=f.parent?.key||f._epica?.key||null;
         const mesFijo=MT_MES_POR_BUG[b.key]||(epKey?MT_MES_POR_EPICA[epKey]:null);
         return {
@@ -3429,7 +3433,7 @@ async function loadMetricas(){
           responsable:(()=>{ const dn=f.assignee?.displayName; if(!dn) return 'Sin asignar';
             return resolveNombreDesdeJira(dn)?.nombre||dn; })(),
           cerrado:bgEstadoCls(f.status?.name).g==='Cerrado',
-          mes:mesFijo||(usaDue?due:created).slice(0,7),
+          mes:mesFijo||(usaDue?due:(usaIni?ini:created)).slice(0,7),
           estimado:!usaDue
         };
       }).filter(x=>/^\d{4}-\d{2}$/.test(x.mes) && !MT_BUGS_EXCLUIDOS.includes(x.key));
@@ -3684,7 +3688,7 @@ function mtDonasFila(){
     </div>
     <div class="mt-cuatro">${tarjetas}</div>
     <div style="font-size:10px;color:var(--text-dim);text-align:center;margin-top:8px">
-      Bugs: mes de vencimiento (o de registro si no tiene) · Horas: Registro de actividad del bug y sus subtareas, por mes del trabajo
+      Bugs: mes de vencimiento (o de inicio si falta o es anterior al registro; si no, de registro) · Horas: Registro de actividad del bug y sus subtareas, por mes del trabajo
     </div>
   </div>`;
 }
