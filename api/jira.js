@@ -296,11 +296,10 @@ module.exports = async function handler(req, res) {
 
 
     } else if (type === 'metricas') {
-      // Desvío de entrega = "Fecha de entrega desarrollo" − "Fecha fin desarrollo".
+      // Desvío de entrega (historias) = "Fecha fin real desarrollo" − "Fecha fin plan desarrollo".
       // Aplica a historias y a bugs; solo entran los que tienen ambas fechas.
       const MET_FIELDS = [
         'summary', 'status', 'assignee', 'parent', 'duedate', 'issuetype',
-        'customfield_11381', // Fecha de entrega desarrollo
         'customfield_10015', // Fecha inicio
         'customfield_10934', // Código
         'customfield_11451', // Resp. Desarrollo (selección múltiple)
@@ -308,18 +307,20 @@ module.exports = async function handler(req, res) {
       // Campo "Entregable": solo las historias marcadas con Sí entran a la métrica
       let CF_ENT = await idCampoEntregable(auth, JIRA_CLOUD);
       if (CF_ENT) MET_FIELDS.push(CF_ENT);
-      // "Fecha fin desarrollo" es ahora la fecha comprometida de la métrica
-      // Si no se resuelve por nombre se usa el id conocido de PTS
-      const CF_FIN = (await idCampoPorNombre(auth, JIRA_CLOUD, 'Fecha fin desarrollo')) || 'customfield_11450';
-      if (!MET_FIELDS.includes(CF_FIN)) MET_FIELDS.push(CF_FIN);
+      // Historias: Vence = "Fecha fin plan desarrollo" · Entrega = "Fecha fin real desarrollo".
+      // Se resuelven por nombre; si no, se usan los ids conocidos de PTS (11449 / 11450).
+      const CF_FIN  = (await idCampoPorNombre(auth, JIRA_CLOUD, 'Fecha fin plan desarrollo')) || 'customfield_11449';
+      const CF_REAL = (await idCampoPorNombre(auth, JIRA_CLOUD, 'Fecha fin real desarrollo')) || 'customfield_11450';
+      [CF_FIN, CF_REAL].forEach(c => { if (!MET_FIELDS.includes(c)) MET_FIELDS.push(c); });
+      const nReal = CF_REAL.replace('customfield_', '');
       // Bugs: Entrega = "Fecha cierre bug" · Vence = "Fecha de vencimiento" (duedate)
       const CF_CIERRE = await idCampoPorNombre(auth, JIRA_CLOUD, 'Fecha cierre bug');
       if (CF_CIERRE && !MET_FIELDS.includes(CF_CIERRE)) MET_FIELDS.push(CF_CIERRE);
-      // Historias entran por "Fecha de entrega desarrollo"; bugs por "Fecha cierre bug"
+      // Historias entran por "Fecha fin real desarrollo"; bugs por "Fecha cierre bug"
       const nCierre = CF_CIERRE ? CF_CIERRE.replace('customfield_', '') : null;
       const MET_JQL = nCierre
-        ? `project = PTS AND ((issuetype != Error AND cf[11381] IS NOT EMPTY) OR (issuetype = Error AND cf[${nCierre}] IS NOT EMPTY)) ORDER BY created DESC`
-        : 'project = PTS AND cf[11381] IS NOT EMPTY ORDER BY cf[11381] DESC';
+        ? `project = PTS AND ((issuetype != Error AND cf[${nReal}] IS NOT EMPTY) OR (issuetype = Error AND cf[${nCierre}] IS NOT EMPTY)) ORDER BY created DESC`
+        : `project = PTS AND cf[${nReal}] IS NOT EMPTY ORDER BY cf[${nReal}] DESC`;
       let items = await fetchAllPages(auth, JIRA_CLOUD, MET_JQL, MET_FIELDS);
 
       // Épica de cada item, para mostrar código y nombre de proyecto
@@ -365,14 +366,14 @@ module.exports = async function handler(req, res) {
       items.forEach(it => {
         it.fields._entregable = CF_ENT ? esEntregable(it.fields[CF_ENT]) : null;
         const esBug = it.fields.issuetype?.name === 'Error';
-        // Historias: Vence = "Fecha fin desarrollo" · Entrega = "Fecha de entrega desarrollo"
+        // Historias: Vence = "Fecha fin plan desarrollo" · Entrega = "Fecha fin real desarrollo"
         // Bugs:      Vence = "Fecha de vencimiento" · Entrega = "Fecha cierre bug"
         it.fields._vence   = (esBug ? it.fields.duedate : it.fields[CF_FIN]) || null;
         it.fields._entrega = (esBug ? (CF_CIERRE ? it.fields[CF_CIERRE] : null)
-                                    : it.fields.customfield_11381) || null;
+                                    : it.fields[CF_REAL]) || null;
       });
       return res.status(200).json({ items, total: items.length, type: 'metricas',
-        campoEntregable: CF_ENT || null, campoFin: CF_FIN, campoCierreBug: CF_CIERRE || null });
+        campoEntregable: CF_ENT || null, campoFin: CF_FIN, campoReal: CF_REAL, campoCierreBug: CF_CIERRE || null });
 
     } else if (type === 'seguimiento') {
       // Seguimiento por entregable: historias con el campo Entregable = Sí.
