@@ -249,9 +249,10 @@ function parseIssue(i){
 
 function updateKpis(data){
   const t=data.length;
-  const crit=data.filter(e=>e.desvioPct!==null&&Math.abs(e.desvioPct)>0.17).length;
-  const tol =data.filter(e=>e.desvioPct!==null&&Math.abs(e.desvioPct)>=0.05&&Math.abs(e.desvioPct)<=0.17).length;
-  const onT =data.filter(e=>e.desvioPct!==null&&Math.abs(e.desvioPct)<0.05).length;
+  // Rangos del Informe: crítico < −10% · alerta −5% a −10% · en control ≥ −5%
+  const crit=data.filter(e=>e.desvioPct!==null&&e.desvioPct<-0.10).length;
+  const tol =data.filter(e=>e.desvioPct!==null&&e.desvioPct>=-0.10&&e.desvioPct<-0.05).length;
+  const onT =data.filter(e=>e.desvioPct!==null&&e.desvioPct>=-0.05).length;
   const avgs=data.map(e=>e.realPct!==null?e.realPct:null).filter(v=>v!==null);
   const avg =avgs.length?Math.round(avgs.reduce((a,b)=>a+b,0)/avgs.length*100):0;
   const cj  =data.filter(e=>e.duedate&&e.duedate.startsWith('2026-06')).length;
@@ -315,7 +316,7 @@ function renderTable(data){
       <td class="muted">${esc(e.sponsor)||'—'}</td>
       <td><span class="badge badge-${sbClass(e.status)}">${e.status}</span></td>
       <td class="muted">${e.planPct!==null?Math.round(e.planPct*100)+'% / '+(e.realPct!==null?Math.round(e.realPct*100)+'%':'—'):'—'}</td>
-      <td class="muted" style="color:${e.desvioPct!==null?(Math.abs(e.desvioPct)>0.17?'var(--red)':Math.abs(e.desvioPct)>=0.05?'var(--yellow)':'var(--green)'):'var(--text-muted)'}">
+      <td class="muted" style="color:${e.desvioPct!==null?(e.desvioPct<-0.10?'var(--red)':e.desvioPct<-0.05?'var(--yellow)':'var(--green)'):'var(--text-muted)'}">
         ${e.desvioPct!==null?Math.round(e.desvioPct*100)+'%':'—'}</td>
       <td class="muted">${e.pctDesarrollo!==null?Math.round(e.pctDesarrollo*100)+'% / '+(e.pctPruebas!==null?Math.round(e.pctPruebas*100)+'%':'—'):'—'}</td>
       <td class="muted">${fmtD(e.fechaInicio)||'—'}</td>
@@ -991,9 +992,9 @@ async function loadData(manual=false){
 
     document.getElementById('kpis-section').innerHTML=`
       <div class="kpi"><div class="kpi-label">Total</div><div class="kpi-value c-white" id="kpi-total"></div></div>
-      <div class="kpi"><div class="kpi-label">Críticos</div><div class="kpi-value c-red" id="kpi-crit"></div><div class="kpi-sub">Desv &gt;17%</div></div>
-      <div class="kpi"><div class="kpi-label">Tolerancia</div><div class="kpi-value c-yellow" id="kpi-tol"></div><div class="kpi-sub">Desv 5–17%</div></div>
-      <div class="kpi"><div class="kpi-label">On Track</div><div class="kpi-value c-blue" id="kpi-ont"></div><div class="kpi-sub">Desv &lt;5%</div></div>
+      <div class="kpi"><div class="kpi-label">Críticos</div><div class="kpi-value c-red" id="kpi-crit"></div><div class="kpi-sub">Desv &lt; −10%</div></div>
+      <div class="kpi"><div class="kpi-label">Tolerancia</div><div class="kpi-value c-yellow" id="kpi-tol"></div><div class="kpi-sub">Desv −5% a −10%</div></div>
+      <div class="kpi"><div class="kpi-label">On Track</div><div class="kpi-value c-blue" id="kpi-ont"></div><div class="kpi-sub">Desv ≥ −5%</div></div>
       <div class="kpi"><div class="kpi-label">Avance prom.</div><div class="kpi-value c-cyan" id="kpi-avg"></div></div>
       <div class="kpi"><div class="kpi-label">Cierre junio</div><div class="kpi-value c-green" id="kpi-cj"></div></div>
     `;
@@ -1006,6 +1007,7 @@ async function loadData(manual=false){
     else {
       pmoRestaurarTab();
     }
+    portAvanceCalcular();   // % Plan / Real / Desvío iguales a los del Informe
   }catch(err){
     console.error(err);
     loading.classList.add('hidden');
@@ -1906,7 +1908,7 @@ function verProyecto(epicIdx){
     :epicaGlobal.pctDesarrollo!=null?Math.round(epicaGlobal.pctDesarrollo*100)+'%':'—'):'—';
   const fin=epicaGlobal?fmtD(epicaGlobal.duedate):'—';
   const desvioPct=epicaGlobal&&epicaGlobal.desvioPct!=null?Math.round(epicaGlobal.desvioPct*100):null;
-  const desvColor=desvioPct===null?'var(--text-muted)':Math.abs(desvioPct)>17?'var(--red)':Math.abs(desvioPct)>=5?'var(--yellow)':'var(--green)';
+  const desvColor=desvioPct===null?'var(--text-muted)':desvioPct<-10?'var(--red)':desvioPct<-5?'var(--yellow)':'var(--green)';
   const sbCls={'Backlog':'backlog','Análisis':'analisis','Desarrollo':'desarrollo','Pruebas':'pruebas','Producción':'produccion','Planificado':'planificado','Stand by':'standby','Desestimado':'desestimado'}[estado]||'backlog';
   const tareas=(p.tareas||[]).slice().sort((a,b)=>(b.updated||b.fecha||'').localeCompare(a.updated||a.fecha||''));
   const tareasHtml=tareas.length
@@ -4161,6 +4163,57 @@ function avProyecto(hist, hoy, venceProyecto){
     r.termino=avSumarHabiles(hoy,Math.ceil(resta/Math.min(1,r.indice)));
   }
   return r;
+}
+
+// ── Avance de cada proyecto en Portafolio = mismo cálculo que el Informe ──
+// Resumen de una épica a partir de la respuesta del informe (avance por fases)
+function avResumenEpica(d, hoy){
+  const epPort = Array.isArray(typeof epics!=='undefined'?epics:null) ? epics.find(x=>x.key===d.epica?.key) : null;
+  const ref = { vence: d.epica?.vence || epPort?.duedate || null, inicio: d.epica?.inicio || epPort?.fechaInicio || null };
+  const hist=(d.entregables||[]).map(e=>({ ...e, real:avReal(e), vent:avVentanas(e, ref) }));
+  return avProyecto(hist, hoy, ref.vence);
+}
+let portAvanceEnCurso=false;
+async function portAvanceCalcular(){
+  if(portAvanceEnCurso) return;
+  portAvanceEnCurso=true;
+  try{
+    if(!infProyectos){
+      const r=await Sesion.pedir('/api/jira',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({type:'informeProyectos'})});
+      const j=await r.json();
+      if(!r.ok) throw new Error(j.error||'Error de API');
+      infProyectos=(j.proyectos||[]).filter(p=>!SPECIAL_EPIC_KEYS.includes(p.key));
+    }
+    const hoy=new Date().toISOString().slice(0,10);
+    const cola=infProyectos.map(p=>p.key);
+    const trabajar=async()=>{
+      while(cola.length){
+        const k=cola.shift();
+        try{
+          if(!infCache[k]){
+            const r=await Sesion.pedir('/api/jira',{method:'POST',headers:{'Content-Type':'application/json'},
+              body:JSON.stringify({type:'informe',epicKey:k})});
+            const j=await r.json(); if(!r.ok) continue;
+            infCache[k]=j;
+          }
+          const pr=avResumenEpica(infCache[k],hoy);
+          const ep=epics.find(e=>e.key===k);
+          if(!ep || !pr) continue;
+          // Mismos valores que las tarjetas del Informe (en fracción, como los campos de Jira)
+          ep.planPct    = pr.plan===null ? null : pr.plan/100;
+          ep.realPct    = pr.real/100;
+          ep.desvioPct  = pr.plan===null ? null : pr.desvio/100;
+          ep.pctDesarrollo = pr.fases.desarrollo/100;
+          ep.pctPruebas    = pr.pruebas/100;
+          ep.avanceInforme = true;
+        }catch(_){}
+      }
+    };
+    await Promise.all([1,2,3,4].map(trabajar));   // 4 consultas en paralelo
+    renderTable(sortedData(getFiltered()));   // también actualiza los KPIs
+  }catch(e){ console.warn('Avance de portafolio:', e.message); }
+  finally{ portAvanceEnCurso=false; }
 }
 
 async function renderInforme(){
