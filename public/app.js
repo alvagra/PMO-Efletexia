@@ -3772,11 +3772,14 @@ function mtRefrescarDonas(){
   if(sb) sb.innerHTML=mtSeccion('BUGS', mtBugsPeriodo(metBugRowsTabla));
 }
 
-// Bugs de la tabla en el periodo de las donas de bugs (mes de Vence = Fecha de vencimiento;
-// si no tiene, el de la Fecha cierre bug). Sin fecha: solo se muestran en "Últimos N meses".
+// Bugs de la tabla en el periodo de las donas de bugs, con el mismo criterio de mes que las donas.
+// Sin fecha: solo se muestran en "Últimos N meses".
 let metBugRowsTabla = [];
 function mtBugsPeriodo(lista){
-  const conMes=(lista||[]).map(r=>({ r, mes:(r.vence||r.entrega||'').slice(0,7)||null }));
+  // Mismo mes que usan las donas de bugs (vencimiento, o registro si vence antes de registrarse);
+  // si el bug no está en ese universo, se usa su Vence o su Fecha cierre bug
+  const mesDona=new Map((metBugsMes||[]).map(b=>[b.key,b.mes]));
+  const conMes=(lista||[]).map(r=>({ r, mes:mesDona.get(r.key)||(r.vence||r.entrega||'').slice(0,7)||null }));
   if(metPeriodo) return conMes.filter(x=>x.mes===metPeriodo).map(x=>x.r);
   const ult=mtMesesDisponibles().slice(-6);
   if(!ult.length) return conMes.map(x=>x.r);
