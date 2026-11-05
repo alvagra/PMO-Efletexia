@@ -3434,6 +3434,10 @@ async function loadMetricas(){
           responsable:(()=>{ const dn=f.assignee?.displayName; if(!dn) return 'Sin asignar';
             return resolveNombreDesdeJira(dn)?.nombre||dn; })(),
           cerrado:bgEstadoCls(f.status?.name).g==='Cerrado',
+          // Datos para listar el bug en la tabla aunque no tenga Fecha cierre bug
+          estado:f.status?.name||'—', vence:due,
+          proyKey:epKey||'', proyecto:f._epica?.summary||f.parent?.fields?.summary||'Sin épica',
+          codigo:f._epica?.codigo||'',
           mes:mesFijo||(usaDue?due:created).slice(0,7),
           estimado:!usaDue
         };
@@ -3522,7 +3526,7 @@ function renderMetricasCuerpo(){
     + mtDonasHistorias()
     + `<div id="mt-sec-hist">${mtSeccion('HISTORIAS', mtHistPeriodo())}</div>`
     + (soloHistorias?'':`<div style="margin-top:22px">${mtDonasFila()}</div>`)
-    + `<div id="mt-sec-bugs">${mtSeccion('BUGS', mtBugsPeriodo(metBugRowsTabla=rows.filter(r=>r.tipo==='Bug')))}</div>`;
+    + `<div id="mt-sec-bugs">${mtSeccion('BUGS', mtBugsPeriodo(metBugRowsTabla=mtBugsUniverso(rows.filter(r=>r.tipo==='Bug'))))}</div>`;
 }
 
 function mtPct(v){ return (Math.round(v*10)/10).toString().replace('.',',')+'%'; }
@@ -3570,7 +3574,7 @@ function mtSeccion(titulo, rows){
     <td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(x.resumen)}">${esc(x.resumen)}</td>
     <td style="white-space:nowrap">${esc(x.responsable)}</td>
     <td style="white-space:nowrap">${x.vence?fmtD(x.vence):`<span style="color:var(--text-muted)">${esBug?'sin vencimiento':'sin fecha fin'}</span>`}</td>
-    <td style="white-space:nowrap">${fmtD(x.entrega)}</td>
+    <td style="white-space:nowrap">${x.entrega?fmtD(x.entrega):'<span style="color:var(--text-muted)">—</span>'}</td>
     ${x.desvio===null
       ? '<td style="text-align:right;white-space:nowrap;color:var(--text-muted)">—</td>'
       : `<td style="text-align:right;font-weight:700;white-space:nowrap;color:${mtColor(x.desvio)}">${x.desvio>0?'+':''}${x.desvio} d</td>`}
@@ -3778,6 +3782,18 @@ function mtRefrescarDonas(){
 // Bugs de la tabla en el periodo de las donas de bugs, con el mismo criterio de mes que las donas.
 // Sin fecha: solo se muestran en "Últimos N meses".
 let metBugRowsTabla = [];
+// Universo de la tabla de bugs = todos los bugs (los mismos de las donas). Los que tienen
+// Fecha cierre bug traen Entrega y Desvío; los demás se listan con Entrega "—"
+function mtBugsUniverso(medidos){
+  const porKey=new Map((medidos||[]).map(r=>[r.key,r]));
+  const extra=(metBugsMes||[]).filter(b=>!porKey.has(b.key)).map(b=>({
+    key:b.key, resumen:b.resumen, tipo:'Bug', esEpica:false,
+    proyKey:b.proyKey, proyecto:b.proyecto, codigo:b.codigo, aplicacion:b.aplicacion,
+    estado:b.estado, responsable:b.responsable, pais:null, entregable:null,
+    vence:b.vence||null, entrega:null, inicio:null, desvio:null, plan:0, pct:null
+  }));
+  return (medidos||[]).filter(r=>!MT_BUGS_EXCLUIDOS.includes(r.key)).concat(extra);
+}
 function mtBugsPeriodo(lista){
   // Mismo mes que usan las donas de bugs (vencimiento, o registro si vence antes de registrarse);
   // si el bug no está en ese universo, se usa su Vence o su Fecha cierre bug
