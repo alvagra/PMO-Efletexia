@@ -3418,9 +3418,12 @@ async function loadMetricas(){
       const jb=await rb.json();
       metBugsMes=(jb.bugs||[]).map(b=>{
         const f=b.fields||{};
-        const created=(f.created||'').slice(0,10);
+        // Fecha de registro del bug = su "Fecha de inicio" en Jira; si no tiene, la de creación
+        const created=(f.customfield_10015||f.created||'').slice(0,10);
         const due=f.duedate||null;
-        const usaDue=!!(due && created && due>=created);
+        // Mes del bug = mes de su Fecha de vencimiento (aunque se haya registrado después);
+        // sin vencimiento, el mes de su Fecha de inicio
+        const usaDue=!!due;
         const epKey=f.parent?.key||f._epica?.key||null;
         const mesFijo=MT_MES_POR_BUG[b.key]||(epKey?MT_MES_POR_EPICA[epKey]:null);
         return {
@@ -3686,7 +3689,7 @@ function mtDonasFila(){
     </div>
     <div class="mt-cuatro">${tarjetas}</div>
     <div style="font-size:10px;color:var(--text-dim);text-align:center;margin-top:8px">
-      Bugs: mes de vencimiento (o de registro si no tiene) · Horas: Registro de actividad del bug y sus subtareas, por mes del trabajo
+      Bugs: mes de vencimiento (o de la fecha de inicio si no tiene) · Horas: Registro de actividad del bug y sus subtareas, por mes del trabajo
     </div>
   </div>`;
 }
