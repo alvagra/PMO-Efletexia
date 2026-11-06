@@ -3609,6 +3609,11 @@ function mtSeccionProyectos(){
   const COL_FASE={ 'Pendiente':'#8b949e','Análisis':'#a371f7','Desarrollo':'#58a6ff','Pruebas':'#39c5cf','Producción':'#3fb950' };
   const itemsFase=MT_ESTADOS_PROY.map(k=>{ const v=lista.filter(x=>x.fase===k).length;
     return { lbl:k, v, c:COL_FASE[k], tip:k, sub:v===1?'1 proyecto':v+' proyectos' }; }).filter(x=>x.v);
+  // Dona por sponsor: proyectos en control y en riesgo (alerta o crítico)
+  const porSp={};
+  lista.forEach(x=>{ const m=porSp[x.sponsor]=porSp[x.sponsor]||{v:0,ok:0,riesgo:0};
+    m.v++; (x.semaforo==='Alerta'||x.semaforo==='Crítico')?m.riesgo++:m.ok++; });
+  const itemsSp=mtTop(porSp,'Otros',x=>`${x.ok} en control · ${x.riesgo} en riesgo`);
   const donas=`<div class="mt-cuatro" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:12px">
     ${mtDonaCard('PROYECTOS POR SEMÁFORO', itemsSem, n, 'PROYECTOS', v=>v)}
     ${mtDonaCard('PROYECTOS POR ESTADO (ÉPICA)', itemsFase, n, 'PROYECTOS', v=>v)}
