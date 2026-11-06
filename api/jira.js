@@ -1018,7 +1018,8 @@ module.exports = async function handler(req, res) {
     } else if (type === 'resumen') {
       // ── RESUMEN DEL PORTAFOLIO: datos de los últimos N meses ─────────────
       // Se devuelven datos compactos; los indicadores se calculan en el navegador.
-      if (soloPropio) return res.status(403).json({ error: 'El resumen del portafolio no está disponible para este perfil.' });
+      if (!(user.permisos || []).includes('tab.resumen'))
+        return res.status(403).json({ error: 'No tienes permiso para ver el Resumen del portafolio.' });
       const meses = Math.min(Math.max(+(req.body?.meses) || 6, 1), 12);
       const hoy = new Date();
       const ini = new Date(hoy.getFullYear(), hoy.getMonth() - (meses - 1), 1);
@@ -1068,7 +1069,8 @@ module.exports = async function handler(req, res) {
     } else if (type === 'resumenHistorico') {
       // Fotos mensuales del Resumen (indicadores de estado, como el plazo), guardadas
       // como propiedad del proyecto PTS en Jira. accion: 'leer' | 'guardar' {mes, foto}
-      if (soloPropio) return res.status(403).json({ error: 'No disponible para este perfil.' });
+      if (!(user.permisos || []).includes('tab.resumen'))
+        return res.status(403).json({ error: 'No tienes permiso para ver el Resumen del portafolio.' });
       const PROP = '/rest/api/3/project/PTS/properties/pmo.resumen.historico';
       const leer = async () => {
         const r = await jiraGet(auth, JIRA_CLOUD, PROP);
