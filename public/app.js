@@ -4335,6 +4335,13 @@ function avProyecto(hist, hoy, venceProyecto){
     r.atraso=avHabiles(avSumar(f,1),hoy);
     r.fechaEquivalente=f;
   }
+  // Proyecto vencido (pasó el Término estimado = Fecha de vencimiento de la épica, sin llegar al 100%):
+  // el atraso se cuenta desde esa fecha (días sin domingos), igual que "vencido hace N días"
+  if(venceProyecto && hoy>venceProyecto && realSub<99.95){
+    r.atraso=avHabiles(avSumar(venceProyecto,1),hoy);
+    r.atrasoDesdeVence=venceProyecto;
+    r.fechaEquivalente=null;
+  }
   // Término estimado al ritmo actual
   // Fin del proyecto: Fecha de vencimiento de la épica; si no tiene, el último vencimiento de sus entregables
   r.finPlan=venceProyecto||conPlan.map(h=>h.vent.fin).sort().slice(-1)[0];
@@ -4949,8 +4956,8 @@ function infHtml(d){
       ${kpiAv('AVANCE REAL',pctTxt(pr.real),null,`${pr.n} entregable${pr.n===1?'':'s'}`)}
       ${kpiAv('DESVÍO',pr.plan===null?'–':`${pr.desvio>=0?'+':'−'}${pctTxt(Math.abs(pr.desvio))}`,pr.semaforo,
         pr.plan===null?'':`${pr.estadoDesvio}${pr.indice?` · cumplimiento ${(Math.round(pr.indice*100)/100).toFixed(2).replace('.',',')}`:''}`)}
-      ${kpiAv('ATRASO',pr.plan===null?'–':pr.atraso?`${pr.atraso} día${pr.atraso===1?'':'s'}`:'Al día',pr.atraso?pr.semaforo:'#3fb950',
-        pr.atraso&&pr.fechaEquivalente?`plan equivalente al ${fCorta(pr.fechaEquivalente)}`:'')}
+      ${kpiAv('ATRASO',pr.plan===null?'–':pr.atraso?`${pr.atraso} día${pr.atraso===1?'':'s'}`:'Al día',pr.atrasoDesdeVence?'#ef4444':pr.atraso?pr.semaforo:'#3fb950',
+        pr.atrasoDesdeVence?`desde el término estimado (${fCorta(pr.atrasoDesdeVence)})`:pr.atraso&&pr.fechaEquivalente?`plan equivalente al ${fCorta(pr.fechaEquivalente)}`:'')}
       ${(()=>{
         // Estado frente al Término estimado (vencimiento de la épica), en días sin domingos
         if(!venceEpica) return kpiAv('TÉRMINO ESTIMADO','–',null,'la épica no tiene fecha de vencimiento');
