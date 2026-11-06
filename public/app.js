@@ -164,6 +164,12 @@ document.getElementById('btn-export-port').addEventListener('click', exportPorta
 // ── TABS ───────────────────────────────────────────────────
 let recursosLoaded = false;
 
+// Pestaña "Seguimiento" retirada del dashboard (se quita aquí para no depender de index.html)
+(function quitarPestanaSeguimiento(){
+  document.querySelector('.tabs .tab[data-tab="seguimiento"]')?.remove();
+  document.getElementById('panel-seguimiento')?.remove();
+})();
+
 // Pestaña "Resumen" (se crea aquí para no depender de una versión nueva de index.html)
 (function crearPestanaResumen(){
   const nav=document.querySelector('.tabs');
@@ -194,7 +200,6 @@ document.querySelectorAll('.tabs .tab').forEach(tab => {
     if(tab.dataset.tab==='metricas' && !metricasLoaded) loadMetricas();
     if(tab.dataset.tab==='informe') renderInforme();
     if(tab.dataset.tab==='resumen') renderResumen();
-    if(tab.dataset.tab==='seguimiento' && !sgLoaded) loadSeguimiento();
   });
 });
 
