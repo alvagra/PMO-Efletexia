@@ -175,16 +175,22 @@ let recursosLoaded = false;
   const nav=document.querySelector('.tabs');
   if(!nav || nav.querySelector('[data-tab="resumen"]')) return;
   const tab=document.createElement('div');
-  tab.className='tab'; tab.dataset.tab='resumen';
+  tab.className='tab'; tab.dataset.tab='resumen'; tab.dataset.permiso='tab.resumen';
+  tab.style.display='none';   // se muestra solo si el usuario tiene el permiso tab.resumen
   tab.innerHTML='<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 14h12"/><path d="M3 11l3-4 3 2 4-6"/></svg>Resumen';
   nav.insertBefore(tab, nav.firstChild);
   const ref=document.getElementById('panel-portafolio');
   if(ref && !document.getElementById('panel-resumen')){
     const panel=document.createElement('div');
-    panel.className='tab-panel'; panel.id='panel-resumen';
+    panel.className='tab-panel'; panel.id='panel-resumen'; panel.dataset.permiso='tab.resumen';
     panel.innerHTML='<div class="mt-wrap" id="rs-contenido"></div>';
     ref.parentNode.insertBefore(panel, ref);
   }
+  // Visibilidad según el permiso "Resumen" de la configuración de usuarios
+  fetch('/api/auth/me',{credentials:'same-origin'}).then(r=>r.ok?r.json():null).then(j=>{
+    if(j && Array.isArray(j.permisos) && j.permisos.includes('tab.resumen')) tab.style.display='';
+    else { tab.remove(); document.getElementById('panel-resumen')?.remove(); }
+  }).catch(()=>{});
 })();
 
 document.querySelectorAll('.tabs .tab').forEach(tab => {
@@ -2071,6 +2077,10 @@ function resolveNombreDesdeJira(displayName) {
   // 1. Exacto normalizado
   for(const [ini, rec] of Object.entries(NOMENCLATURA)){
     if(norm(rec.nombre) === dn) return { ini, ...rec };
+  }
+  // 1b. Alias declarados en la nomenclatura (ej. "Stiven Díaz" → "Steven Díaz")
+  for(const [ini, rec] of Object.entries(NOMENCLATURA)){
+    if((rec.alias||[]).some(a => { const na = norm(a); return dn === na || dn.startsWith(na + ' ') || dn.startsWith(na); })) return { ini, ...rec };
   }
   // 2. displayName contenido en nombre canónico o viceversa
   for(const [ini, rec] of Object.entries(NOMENCLATURA)){
