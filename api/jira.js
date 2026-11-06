@@ -22,6 +22,23 @@ function jiraGet(auth, cloud, path) {
   });
 }
 
+// PUT con cuerpo JSON (para guardar propiedades del proyecto, p. ej. el histórico del Resumen)
+function jiraPut(auth, cloud, path, body) {
+  return new Promise((resolve, reject) => {
+    const data = JSON.stringify(body);
+    const options = {
+      hostname: `${cloud}.atlassian.net`, path, method: 'PUT',
+      headers: { 'Authorization': `Basic ${auth}`, 'Accept': 'application/json',
+                 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) },
+    };
+    const req = https.request(options, (res) => {
+      let out = ''; res.on('data', c => { out += c; });
+      res.on('end', () => resolve({ status: res.statusCode, body: out }));
+    });
+    req.on('error', reject); req.write(data); req.end();
+  });
+}
+
 // Id del campo "Entregable". No está fijo en el código porque puede variar
 // entre instancias; se resuelve por nombre una vez y queda cacheado.
 let _cfEntregable;
@@ -997,6 +1014,76 @@ module.exports = async function handler(req, res) {
         eventos,
         type: 'bugHistory'
       });
+
+    } else if (type === 'resumen') {
+      // ── RESUMEN DEL PORTAFOLIO: datos de los últimos N meses ─────────────
+      // Se devuelven datos compactos; los indicadores se calculan en el navegador.
+      if (soloPropio) return res.status(403).json({ error: 'El resumen del portafolio no está disponible para este perfil.' });
+      const meses = Math.min(Math.max(+(req.body?.meses) || 6, 1), 12);
+      const hoy = new Date();
+      const ini = new Date(hoy.getFullYear(), hoy.getMonth() - (meses - 1), 1);
+      const iniIso = `${ini.getFullYear()}-${String(ini.getMonth() + 1).padStart(2, '0')}-01`;
+      const ini2 = new Date(ini); ini2.setMonth(ini2.getMonth() - 3);
+      const ini2Iso = `${ini2.getFullYear()}-${String(ini2.getMonth() + 1).padStart(2, '0')}-01`;
+      const cfPor = async (nombres, def) => {
+        for (const n of nombres) { const id = await idCampoPorNombre(auth, JIRA_CLOUD, n); if (id) return id; }
+        return def;
+      };
+      const CF_PLAN = await cfPor(['Fecha fin plan desarrollo'], 'customfield_11449');
+      const CF_REAL = await cfPor(['Fecha fin real desarrollo'], 'customfield_11450');
+      const CF_CIERRE = await cfPor(['Fecha cierre bug'], 'customfield_11484');
+      const CF_ENT = await idCampoEntregable(auth, JIRA_CLOUD).catch(() => null);
+      const n = id => id.replace('customfield_', '');
+      const f = (iss, k) => iss.fields?.[k] ?? null;
+
+      // 1) Entregables con fecha fin plan desarrollo en el rango
+      const entJql = `project = PTS AND issuetype != Error AND cf[${n(CF_PLAN)}] >= "${iniIso}"`
+        + (CF_ENT ? ` AND cf[${n(CF_ENT)}] = "Sí"` : '');
+      const ent = await fetchAllPages(auth, JIRA_CLOUD, entJql,
+        ['status', 'customfield_10015', CF_PLAN, CF_REAL, CF_ENT].filter(Boolean));
+      // 2) Bugs: recientes o aún abiertos (para reconstruir los abiertos al cierre de cada mes)
+      const bugs = await fetchAllPages(auth, JIRA_CLOUD,
+        `project = PTS AND issuetype = Error AND key not in (PTS-1398, PTS-1399) AND (created >= "${ini2Iso}" OR statusCategory != Done)`,
+        ['status', 'priority', 'created', 'duedate', 'customfield_10015', 'statuscategorychangedate', 'parent', CF_CIERRE]);
+      // 3) Subtareas cerradas en el rango (estimado vs registrado)
+      const subC = await fetchAllPages(auth, JIRA_CLOUD,
+        `project = PTS AND issuetype in subTaskIssueTypes() AND statusCategory = Done AND statusCategoryChangedDate >= "${iniIso}"`,
+        ['customfield_11136', 'timespent', 'statuscategorychangedate']);
+      // 4) Subtareas creadas en el rango (cobertura de estimación)
+      const subN = await fetchAllPages(auth, JIRA_CLOUD,
+        `project = PTS AND issuetype in subTaskIssueTypes() AND created >= "${iniIso}"`,
+        ['customfield_11136', 'created']);
+
+      return res.status(200).json({
+        type: 'resumen', desde: iniIso, meses,
+        entregables: ent.map(i => ({ key: i.key, estado: f(i, 'status')?.name || '', cat: f(i, 'status')?.statusCategory?.key || '',
+          inicio: f(i, 'customfield_10015'), plan: f(i, CF_PLAN), real: f(i, CF_REAL) })),
+        bugs: bugs.map(i => ({ key: i.key, prio: f(i, 'priority')?.name || '', cat: f(i, 'status')?.statusCategory?.key || '',
+          creado: (f(i, 'created') || '').slice(0, 10), inicio: f(i, 'customfield_10015'), vence: f(i, 'duedate'),
+          cambio: f(i, 'statuscategorychangedate'), cierreBug: f(i, CF_CIERRE), epica: f(i, 'parent')?.key || null })),
+        subCerradas: subC.map(i => ({ est: f(i, 'customfield_11136'), seg: f(i, 'timespent') || 0, cierre: (f(i, 'statuscategorychangedate') || '').slice(0, 10) })),
+        subNuevas: subN.map(i => ({ est: f(i, 'customfield_11136'), creado: (f(i, 'created') || '').slice(0, 10) })),
+      });
+
+    } else if (type === 'resumenHistorico') {
+      // Fotos mensuales del Resumen (indicadores de estado, como el plazo), guardadas
+      // como propiedad del proyecto PTS en Jira. accion: 'leer' | 'guardar' {mes, foto}
+      if (soloPropio) return res.status(403).json({ error: 'No disponible para este perfil.' });
+      const PROP = '/rest/api/3/project/PTS/properties/pmo.resumen.historico';
+      const leer = async () => {
+        const r = await jiraGet(auth, JIRA_CLOUD, PROP);
+        return r.status === 200 ? (r.body?.value || {}) : {};
+      };
+      const { accion, mes, foto } = req.body || {};
+      if (accion === 'guardar') {
+        if (!/^\d{4}-\d{2}$/.test(mes || '') || !foto) return res.status(400).json({ error: 'Mes o foto inválidos.' });
+        const hist = await leer();
+        hist[mes] = { ...foto, guardado: new Date().toISOString() };
+        const r = await jiraPut(auth, JIRA_CLOUD, PROP, hist);
+        if (r.status >= 300) return res.status(200).json({ ok: false, error: `Jira ${r.status}` });
+        return res.status(200).json({ ok: true });
+      }
+      return res.status(200).json({ historico: await leer() });
 
     } else if (type === 'capacity') {
       // Subtareas + worklogs por fecha
