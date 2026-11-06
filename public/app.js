@@ -164,6 +164,23 @@ document.getElementById('btn-export-port').addEventListener('click', exportPorta
 // ── TABS ───────────────────────────────────────────────────
 let recursosLoaded = false;
 
+// Pestaña "Resumen" (se crea aquí para no depender de una versión nueva de index.html)
+(function crearPestanaResumen(){
+  const nav=document.querySelector('.tabs');
+  if(!nav || nav.querySelector('[data-tab="resumen"]')) return;
+  const tab=document.createElement('div');
+  tab.className='tab'; tab.dataset.tab='resumen';
+  tab.innerHTML='<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 14h12"/><path d="M3 11l3-4 3 2 4-6"/></svg>Resumen';
+  nav.insertBefore(tab, nav.firstChild);
+  const ref=document.getElementById('panel-portafolio');
+  if(ref && !document.getElementById('panel-resumen')){
+    const panel=document.createElement('div');
+    panel.className='tab-panel'; panel.id='panel-resumen';
+    panel.innerHTML='<div class="mt-wrap" id="rs-contenido"></div>';
+    ref.parentNode.insertBefore(panel, ref);
+  }
+})();
+
 document.querySelectorAll('.tabs .tab').forEach(tab => {
   tab.addEventListener('click', () => {
     document.querySelectorAll('.tabs .tab').forEach(t => t.classList.remove('active'));
@@ -176,6 +193,7 @@ document.querySelectorAll('.tabs .tab').forEach(tab => {
     if(tab.dataset.tab==='entregables') renderEntregables();
     if(tab.dataset.tab==='metricas' && !metricasLoaded) loadMetricas();
     if(tab.dataset.tab==='informe') renderInforme();
+    if(tab.dataset.tab==='resumen') renderResumen();
     if(tab.dataset.tab==='seguimiento' && !sgLoaded) loadSeguimiento();
   });
 });
@@ -4043,6 +4061,7 @@ const infCache = {};         // epicKey → respuesta de la API
 function infInvalidar(){
   infProyectos=null;
   Object.keys(infCache).forEach(k=>delete infCache[k]);
+  rsDatos=null;   // el Resumen se recalcula al volver a abrirlo
   if(document.getElementById('panel-informe')?.classList.contains('active')) renderInforme();
 }
 
@@ -4371,8 +4390,320 @@ async function portAvanceCalcular(){
     await Promise.all([1,2,3,4].map(trabajar));   // 4 consultas en paralelo
     renderTable(sortedData(getFiltered()));   // también actualiza los KPIs
     mtRefrescarProyectos();                   // sección Proyectos de Métricas
+    if(typeof rsDatos!=='undefined' && rsDatos) rsRender();   // pestaña Resumen (plazo en vivo)
   }catch(e){ console.warn('Avance de portafolio:', e.message); }
   finally{ portAvanceEnCurso=false; }
+}
+
+
+// ═══════════════════════════════════════════════════════════
+//  RESUMEN DEL PORTAFOLIO — índice de salud y 6 dimensiones, por mes, con histórico
+//  Flujo (se reconstruye desde Jira para cualquier mes): entrega, calidad, capacidad,
+//  costos, gobierno. Estado (plazo): foto mensual guardada en Jira (propiedad del
+//  proyecto PTS); el mes en curso se calcula en vivo con el mismo cálculo del Informe.
+//  Cada KPI puntúa verde 100 · ámbar 60 · rojo 20; dimensión = promedio de sus KPI;
+//  índice = promedio ponderado de las dimensiones con datos.
+// ═══════════════════════════════════════════════════════════
+const RS_PESOS = { plazo:25, entrega:20, calidad:20, capacidad:15, costos:15, gobierno:5 };
+const RS_NOMBRES = { plazo:'Plazo', entrega:'Entrega', calidad:'Calidad', capacidad:'Capacidad', costos:'Costos', gobierno:'Gobierno y datos' };
+const RS_G='#3fb950', RS_A='#F5B800', RS_R='#ef4444', RS_B='#58a6ff';
+let rsDatos=null, rsHist=null, rsMes=null, rsCargando=false;
+
+const rsIso = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const rsFinMes = m => { const [y,mm]=m.split('-').map(Number); return rsIso(new Date(y,mm,0)); };
+const rsDias = (a,b) => Math.round((new Date(b+'T00:00:00')-new Date(a+'T00:00:00'))/864e5);
+const rsCol = s => s===null?'var(--text-muted)':s>=75?RS_G:s>=50?RS_A:RS_R;
+// Puntaje de un KPI: dir +1 (mayor es mejor) o −1, con umbral verde y ámbar
+function rsPts(v, verde, ambar, dir=1){
+  if(v===null||v===undefined||isNaN(v)) return null;
+  return dir>0 ? (v>=verde?100:v>=ambar?60:20) : (v<=verde?100:v<=ambar?60:20);
+}
+const rsColPts = p => p===null?'var(--text-muted)':p===100?RS_G:p===60?RS_A:RS_R;
+const rsProm = a => { const b=a.filter(x=>x!==null&&x!==undefined); return b.length?Math.round(b.reduce((s,x)=>s+x,0)/b.length):null; };
+const rsFmt = (v,d=0) => v===null||v===undefined||isNaN(v)?'–':(Math.round(v*10**d)/10**d).toLocaleString('es-PE',{minimumFractionDigits:d,maximumFractionDigits:d});
+
+// Meses del rango (más antiguo → actual)
+function rsMeses(){
+  const out=[], hoy=new Date();
+  for(let i=(rsDatos?.meses||6)-1;i>=0;i--){ const d=new Date(hoy.getFullYear(),hoy.getMonth()-i,1); out.push(rsIso(d).slice(0,7)); }
+  return out;
+}
+
+// Plazo del mes en curso: mismo cálculo del Informe sobre los proyectos en curso
+function rsPlazoActual(){
+  const lista=(typeof mtProyDatos==='function'?(mtProyDatos()||[]):[]).filter(x=>x.fase!=='Producción');
+  if(!lista.length) return null;
+  const conPlan=lista.filter(x=>x.pr.plan!==null);
+  const prom=a=>a.length?a.reduce((s,v)=>s+v,0)/a.length:null;
+  return { total:lista.length,
+    control:lista.filter(x=>x.semaforo==='En control').length,
+    alerta:lista.filter(x=>x.semaforo==='Alerta').length,
+    critico:lista.filter(x=>x.semaforo==='Crítico').length,
+    spi:prom(conPlan.filter(x=>x.pr.indice).map(x=>x.pr.indice)),
+    atraso:prom(conPlan.map(x=>x.pr.atraso||0)),
+    vencidos:lista.filter(x=>x.vencido).length };
+}
+
+// Indicadores de un mes
+function rsCalcular(mes){
+  const d=rsDatos, ini=mes+'-01', fin=rsFinMes(mes), hoyIso=rsIso(new Date());
+  const corte = fin<hoyIso ? fin : hoyIso;
+  const enMes = x => x && x.slice(0,7)===mes;
+  const r={ mes };
+
+  // ── Plazo (estado): en vivo para el mes actual, foto guardada para meses anteriores
+  const pl = mes===hoyIso.slice(0,7) ? rsPlazoActual() : (rsHist?.[mes]?.plazo||null);
+  r.plazo = pl ? { ...pl, pts:[ rsPts(pl.spi,0.95,0.90), rsPts(pl.total?pl.critico/pl.total*100:null,10,25,-1),
+    rsPts(pl.vencidos,0,2,-1), rsPts(pl.atraso,5,15,-1) ] } : null;
+
+  // ── Entrega: entregables con fin plan desarrollo en el mes
+  const comp=(d.entregables||[]).filter(e=>enMes(e.plan));
+  const entr=comp.filter(e=>e.real && e.real<=fin);
+  const aTiempo=entr.filter(e=>e.real<=e.plan);
+  const leads=entr.filter(e=>e.inicio).map(e=>Math.max(0,rsDias(e.inicio,e.real)));
+  const prod=comp.filter(e=>e.cat==='done'||/produc/i.test(e.estado)).length;
+  r.entrega = comp.length ? { comp:comp.length, entr:entr.length, aTiempo:aTiempo.length, tarde:entr.length-aTiempo.length,
+    efic:entr.length/comp.length*100, pctTiempo:entr.length?aTiempo.length/entr.length*100:null,
+    lead:leads.length?leads.reduce((a,b)=>a+b,0)/leads.length:null, prod } : null;
+  if(r.entrega) r.entrega.pts=[ rsPts(r.entrega.efic,90,75), rsPts(r.entrega.pctTiempo,85,70), rsPts(r.entrega.lead,30,45,-1) ];
+
+  // ── Calidad
+  const bugs=d.bugs||[];
+  const cierreDe=b=>b.cat==='done'&&b.cambio?b.cambio.slice(0,10):null;
+  const mesBug=b=>(b.vence||b.inicio||b.creado||'').slice(0,7);
+  const delMes=bugs.filter(b=>mesBug(b)===mes);
+  const abiertos=bugs.filter(b=>b.creado<=corte && !(cierreDe(b) && cierreDe(b)<=corte));
+  const prioN=p=>{ const t=(p||'').toLowerCase(); return t==='highest'?'Crítico':t==='high'?'Alto':t==='medium'?'Medio':'Bajo'; };
+  const porPrio={Crítico:0,Alto:0,Medio:0,Bajo:0}; abiertos.forEach(b=>porPrio[prioN(b.prio)]++);
+  const viejos=abiertos.filter(b=>rsDias(b.inicio||b.creado,corte)>15).length;
+  // MTTR: bugs cerrados en el mes; se excluyen los cierres masivos (10 o más en la misma hora)
+  const cerr=bugs.filter(b=>enMes(cierreDe(b)));
+  const porHora={}; cerr.forEach(b=>{ const h=b.cambio.slice(0,13); porHora[h]=(porHora[h]||0)+1; });
+  const cerrReal=cerr.filter(b=>porHora[b.cambio.slice(0,13)]<10);
+  const tts=cerrReal.map(b=>Math.max(0,rsDias(b.inicio||b.creado,cierreDe(b))));
+  const mttr=tts.length?tts.reduce((a,b)=>a+b,0)/tts.length:null;
+  const dens=comp.length?delMes.length/comp.length:null;
+  r.calidad={ delMes:delMes.length, dens, abiertos:abiertos.length, porPrio, critAlto:porPrio.Crítico+porPrio.Alto, viejos, mttr,
+    masivos:cerr.length-cerrReal.length, cerrados:cerr.length,
+    conCierre:cerr.filter(b=>b.cierreBug).length };
+  r.calidad.pts=[ rsPts(dens,2,4,-1), rsPts(r.calidad.critAlto,5,10,-1), rsPts(mttr,3,7,-1), rsPts(viejos,0,3,-1) ];
+
+  // ── Capacidad: horas registradas (Registro de actividad) del equipo de Desarrollo
+  const equipo=Object.values(NOMENCLATURA).filter(p=>p.area==='Desarrollo');
+  const [yy,mm]=mes.split('-').map(Number);
+  const porPersona=equipo.map(p=>{
+    const dias=diasLaborablesDelMes(yy,mm-1,p.pais,p.nombre).filter(x=>x<=corte).length;
+    const filas=(capRows||[]).filter(x=>x.persona===p.nombre && enMes(x.fecha));
+    const h=filas.reduce((a,x)=>a+(x.horas||0),0), hb=filas.filter(x=>x.esBug).reduce((a,x)=>a+(x.horas||0),0);
+    return { nombre:p.nombre, horas:h, horasBug:hb, cap:dias*8 };
+  });
+  const H=porPersona.reduce((a,x)=>a+x.horas,0), C=porPersona.reduce((a,x)=>a+x.cap,0), HB=porPersona.reduce((a,x)=>a+x.horasBug,0);
+  r.capacidad = capRows&&capRows.length ? { horas:H, cap:C, util:C?H/C*100:null, porPersona:porPersona.sort((a,b)=>b.horas-a.horas),
+    sobre:porPersona.filter(x=>x.cap&&x.horas>x.cap*1.1).length, pctBug:H?HB/H*100:null } : null;
+  if(r.capacidad){ const u=r.capacidad.util;
+    r.capacidad.pts=[ u===null?null:(u>=70&&u<=100?100:(u>=50&&u<=115?60:20)), rsPts(r.capacidad.sobre,0,1,-1), rsPts(r.capacidad.pctBug,15,25,-1) ]; }
+
+  // ── Costos: subtareas cerradas en el mes con estimación y horas registradas
+  const sc=(d.subCerradas||[]).filter(s=>enMes(s.cierre)&&s.est>0&&s.seg>0);
+  const est=sc.reduce((a,s)=>a+s.est,0), reg=sc.reduce((a,s)=>a+s.seg/3600,0);
+  r.costos = sc.length ? { n:sc.length, est, reg, cpi:est/reg, desv:(reg-est)/est*100 } : null;
+  if(r.costos) r.costos.pts=[ rsPts(r.costos.cpi,0.95,0.90), rsPts(r.costos.desv,5,10,-1) ];
+
+  // ── Gobierno y datos
+  const sn=(d.subNuevas||[]).filter(s=>enMes(s.creado));
+  r.gobierno={ subN:sn.length, subEst:sn.filter(s=>s.est>0).length,
+    pctEst:sn.length?sn.filter(s=>s.est>0).length/sn.length*100:null,
+    pctCierre:cerr.length?r.calidad.conCierre/cerr.length*100:null,
+    pctFechas:comp.length?comp.filter(e=>e.plan&&e.real).length/comp.length*100:null,
+    util:r.capacidad?.util??null };
+  r.gobierno.pts=[ rsPts(r.gobierno.pctEst,95,80), rsPts(r.gobierno.pctCierre,90,60), rsPts(r.gobierno.pctFechas,95,80) ];
+
+  // ── Puntajes
+  r.score={};
+  Object.keys(RS_PESOS).forEach(k=>{ r.score[k]= r[k] ? rsProm(r[k].pts) : null; });
+  let sp=0, sw=0;
+  Object.entries(RS_PESOS).forEach(([k,w])=>{ if(r.score[k]!==null){ sp+=r.score[k]*w; sw+=w; } });
+  r.salud = sw ? Math.round(sp/sw) : null;
+  return r;
+}
+
+// ── Gráficos (SVG) ──
+function rsArc(cx,cy,rad,a0,a1){ const p=a=>[cx+rad*Math.cos(a),cy-rad*Math.sin(a)]; const [x0,y0]=p(a0),[x1,y1]=p(a1);
+  return `M${x0.toFixed(1)},${y0.toFixed(1)} A${rad},${rad} 0 0 1 ${x1.toFixed(1)},${y1.toFixed(1)}`; }
+function rsGauge(v,max,c,txt,sub,w=130){
+  const a=Math.PI*(1-Math.max(0,Math.min(v??0,max))/max);
+  return `<svg viewBox="0 0 140 86" width="${w}"><path d="${rsArc(70,70,52,Math.PI,0)}" stroke="var(--border)" stroke-width="12" fill="none"/>
+  ${v===null||v===undefined?'':`<path d="${rsArc(70,70,52,Math.PI,a)}" stroke="${c}" stroke-width="12" fill="none" stroke-linecap="round"/>`}
+  <text x="70" y="66" text-anchor="middle" font-size="20" font-weight="700" fill="var(--text-primary)">${txt}</text>
+  <text x="70" y="82" text-anchor="middle" font-size="9" fill="var(--text-muted)">${sub}</text></svg>`;
+}
+function rsDonut(parts,center,sub,w=104){
+  const tot=parts.reduce((a,p)=>a+p[1],0)||1, C=2*Math.PI*38; let a=0, s='';
+  parts.forEach(([,v,c])=>{ const len=v/tot*C; if(len>0) s+=`<circle cx="55" cy="55" r="38" fill="none" stroke="${c}" stroke-width="14" stroke-dasharray="${len} ${C-len}" stroke-dashoffset="${-a}" transform="rotate(-90 55 55)"/>`; a+=len; });
+  return `<svg viewBox="0 0 110 110" width="${w}"><circle cx="55" cy="55" r="38" fill="none" stroke="var(--border)" stroke-width="14" opacity=".4"/>${s}
+  <text x="55" y="58" text-anchor="middle" font-size="18" font-weight="700" fill="var(--text-primary)">${center}</text>
+  <text x="55" y="72" text-anchor="middle" font-size="9" fill="var(--text-muted)">${sub}</text></svg>`;
+}
+const rsBar=(l,v,max,c,txt)=>`<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);margin:6px 0 3px"><span>${l}</span><span style="color:var(--text-primary);font-weight:600">${txt}</span></div>
+  <div style="height:7px;background:var(--border);border-radius:4px;overflow:hidden"><div style="width:${v===null?0:Math.max(0,Math.min(v/max*100,100))}%;height:100%;background:${c}"></div></div>`;
+const rsLeg=a=>`<div style="display:flex;gap:10px;flex-wrap:wrap;font-size:10px;color:var(--text-muted);margin-top:4px">${a.map(([l,c])=>`<span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${c};margin-right:3px"></i>${l}</span>`).join('')}</div>`;
+// Tendencia mensual de un indicador (el mes elegido se resalta)
+function rsSpark(vals,meses,sel,colFn,fmt,titulo){
+  const W=300,h=46,pad=6, nums=vals.filter(v=>v!==null&&v!==undefined);
+  if(!nums.length) return '';
+  const min=Math.min(...nums), max=Math.max(...nums), rg=(max-min)||1;
+  const x=i=>18+i*((W-36)/Math.max(1,vals.length-1)), y=v=>pad+(h-2*pad)*(1-(v-min)/rg);
+  let pts=vals.map((v,i)=>v===null||v===undefined?null:`${x(i)},${y(v)}`).filter(Boolean).join(' ');
+  let s=`<polyline points="${pts}" fill="none" stroke="var(--text-muted)" stroke-width="1.3"/>`;
+  vals.forEach((v,i)=>{ if(v===null||v===undefined) return;
+    s+=`<circle cx="${x(i)}" cy="${y(v)}" r="${i===sel?4.5:2.8}" fill="${colFn(v)}" stroke="${i===sel?'var(--text-primary)':'none'}" stroke-width="1.2"><title>${mtMesCorto(meses[i])}: ${fmt(v)}</title></circle>`; });
+  meses.forEach((m,i)=>{ s+=`<text x="${x(i)}" y="${h+10}" font-size="9" text-anchor="middle" fill="${i===sel?'var(--text-primary)':'var(--text-muted)'}">${mtMesCorto(m).slice(0,3)}</text>`; });
+  return `<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:6px"><div style="font-size:10px;color:var(--text-muted)">${titulo} · histórico</div><svg viewBox="0 0 ${W} ${h+14}" width="100%">${s}</svg></div>`;
+}
+
+function rsCard(titulo,fuente,score,body,nota,spark){
+  return `<div class="mt-card" style="margin:0;padding:12px 14px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:13px;font-weight:700;color:var(--text-primary)">${titulo}</span>
+    <span style="font-size:12px;font-weight:700;color:${rsCol(score)}">${score===null?'sin datos':score+' / 100'}</span></div>
+    <div style="font-size:10px;color:var(--text-muted);margin-bottom:6px">${fuente}</div>${body}
+    ${nota?`<div style="font-size:10px;color:var(--text-muted);margin-top:6px">${nota}</div>`:''}${spark||''}</div>`;
+}
+
+function rsRender(){
+  const cont=document.getElementById('rs-contenido'); if(!cont) return;
+  const meses=rsMeses(); if(!rsMes||!meses.includes(rsMes)) rsMes=meses[meses.length-1];
+  const all=meses.map(m=>rsCalcular(m)), i=meses.indexOf(rsMes), r=all[i], hoyM=rsIso(new Date()).slice(0,7);
+  const serie=fn=>all.map(x=>{ try{ return fn(x); }catch(_){ return null; } });
+  const sp=(fn,colFn,fmt,t)=>rsSpark(serie(fn),meses,i,colFn,fmt,t);
+  const opc=meses.slice().reverse().map(m=>`<option value="${m}"${m===rsMes?' selected':''}>${mtMesCorto(m)} ${m.slice(0,4)}${m===hoyM?' (en curso)':''}</option>`).join('');
+
+  // Cabecera: índice + dimensiones + histórico del índice
+  const dims=Object.keys(RS_PESOS);
+  const hist=all.map((x,k)=>`<div style="flex:1;text-align:center;cursor:pointer" onclick="rsMes='${x.mes}';rsRender()">
+    <div style="height:46px;display:flex;align-items:flex-end;justify-content:center"><div style="width:60%;height:${(x.salud||0)*0.46}px;background:${rsCol(x.salud)};border-radius:3px 3px 0 0;opacity:${k===i?1:.45}"></div></div>
+    <div style="font-size:10px;color:${k===i?'var(--text-primary)':'var(--text-muted)'};font-weight:${k===i?700:400}">${mtMesCorto(x.mes).slice(0,3)}</div>
+    <div style="font-size:10px;color:${rsCol(x.salud)}">${x.salud??'–'}</div></div>`).join('');
+  let html=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <div><span style="font-size:15px;font-weight:700;color:var(--text-primary)">Resumen del portafolio</span>
+    <span style="font-size:11px;color:var(--text-muted);margin-left:8px">Datos de Jira PTS · actualizado ${new Date().toLocaleString('es-PE',{dateStyle:'short',timeStyle:'short'})}</span></div>
+    <div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;color:var(--text-muted)">Mes</span>
+    <select onchange="rsMes=this.value;rsRender()">${opc}</select></div></div>
+  <div class="mt-card" style="margin:0 0 12px;padding:14px 16px;display:grid;grid-template-columns:170px 1fr 260px;gap:18px;align-items:center">
+    <div style="text-align:center">${rsGauge(r.salud,100,rsCol(r.salud),r.salud??'–',r.salud===null?'sin datos':`de 100 · ${r.salud>=75?'Saludable':r.salud>=50?'En observación':'En riesgo'}`,160)}</div>
+    <div><div style="font-size:14px;font-weight:700;color:var(--text-primary)">Índice de salud del portafolio · ${mtMesCorto(rsMes)} ${rsMes.slice(0,4)}</div>
+      <div style="font-size:10px;color:var(--text-muted);margin:2px 0 8px">Promedio ponderado de las dimensiones · cada KPI: verde 100, ámbar 60, rojo 20</div>
+      ${dims.map(k=>`<div style="display:grid;grid-template-columns:130px 1fr 50px;gap:8px;align-items:center;font-size:11px;margin:3px 0">
+        <span style="color:var(--text-muted)">${RS_NOMBRES[k]} · ${RS_PESOS[k]}%</span>
+        <div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden"><div style="width:${r.score[k]||0}%;height:100%;background:${rsCol(r.score[k])}"></div></div>
+        <span style="text-align:right;color:${rsCol(r.score[k])}">${r.score[k]??'–'}</span></div>`).join('')}</div>
+    <div><div style="font-size:10px;color:var(--text-muted);margin-bottom:4px">Histórico del índice (clic para ver el mes)</div><div style="display:flex;gap:2px">${hist}</div></div>
+  </div><div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">`;
+
+  // 1. Plazo
+  const p=r.plazo;
+  html+=rsCard('1. Plazo', rsMes===hoyM?'Métricas · Proyectos (en vivo)':'Foto mensual guardada', r.score.plazo,
+    p ? `<div style="display:flex;align-items:center;gap:10px">${rsDonut([['Crítico',p.critico,RS_R],['Alerta',p.alerta,RS_A],['En control',p.control,RS_G]],p.total,'proyectos')}
+      <div style="flex:1">${rsGauge(p.spi,1.1,rsColPts(rsPts(p.spi,0.95,0.90)),rsFmt(p.spi,2),'cumplimiento (SPI)',120)}</div></div>
+      ${rsLeg([[`Crítico ${p.critico}`,RS_R],[`Alerta ${p.alerta}`,RS_A],[`En control ${p.control}`,RS_G]])}
+      ${rsBar('Proyectos vencidos',p.vencidos,Math.max(p.total,1),rsColPts(rsPts(p.vencidos,0,2,-1)),`${p.vencidos} de ${p.total}`)}
+      ${rsBar('Atraso promedio',p.atraso,60,rsColPts(rsPts(p.atraso,5,15,-1)),`${rsFmt(p.atraso)} días`)}`
+      : `<div class="mt-empty" style="padding:24px 0">Sin foto guardada para este mes. El plazo se registra automáticamente cada vez que se abre el Resumen durante el mes.</div>`,
+    '', sp(x=>x.plazo?.spi??null,v=>rsColPts(rsPts(v,0.95,0.90)),v=>rsFmt(v,2),'SPI'));
+
+  // 2. Entrega
+  const e=r.entrega;
+  html+=rsCard('2. Entrega','Historias entregables con fin plan en el mes', r.score.entrega,
+    e ? `<div style="display:flex;align-items:center;gap:10px">${rsDonut([['A tiempo',e.aTiempo,RS_G],['Tarde',e.tarde,RS_R],['Pendientes',e.comp-e.entr,'#8b949e']],(e.pctTiempo===null?'–':Math.round(e.pctTiempo)+'%'),'a tiempo')}
+      <div style="flex:1">${rsGauge(e.efic,100,rsColPts(rsPts(e.efic,90,75)),Math.round(e.efic)+'%','eficiencia de entrega',120)}</div></div>
+      ${rsLeg([[`A tiempo ${e.aTiempo}`,RS_G],[`Tarde ${e.tarde}`,RS_R],[`Sin entregar ${e.comp-e.entr}`,'#8b949e']])}
+      ${rsBar('En producción',e.prod,e.comp,RS_B,`${e.prod} de ${e.comp}`)}
+      ${rsBar('Lead time (inicio → fin real)',e.lead,45,rsColPts(rsPts(e.lead,30,45,-1)),`${rsFmt(e.lead)} días`)}`
+      : `<div class="mt-empty" style="padding:24px 0">No hay entregables con fin plan en este mes.</div>`,
+    '', sp(x=>x.entrega?.pctTiempo??null,v=>rsColPts(rsPts(v,85,70)),v=>Math.round(v)+'%','Entrega a tiempo'));
+
+  // 3. Calidad
+  const c=r.calidad, pr=[['Crítico',RS_R],['Alto','#f0883e'],['Medio',RS_A],['Bajo','#8b949e']], mx=Math.max(1,...pr.map(([k])=>c.porPrio[k]));
+  html+=rsCard('3. Calidad',`Bugs PTS · abiertos al ${rsMes===hoyM?'día de hoy':'cierre del mes'}`, r.score.calidad,
+    `<div style="font-size:11px;color:var(--text-muted)">Bugs abiertos por prioridad (${c.abiertos})</div>
+     <svg viewBox="0 0 260 92" width="100%">${pr.map(([k,cc],j)=>{ const v=c.porPrio[k], hh=v/mx*60;
+       return `<rect x="${12+j*62}" y="${78-hh}" width="40" height="${hh}" rx="3" fill="${cc}"/><text x="${32+j*62}" y="${73-hh}" text-anchor="middle" font-size="11" font-weight="700" fill="var(--text-primary)">${v}</text><text x="${32+j*62}" y="90" text-anchor="middle" font-size="9" fill="var(--text-muted)">${k}</text>`; }).join('')}</svg>
+     ${rsBar('Abiertos con más de 15 días',c.viejos,Math.max(c.abiertos,1),rsColPts(rsPts(c.viejos,0,3,-1)),`${c.viejos} de ${c.abiertos}`)}
+     ${rsBar('MTTR (meta ≤ 3 d)',c.mttr,12,rsColPts(rsPts(c.mttr,3,7,-1)),`${rsFmt(c.mttr,1)} días`)}
+     ${rsBar('Bugs del mes por entregable',c.dens,8,rsColPts(rsPts(c.dens,2,4,-1)),`${c.delMes} · ${rsFmt(c.dens,1)}`)}`,
+    c.masivos?`MTTR sin ${c.masivos} cierres masivos (10 o más en la misma hora).`:'',
+    sp(x=>x.calidad?.critAlto??null,v=>rsColPts(rsPts(v,5,10,-1)),v=>v,'Bugs críticos y altos abiertos'));
+
+  // 4. Capacidad
+  const k=r.capacidad;
+  html+=rsCard('4. Capacidad','Horas registradas del equipo de Desarrollo', r.score.capacidad,
+    k ? `<div style="display:flex;align-items:center;gap:10px">${rsGauge(k.util,100,rsColPts(k.util>=70&&k.util<=100?100:k.util>=50&&k.util<=115?60:20),Math.round(k.util)+'%','registradas ÷ capacidad',112)}
+      <div style="font-size:11px;color:var(--text-muted)">${rsFmt(k.horas)} h de ${rsFmt(k.cap)} h<br>${k.sobre} sobreasignados<br>${rsFmt(k.pctBug)}% en bugs</div></div>
+      ${k.porPersona.map(x=>`<div style="display:grid;grid-template-columns:104px 1fr 40px;gap:6px;align-items:center;font-size:10px;margin:3px 0"><span style="color:var(--text-muted)">${esc(x.nombre)}</span>
+        <div style="height:7px;background:var(--border);border-radius:4px;overflow:hidden"><div style="width:${x.cap?Math.min(x.horas/x.cap*100,100):0}%;height:100%;background:${x.cap&&x.horas/x.cap>=.7?RS_G:x.cap&&x.horas/x.cap>=.4?RS_A:RS_R}"></div></div>
+        <span style="text-align:right;color:var(--text-muted)">${Math.round(x.horas)} h</span></div>`).join('')}`
+      : `<div class="mt-empty" style="padding:24px 0">Cargando el registro de actividad…</div>`,
+    k&&k.util<50?'Un porcentaje bajo suele indicar horas no registradas más que baja carga real.':'',
+    sp(x=>x.capacidad?.util??null,v=>rsColPts(v>=70&&v<=100?100:v>=50&&v<=115?60:20),v=>Math.round(v)+'%','Utilización'));
+
+  // 5. Costos
+  const o=r.costos;
+  html+=rsCard('5. Costos','Subtareas cerradas en el mes · estimado vs registrado', r.score.costos,
+    o ? `<div style="display:flex;align-items:center;gap:10px">${rsGauge(o.cpi,1.2,rsColPts(rsPts(o.cpi,0.95,0.90)),rsFmt(o.cpi,2),'CPI',120)}
+      <svg viewBox="0 0 130 100" width="130">${(()=>{ const m2=Math.max(o.est,o.reg)||1, he=o.est/m2*70, hr=o.reg/m2*70;
+        return `<rect x="15" y="${88-he}" width="38" height="${he}" rx="3" fill="${RS_B}"/><rect x="72" y="${88-hr}" width="38" height="${hr}" rx="3" fill="${o.reg>o.est?RS_R:RS_G}"/>
+        <text x="34" y="${83-he}" text-anchor="middle" font-size="11" font-weight="700" fill="var(--text-primary)">${Math.round(o.est)} h</text><text x="91" y="${83-hr}" text-anchor="middle" font-size="11" font-weight="700" fill="var(--text-primary)">${Math.round(o.reg)} h</text>`; })()}</svg></div>
+      ${rsLeg([['Estimadas',RS_B],['Registradas',o.reg>o.est?RS_R:RS_G]])}
+      ${rsBar('Desviación de horas',Math.abs(o.desv),30,rsColPts(rsPts(o.desv,5,10,-1)),`${o.desv>0?'+':''}${rsFmt(o.desv)}%`)}`
+      : `<div class="mt-empty" style="padding:24px 0">No hay subtareas cerradas con estimación y horas en este mes.</div>`,
+    o?`${o.n} subtareas · por cada hora invertida se avanzan ${rsFmt(o.cpi,2)} h de lo estimado.`:'',
+    sp(x=>x.costos?.cpi??null,v=>rsColPts(rsPts(v,0.95,0.90)),v=>rsFmt(v,2),'CPI'));
+
+  // 6. Gobierno y datos
+  const g=r.gobierno;
+  html+=rsCard('6. Gobierno y datos','Calidad del registro en Jira en el mes', r.score.gobierno,
+    `${rsBar('Entregables con fechas plan/real',g.pctFechas,100,rsColPts(rsPts(g.pctFechas,95,80)),g.pctFechas===null?'–':Math.round(g.pctFechas)+'%')}
+     ${rsBar('Subtareas nuevas con horas estimadas',g.pctEst,100,rsColPts(rsPts(g.pctEst,95,80)),g.pctEst===null?'–':`${g.subEst} de ${g.subN} · ${Math.round(g.pctEst)}%`)}
+     ${rsBar('Bugs cerrados con fecha de cierre',g.pctCierre,100,rsColPts(rsPts(g.pctCierre,90,60)),g.pctCierre===null?'–':`${c.conCierre} de ${c.cerrados} · ${Math.round(g.pctCierre)}%`)}
+     ${rsBar('Horas registradas vs capacidad',g.util,100,rsColPts(g.util===null?null:g.util>=70?100:g.util>=50?60:20),g.util===null?'–':Math.round(g.util)+'%')}`,
+    'Una baja cobertura limita la precisión de Calidad, Capacidad y Costos.',
+    sp(x=>x.gobierno?.pctEst??null,v=>rsColPts(rsPts(v,95,80)),v=>Math.round(v)+'%','Subtareas estimadas'));
+
+  cont.innerHTML=html+'</div>';
+
+  // Foto del mes en curso (plazo) para el histórico
+  if(rsMes===hoyM && r.plazo) rsGuardarFoto(hoyM,{ plazo:{ total:r.plazo.total, control:r.plazo.control, alerta:r.plazo.alerta, critico:r.plazo.critico,
+    spi:r.plazo.spi, atraso:r.plazo.atraso, vencidos:r.plazo.vencidos } });
+}
+
+let rsFotoGuardada=null;
+async function rsGuardarFoto(mes,foto){
+  const firma=JSON.stringify(foto);
+  if(rsFotoGuardada===firma) return;   // una vez por sesión salvo que cambie
+  rsFotoGuardada=firma;
+  try{
+    await Sesion.pedir('/api/jira',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({type:'resumenHistorico',accion:'guardar',mes,foto})});
+    rsHist=rsHist||{}; rsHist[mes]=foto;
+  }catch(_){}
+}
+
+async function renderResumen(){
+  const cont=document.getElementById('rs-contenido'); if(!cont) return;
+  if(rsDatos){ rsRender(); return; }
+  if(rsCargando) return;
+  rsCargando=true;
+  cont.innerHTML='<div class="mt-empty">Calculando el resumen del portafolio…</div>';
+  try{
+    const pedir=b=>Sesion.pedir('/api/jira',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(async r=>{ const j=await r.json(); if(!r.ok) throw new Error(j.error||'Error de API'); return j; });
+    const [d,h]=await Promise.all([ pedir({type:'resumen',meses:6}), pedir({type:'resumenHistorico',accion:'leer'}).catch(()=>({historico:{}})) ]);
+    rsDatos=d; rsHist=h.historico||{};
+    // Capacidad necesita el registro de actividad; el plazo, el avance de los proyectos
+    if(!capacityLoaded && typeof loadCapacity==='function') Promise.resolve(loadCapacity()).then(()=>rsRender()).catch(()=>{});
+    if(typeof portAvanceCalcular==='function') Promise.resolve(portAvanceCalcular()).then(()=>rsRender()).catch(()=>{});
+    rsRender();
+  }catch(e){
+    cont.innerHTML=`<div class="mt-empty">No se pudo cargar el resumen.<br><span style="font-size:11px">${esc(e.message)}</span></div>`;
+  }finally{ rsCargando=false; }
 }
 
 async function renderInforme(){
