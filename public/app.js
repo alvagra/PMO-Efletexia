@@ -3522,7 +3522,8 @@ function renderMetricasCuerpo(){
   // KPIs globales sobre el total filtrado
   const soloHistorias=(document.getElementById('mt-tipo')?.value||'')==='Historia';
   metHistRows=rows.filter(r=>r.tipo==='Historia');
-  cuerpo.innerHTML = mtKpis(rows)
+  cuerpo.innerHTML = `<div id="mt-proy">${mtSeccionProyectos()}</div>`
+    + mtKpis(rows)
     + mtDonasHistorias()
     + `<div id="mt-sec-hist">${mtSeccion('HISTORIAS', mtHistPeriodo())}</div>`
     + (soloHistorias?'':`<div style="margin-top:22px">${mtDonasFila()}</div>`)
@@ -3530,6 +3531,133 @@ function renderMetricasCuerpo(){
 }
 
 function mtPct(v){ return (Math.round(v*10)/10).toString().replace('.',',')+'%'; }
+
+// ═══════════════════════════════════════════════════════════
+//  MÉTRICAS · SECCIÓN PROYECTOS
+//  Mismo cálculo que el Informe y Portafolio (avResumenEpica sobre la respuesta del informe).
+//  Activos: épicas con entregables que no están en Producción, Stand by ni Desestimado.
+//  Periodo: mes del Término estimado (vencimiento de la épica).
+// ═══════════════════════════════════════════════════════════
+let metPeriodoProy = '';
+function mtProyDatos(){
+  if(!infProyectos) return null;
+  const hoy=new Date().toISOString().slice(0,10);
+  const out=[];
+  infProyectos.forEach(p=>{
+    const d=infCache[p.key]; if(!d) return;
+    const ep=(epics||[]).find(e=>e.key===p.key)||{};
+    const est=ganttNorm(ep.status||d.epica?.estado||'');
+    if(/produccion|stand by|standby|desestim|cancel/.test(est)) return;
+    const pr=avResumenEpica(d,hoy); if(!pr) return;
+    const vence=d.epica?.vence||ep.duedate||null;
+    // Fase actual del proyecto: la más frecuente entre sus entregables
+    const cuenta={};
+    (d.entregables||[]).forEach(e=>{
+      const r=avReal(e); let f;
+      if(r.fase===5) f='Producción';
+      else if(r.fase===4) f = r.fases.uat>=99.95 ? 'Listo para producción' : 'Pruebas QA/UAT';
+      else if(r.fase===3) f='Pruebas QA/UAT';
+      else if(r.fase===2) f='Desarrollo';
+      else if(r.fase===1) f='Análisis';
+      else if(r.fase===-1) f='Bloqueado';
+      else f='Pendiente';
+      cuenta[f]=(cuenta[f]||0)+1;
+    });
+    const fase=Object.entries(cuenta).sort((a,b)=>b[1]-a[1])[0]?.[0]||'Pendiente';
+    const semaforo = pr.plan===null ? 'Sin plan' : pr.desvio>=-5 ? 'En control' : pr.desvio>=-10 ? 'Alerta' : 'Crítico';
+    out.push({ key:p.key, codigo:ep.codigo||d.epica?.codigo||p.key, nombre:ep.summary||d.epica?.summary||p.key,
+      sponsor:ep.sponsor||'Sin sponsor', pr, vence, fase, semaforo,
+      vencido: !!(vence && vence<hoy && pr.real<99.95), terminado: pr.real>=99.95,
+      bugsAbiertos:(d.bugs||[]).filter(infBugAbierto).length,
+      mes: vence ? vence.slice(0,7) : null });
+  });
+  return out;
+}
+function mtSeccionProyectos(){
+  const todos=mtProyDatos();
+  if(!todos){
+    if(typeof portAvanceCalcular==='function') portAvanceCalcular();
+    return `<div class="mt-empty" style="margin-bottom:16px">Calculando el avance de los proyectos…</div>`;
+  }
+  if(!todos.length) return '';
+  const meses=[...new Set(todos.filter(x=>x.mes).map(x=>x.mes))].sort();
+  if(metPeriodoProy && !meses.includes(metPeriodoProy)) metPeriodoProy='';
+  const lista = metPeriodoProy ? todos.filter(x=>x.mes===metPeriodoProy) : todos;
+  const opciones=[`<option value="">Todos los activos</option>`]
+    .concat(meses.slice().reverse().map(m=>`<option value="${m}"${m===metPeriodoProy?' selected':''}>${mtMesCorto(m)} ${m.slice(0,4)}</option>`)).join('');
+  const n=lista.length;
+  const cnt=k=>lista.filter(x=>x.semaforo===k).length;
+  const conPlan=lista.filter(x=>x.pr.plan!==null);
+  const prom=a=>a.length?a.reduce((s,v)=>s+v,0)/a.length:null;
+  const spi=prom(conPlan.filter(x=>x.pr.indice).map(x=>x.pr.indice));
+  const atr=prom(conPlan.map(x=>x.pr.atraso||0));
+  const venc=lista.filter(x=>x.vencido).length;
+  const term=lista.filter(x=>x.terminado).length;
+  const dec=(v,d=2)=>v===null?'–':v.toFixed(d).replace('.',',');
+  const kpi=(l,v,c,sub)=>`<div class="mt-kpi"><div class="mt-kpi-lbl">${l}</div><div class="mt-kpi-val" style="color:${c||'var(--text-primary)'}">${v}</div>${sub?`<div class="mt-kpi-sub">${sub}</div>`:''}</div>`;
+  const kpis=`<div class="mt-kpis">
+    ${kpi('PROYECTOS ACTIVOS',n,null,'con entregables')}
+    ${kpi('EN CONTROL',cnt('En control'),'#3fb950','desvío ≥ −5%')}
+    ${kpi('ALERTA',cnt('Alerta'),'#F5B800','−5% a −10%')}
+    ${kpi('CRÍTICOS',cnt('Crítico'),'#ef4444','desvío < −10%')}
+    ${kpi('CUMPLIMIENTO PROM.',dec(spi),spi===null?null:spi>=0.95?'#3fb950':spi>=0.90?'#F5B800':'#ef4444','real ÷ plan')}
+    ${kpi('ATRASO PROMEDIO',atr===null?'–':`${Math.round(atr)} día${Math.round(atr)===1?'':'s'}`,atr>0?'#F5B800':'#3fb950','frente al plan')}
+    ${kpi('VENCIDOS',venc,venc?'#ef4444':'#3fb950','término estimado pasado')}
+    ${kpi('TERMINADOS',`${term} de ${n}`,null,'avance real 100%')}
+  </div>`;
+  // Donas
+  const SEM={ 'En control':'#3fb950', 'Alerta':'#F5B800', 'Crítico':'#ef4444', 'Sin plan':'#8b949e' };
+  const itemsSem=Object.keys(SEM).map(k=>({ lbl:k, v:cnt(k), c:SEM[k], tip:k,
+    sub:lista.filter(x=>x.semaforo===k).map(x=>x.codigo).slice(0,4).join(', ')+(cnt(k)>4?'…':'') })).filter(x=>x.v);
+  const FASE={ 'Análisis':'#a371f7','Desarrollo':'#58a6ff','Pruebas QA/UAT':'#39c5cf','Listo para producción':'#3fb950','Pendiente':'#8b949e','Bloqueado':'#ef4444' };
+  const itemsFase=Object.keys(FASE).map(k=>{ const v=lista.filter(x=>x.fase===k).length;
+    return { lbl:k, v, c:FASE[k], tip:k, sub:v?`${v===1?'1 proyecto':v+' proyectos'}`:'' }; }).filter(x=>x.v);
+  const porSp={};
+  lista.forEach(x=>{ const m=porSp[x.sponsor]=porSp[x.sponsor]||{v:0,ok:0,riesgo:0};
+    m.v++; (x.semaforo==='Alerta'||x.semaforo==='Crítico')?m.riesgo++:m.ok++; });
+  const itemsSp=mtTop(porSp,'Otros',x=>`${x.ok} en control · ${x.riesgo} en riesgo`);
+  const donas=`<div class="mt-cuatro" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:12px">
+    ${mtDonaCard('PROYECTOS POR SEMÁFORO', itemsSem, n, 'PROYECTOS', v=>v)}
+    ${mtDonaCard('PROYECTOS POR FASE ACTUAL', itemsFase, n, 'PROYECTOS', v=>v)}
+    ${mtDonaCard('PROYECTOS POR SPONSOR', itemsSp, n, 'PROYECTOS', v=>v)}
+  </div>`;
+  // Tabla: peor desvío primero
+  const fC=v=>{ if(!v) return '–'; const [y,m,d]=v.split('-'); return `${d}-${['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][+m-1]}`; };
+  const pc=v=>v===null||v===undefined?'–':(Math.round(v*10)/10).toString().replace('.',',')+'%';
+  const ord=lista.slice().sort((a,b)=>(a.pr.plan===null?999:a.pr.desvio)-(b.pr.plan===null?999:b.pr.desvio));
+  const filas=ord.map(x=>{
+    const dv=x.pr.plan===null?null:x.pr.desvio;
+    return `<tr>
+      <td style="white-space:nowrap"><a class="jlink" href="#" onclick="event.preventDefault();infSel='${x.key}';infGuardarUltimo('${x.key}');document.querySelector('.tab[data-tab=informe]')?.click();">${esc(x.codigo)}</a></td>
+      <td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(x.nombre)}">${esc(x.nombre)}</td>
+      <td>${esc(x.sponsor)}</td>
+      <td style="text-align:right">${pc(x.pr.plan)}</td>
+      <td style="text-align:right;font-weight:600">${pc(x.pr.real)}</td>
+      <td style="text-align:right;font-weight:700;color:${SEM[x.semaforo]}">${dv===null?'–':(dv>=0?'+':'−')+pc(Math.abs(dv))}</td>
+      <td style="text-align:right">${x.pr.plan===null?'–':x.pr.atraso?x.pr.atraso+' d':'Al día'}</td>
+      <td style="white-space:nowrap;color:${x.vencido?'#ef4444':'inherit'}">${fC(x.vence)}</td>
+      <td style="text-align:right">${x.bugsAbiertos}</td>
+    </tr>`; }).join('');
+  return `<div style="display:flex;align-items:center;justify-content:space-between;margin:4px 0 10px">
+      <div><span style="font-size:13px;font-weight:700;color:#58a6ff;letter-spacing:.04em">PROYECTOS</span>
+        <span style="font-size:11px;color:var(--text-muted);margin-left:8px">${n} activos · cumplimiento ${dec(spi)} · ${venc} vencido${venc===1?'':'s'}</span></div>
+      <div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;color:var(--text-muted)">Periodo</span>
+        <select onchange="metPeriodoProy=this.value;mtRefrescarProyectos()">${opciones}</select></div>
+    </div>
+    ${kpis}${donas}
+    <div class="mt-card"><div class="mt-card-t">DETALLE DE PROYECTOS</div>
+      <div style="overflow-x:auto"><table class="mt-tabla"><thead><tr>
+        <th>Código</th><th>Proyecto</th><th>Sponsor</th><th style="text-align:right">Plan</th><th style="text-align:right">Real</th>
+        <th style="text-align:right">Desvío</th><th style="text-align:right">Atraso</th><th>Término</th><th style="text-align:right">Bugs abiertos</th>
+      </tr></thead><tbody>${filas}</tbody></table></div>
+      <div style="font-size:10px;color:var(--text-dim);margin-top:8px">Mismo cálculo que el Informe: desvío = avance real − plan; verde ≥ −5%, ámbar −5% a −10%, rojo &lt; −10%. Periodo = mes del Término estimado de la épica. Clic en el código para abrir su Informe.</div>
+    </div>
+    <div style="height:22px"></div>`;
+}
+function mtRefrescarProyectos(){
+  const el=document.getElementById('mt-proy');
+  if(el) el.innerHTML=mtSeccionProyectos();
+}
 
 function mtResumen(rows){
   // Solo se miden las filas con ambas fechas; las demás se cuentan aparte
@@ -4234,6 +4362,7 @@ async function portAvanceCalcular(){
     };
     await Promise.all([1,2,3,4].map(trabajar));   // 4 consultas en paralelo
     renderTable(sortedData(getFiltered()));   // también actualiza los KPIs
+    mtRefrescarProyectos();                   // sección Proyectos de Métricas
   }catch(e){ console.warn('Avance de portafolio:', e.message); }
   finally{ portAvanceEnCurso=false; }
 }
