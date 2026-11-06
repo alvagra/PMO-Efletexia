@@ -3535,10 +3535,22 @@ function mtPct(v){ return (Math.round(v*10)/10).toString().replace('.',',')+'%';
 // ═══════════════════════════════════════════════════════════
 //  MÉTRICAS · SECCIÓN PROYECTOS
 //  Mismo cálculo que el Informe y Portafolio (avResumenEpica sobre la respuesta del informe).
-//  Activos: épicas con entregables que no están en Producción, Stand by ni Desestimado.
+//  Proyectos: épicas con entregables en Pendiente, Análisis, Desarrollo, Pruebas o Producción.
 //  Periodo: mes del Término estimado (vencimiento de la épica).
 // ═══════════════════════════════════════════════════════════
 let metPeriodoProy = '';
+// Estado de la épica normalizado a los 5 estados de proyecto; null = no se considera
+const MT_ESTADOS_PROY = ['Pendiente','Análisis','Desarrollo','Pruebas','Producción'];
+function mtEstadoEpica(nombre){
+  const t=ganttNorm(nombre);
+  if(!t) return null;
+  if(t.includes('produccion')||t.includes('marcha blanca')) return 'Producción';
+  if(t.includes('prueba')||t==='qa'||t==='uat'||t.includes(' qa')||t.includes(' uat')) return 'Pruebas';
+  if(t.includes('desarrollo')) return 'Desarrollo';
+  if(t.includes('analisis')) return 'Análisis';
+  if(t.includes('pendiente')||t.includes('backlog')||t.includes('planific')||t.includes('por hacer')) return 'Pendiente';
+  return null;   // Stand by, Desestimado, Cancelado, etc.
+}
 function mtProyDatos(){
   if(!infProyectos) return null;
   const hoy=new Date().toISOString().slice(0,10);
@@ -3546,24 +3558,11 @@ function mtProyDatos(){
   infProyectos.forEach(p=>{
     const d=infCache[p.key]; if(!d) return;
     const ep=(epics||[]).find(e=>e.key===p.key)||{};
-    const est=ganttNorm(ep.status||d.epica?.estado||'');
-    if(/produccion|stand by|standby|desestim|cancel/.test(est)) return;
+    // Solo épicas en Pendiente, Análisis, Desarrollo, Pruebas o Producción
+    const fase=mtEstadoEpica(ep.status||d.epica?.estado||'');
+    if(!fase) return;
     const pr=avResumenEpica(d,hoy); if(!pr) return;
     const vence=d.epica?.vence||ep.duedate||null;
-    // Fase actual del proyecto: la más frecuente entre sus entregables
-    const cuenta={};
-    (d.entregables||[]).forEach(e=>{
-      const r=avReal(e); let f;
-      if(r.fase===5) f='Producción';
-      else if(r.fase===4) f = r.fases.uat>=99.95 ? 'Listo para producción' : 'Pruebas QA/UAT';
-      else if(r.fase===3) f='Pruebas QA/UAT';
-      else if(r.fase===2) f='Desarrollo';
-      else if(r.fase===1) f='Análisis';
-      else if(r.fase===-1) f='Bloqueado';
-      else f='Pendiente';
-      cuenta[f]=(cuenta[f]||0)+1;
-    });
-    const fase=Object.entries(cuenta).sort((a,b)=>b[1]-a[1])[0]?.[0]||'Pendiente';
     const semaforo = pr.plan===null ? 'Sin plan' : pr.desvio>=-5 ? 'En control' : pr.desvio>=-10 ? 'Alerta' : 'Crítico';
     out.push({ key:p.key, codigo:ep.codigo||d.epica?.codigo||p.key, nombre:ep.summary||d.epica?.summary||p.key,
       sponsor:ep.sponsor||'Sin sponsor', pr, vence, fase, semaforo,
@@ -3579,12 +3578,9 @@ function mtSeccionProyectos(){
     if(typeof portAvanceCalcular==='function') portAvanceCalcular();
     return `<div class="mt-empty" style="margin-bottom:16px">Calculando el avance de los proyectos…</div>`;
   }
-  if(!todos.length) return '';
+  if(!todos.length) return `<div style="display:flex;justify-content:flex-end;margin-bottom:12px">${mtSelectorPeriodo()}</div>`;
   const meses=[...new Set(todos.filter(x=>x.mes).map(x=>x.mes))].sort();
-  if(metPeriodoProy && !meses.includes(metPeriodoProy)) metPeriodoProy='';
   const lista = metPeriodoProy ? todos.filter(x=>x.mes===metPeriodoProy) : todos;
-  const opciones=[`<option value="">Todos los activos</option>`]
-    .concat(meses.slice().reverse().map(m=>`<option value="${m}"${m===metPeriodoProy?' selected':''}>${mtMesCorto(m)} ${m.slice(0,4)}</option>`)).join('');
   const n=lista.length;
   const cnt=k=>lista.filter(x=>x.semaforo===k).length;
   const conPlan=lista.filter(x=>x.pr.plan!==null);
@@ -3596,7 +3592,7 @@ function mtSeccionProyectos(){
   const dec=(v,d=2)=>v===null?'–':v.toFixed(d).replace('.',',');
   const kpi=(l,v,c,sub)=>`<div class="mt-kpi"><div class="mt-kpi-lbl">${l}</div><div class="mt-kpi-val" style="color:${c||'var(--text-primary)'}">${v}</div>${sub?`<div class="mt-kpi-sub">${sub}</div>`:''}</div>`;
   const kpis=`<div class="mt-kpis">
-    ${kpi('PROYECTOS ACTIVOS',n,null,'con entregables')}
+    ${kpi('PROYECTOS',n,null,`${lista.filter(x=>x.fase!=='Producción').length} en curso · ${lista.filter(x=>x.fase==='Producción').length} en producción`)}
     ${kpi('EN CONTROL',cnt('En control'),'#3fb950','desvío ≥ −5%')}
     ${kpi('ALERTA',cnt('Alerta'),'#F5B800','−5% a −10%')}
     ${kpi('CRÍTICOS',cnt('Crítico'),'#ef4444','desvío < −10%')}
@@ -3609,16 +3605,13 @@ function mtSeccionProyectos(){
   const SEM={ 'En control':'#3fb950', 'Alerta':'#F5B800', 'Crítico':'#ef4444', 'Sin plan':'#8b949e' };
   const itemsSem=Object.keys(SEM).map(k=>({ lbl:k, v:cnt(k), c:SEM[k], tip:k,
     sub:lista.filter(x=>x.semaforo===k).map(x=>x.codigo).slice(0,4).join(', ')+(cnt(k)>4?'…':'') })).filter(x=>x.v);
-  const FASE={ 'Análisis':'#a371f7','Desarrollo':'#58a6ff','Pruebas QA/UAT':'#39c5cf','Listo para producción':'#3fb950','Pendiente':'#8b949e','Bloqueado':'#ef4444' };
-  const itemsFase=Object.keys(FASE).map(k=>{ const v=lista.filter(x=>x.fase===k).length;
-    return { lbl:k, v, c:FASE[k], tip:k, sub:v?`${v===1?'1 proyecto':v+' proyectos'}`:'' }; }).filter(x=>x.v);
-  const porSp={};
-  lista.forEach(x=>{ const m=porSp[x.sponsor]=porSp[x.sponsor]||{v:0,ok:0,riesgo:0};
-    m.v++; (x.semaforo==='Alerta'||x.semaforo==='Crítico')?m.riesgo++:m.ok++; });
-  const itemsSp=mtTop(porSp,'Otros',x=>`${x.ok} en control · ${x.riesgo} en riesgo`);
+  // Dona por estado de la épica: solo los 5 estados de proyecto, en orden del flujo
+  const COL_FASE={ 'Pendiente':'#8b949e','Análisis':'#a371f7','Desarrollo':'#58a6ff','Pruebas':'#39c5cf','Producción':'#3fb950' };
+  const itemsFase=MT_ESTADOS_PROY.map(k=>{ const v=lista.filter(x=>x.fase===k).length;
+    return { lbl:k, v, c:COL_FASE[k], tip:k, sub:v===1?'1 proyecto':v+' proyectos' }; }).filter(x=>x.v);
   const donas=`<div class="mt-cuatro" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:12px">
     ${mtDonaCard('PROYECTOS POR SEMÁFORO', itemsSem, n, 'PROYECTOS', v=>v)}
-    ${mtDonaCard('PROYECTOS POR FASE ACTUAL', itemsFase, n, 'PROYECTOS', v=>v)}
+    ${mtDonaCard('PROYECTOS POR ESTADO (ÉPICA)', itemsFase, n, 'PROYECTOS', v=>v)}
     ${mtDonaCard('PROYECTOS POR SPONSOR', itemsSp, n, 'PROYECTOS', v=>v)}
   </div>`;
   // Tabla: peor desvío primero
@@ -3640,9 +3633,8 @@ function mtSeccionProyectos(){
     </tr>`; }).join('');
   return `<div style="display:flex;align-items:center;justify-content:space-between;margin:4px 0 10px">
       <div><span style="font-size:13px;font-weight:700;color:#58a6ff;letter-spacing:.04em">PROYECTOS</span>
-        <span style="font-size:11px;color:var(--text-muted);margin-left:8px">${n} activos · cumplimiento ${dec(spi)} · ${venc} vencido${venc===1?'':'s'}</span></div>
-      <div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;color:var(--text-muted)">Periodo</span>
-        <select onchange="metPeriodoProy=this.value;mtRefrescarProyectos()">${opciones}</select></div>
+        <span style="font-size:11px;color:var(--text-muted);margin-left:8px">${n} proyectos · cumplimiento ${dec(spi)} · ${venc} vencido${venc===1?'':'s'}</span></div>
+      ${mtSelectorPeriodo()}
     </div>
     ${kpis}${donas}
     <div class="mt-card"><div class="mt-card-t">DETALLE DE PROYECTOS</div>
@@ -3654,6 +3646,27 @@ function mtSeccionProyectos(){
     </div>
     <div style="height:22px"></div>`;
 }
+// ── Periodo único de Métricas: aplica a proyectos, historias y bugs ──
+// '' = proyectos activos + últimos 6 meses de historias y bugs; 'AAAA-MM' = ese mes en las tres secciones
+function mtMesesGlobales(){
+  const m=new Set();
+  (mtProyDatos()||[]).forEach(x=>{ if(x.mes) m.add(x.mes); });
+  (metHistRows||[]).forEach(r=>{ if(r.vence) m.add(r.vence.slice(0,7)); });
+  (typeof mtMesesDisponibles==='function'?mtMesesDisponibles():[]).forEach(x=>m.add(x));
+  return [...m].sort();
+}
+function mtSelectorPeriodo(){
+  const v=metPeriodoProy;
+  const opc=[`<option value="">Todos (proyectos · últimos 6 meses)</option>`]
+    .concat(mtMesesGlobales().reverse().map(m=>`<option value="${m}"${m===v?' selected':''}>${mtMesCorto(m)} ${m.slice(0,4)}</option>`)).join('');
+  return `<div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;color:var(--text-muted)">Periodo</span>
+    <select id="mt-periodo-global" onchange="mtCambiarPeriodo(this.value)">${opc}</select></div>`;
+}
+function mtCambiarPeriodo(v){
+  metPeriodoProy=v; metPeriodoHist=v; metPeriodo=v;
+  mtRefrescarProyectos(); mtRefrescarDonasHist(); mtRefrescarDonas();
+}
+
 function mtRefrescarProyectos(){
   const el=document.getElementById('mt-proy');
   if(el) el.innerHTML=mtSeccionProyectos();
@@ -3815,10 +3828,6 @@ function mtDonasFila(){
       @media (max-width:1100px){.mt-cuatro{grid-template-columns:repeat(2,minmax(0,1fr))}}
       @media (max-width:700px){.mt-cuatro{grid-template-columns:1fr}}
     </style>
-    <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:8px">
-      <span style="font-size:11px;color:var(--text-muted)">Periodo</span>
-      <select id="mt-periodo" onchange="metPeriodo=this.value;mtRefrescarDonas()">${opciones}</select>
-    </div>
     <div class="mt-cuatro">${tarjetas}</div>
     <div style="font-size:10px;color:var(--text-dim);text-align:center;margin-top:8px">
       Bugs: mes de vencimiento (o de la fecha de inicio si no tiene) · Horas: Registro de actividad del bug y sus subtareas, por mes del trabajo
@@ -3835,7 +3844,6 @@ function mtDonasHistorias(){
     .map(r=>({...r, mes:r.vence.slice(0,7)}));
   if(!todas.length) return '';
   const meses=[...new Set(todas.map(r=>r.mes))].sort();
-  if(metPeriodoHist && !meses.includes(metPeriodoHist)) metPeriodoHist='';
   const ult=meses.slice(-6);
   const rows=metPeriodoHist ? todas.filter(r=>r.mes===metPeriodoHist) : todas.filter(r=>ult.includes(r.mes));
   const opciones=[`<option value="">Últimos ${ult.length} ${ult.length===1?'mes':'meses'}</option>`]
@@ -3888,10 +3896,6 @@ function mtDonasHistorias(){
       @media (max-width:1100px){.mt-cuatro{grid-template-columns:repeat(2,minmax(0,1fr))}}
       @media (max-width:700px){.mt-cuatro{grid-template-columns:1fr}}
     </style>
-    <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:8px">
-      <span style="font-size:11px;color:var(--text-muted)">Periodo</span>
-      <select id="mt-periodo-hist" onchange="metPeriodoHist=this.value;mtRefrescarDonasHist()">${opciones}</select>
-    </div>
     <div class="mt-cuatro">${tarjetas}</div>
     <div style="font-size:10px;color:var(--text-dim);text-align:center;margin-top:8px">
       Historias entregables: mes de Vence (Fecha fin plan desarrollo) · Desvío en días sin domingos · Un entregable con varios responsables cuenta para cada uno
@@ -3946,7 +3950,6 @@ function mtRefrescarDonasHist(){
 function mtHistPeriodo(){
   const todas=(metHistRows||[]);
   const meses=[...new Set(todas.filter(r=>r.vence).map(r=>r.vence.slice(0,7)))].sort();
-  if(metPeriodoHist && !meses.includes(metPeriodoHist)) metPeriodoHist='';
   if(metPeriodoHist) return todas.filter(r=>r.vence && r.vence.slice(0,7)===metPeriodoHist);
   const ult=meses.slice(-6);
   return todas.filter(r=>!r.vence || ult.includes(r.vence.slice(0,7)));
