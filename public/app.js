@@ -4421,8 +4421,8 @@ async function portAvanceCalcular(){
 // ═══════════════════════════════════════════════════════════
 //  RESUMEN DEL PORTAFOLIO — índice de salud y 6 dimensiones, por mes, con histórico
 //  Flujo (se reconstruye desde Jira para cualquier mes): entrega, calidad, capacidad,
-//  costos, gobierno. Estado (plazo): foto mensual guardada en Jira (propiedad del
-//  proyecto PTS); el mes en curso se calcula en vivo con el mismo cálculo del Informe.
+//  costos, gobierno. Plazo: el mes en curso se calcula en vivo con el mismo cálculo del
+//  Informe; los meses anteriores se reconstruyen con el historial de estados (changelog).
 //  Cada KPI puntúa verde 100 · ámbar 60 · rojo 20; dimensión = promedio de sus KPI;
 //  índice = promedio ponderado de las dimensiones con datos.
 // ═══════════════════════════════════════════════════════════
@@ -4466,6 +4466,51 @@ function rsPlazoActual(){
     vencidos:lista.filter(x=>x.vencido).length };
 }
 
+// Estado de una incidencia a una fecha, según su historial de estados (changelog de Jira).
+// null = aún no existía a esa fecha.
+function rsEstadoEn(actual, estados, creado, fecha){
+  if(creado && creado>fecha) return null;
+  if(!Array.isArray(estados) || !estados.length) return actual;
+  let est = estados[0].de || actual;          // estado con el que se creó
+  for(const h of estados){ if(h.fecha<=fecha) est=h.a; else break; }
+  return est;
+}
+// Plazo a una fecha pasada: el mismo cálculo del Informe sobre los proyectos y entregables
+// tal como estaban ese día (estados del changelog y subtareas cerradas hasta esa fecha)
+function rsPlazoEn(fecha){
+  if(!infProyectos) return null;
+  const lista=[];
+  infProyectos.forEach(p=>{
+    const d=infCache[p.key]; if(!d) return;
+    const ep=d.epica||{};
+    const fase=mtEstadoEpica(rsEstadoEn(ep.estado, ep.estados, ep.creado, fecha)||'');
+    if(!fase || fase==='Producción') return;           // solo proyectos en curso a esa fecha
+    const ents=(d.entregables||[]).map(e=>{
+      const est=rsEstadoEn(e.estado, e.estados, e.creado, fecha);
+      if(est===null) return null;
+      return { ...e, estado:est, estadoCat:'',
+        subtareas:(e.subtareas||[]).map(st=>{ const ok=!!(st.cierre && st.cierre<=fecha);
+          return { ...st, estadoCat: ok?'done':'indeterminate', estado: ok?(st.estado||'Cerrado'):'En curso' }; }) };
+    }).filter(Boolean);
+    if(!ents.length) return;
+    const pr=avResumenEpica({ ...d, entregables:ents }, fecha);
+    if(!pr) return;
+    const vence=ep.vence||null;
+    lista.push({ pr, semaforo: pr.plan===null?'Sin plan':pr.desvio>=-5?'En control':pr.desvio>=-10?'Alerta':'Crítico',
+      vencido: !!(vence && vence<fecha && pr.real<99.95) });
+  });
+  if(!lista.length) return null;
+  const conPlan=lista.filter(x=>x.pr.plan!==null);
+  const prom=a=>a.length?a.reduce((s,v)=>s+v,0)/a.length:null;
+  return { total:lista.length,
+    control:lista.filter(x=>x.semaforo==='En control').length,
+    alerta:lista.filter(x=>x.semaforo==='Alerta').length,
+    critico:lista.filter(x=>x.semaforo==='Crítico').length,
+    spi:prom(conPlan.filter(x=>x.pr.indice).map(x=>x.pr.indice)),
+    atraso:prom(conPlan.map(x=>x.pr.atraso||0)),
+    vencidos:lista.filter(x=>x.vencido).length, reconstruido:true };
+}
+
 // Indicadores de un mes
 function rsCalcular(mes){
   const d=rsDatos, ini=mes+'-01', fin=rsFinMes(mes), hoyIso=rsIso(new Date());
@@ -4473,8 +4518,8 @@ function rsCalcular(mes){
   const enMes = x => x && x.slice(0,7)===mes;
   const r={ mes };
 
-  // ── Plazo (estado): en vivo para el mes actual, foto guardada para meses anteriores
-  const pl = mes===hoyIso.slice(0,7) ? rsPlazoActual() : (rsHist?.[mes]?.plazo||null);
+  // ── Plazo: en vivo para el mes actual; reconstruido con el historial de Jira para meses anteriores
+  const pl = mes===hoyIso.slice(0,7) ? rsPlazoActual() : rsPlazoEn(fin);
   r.plazo = pl ? { ...pl, pts:[ rsPts(pl.spi,0.95,0.90), rsPts(pl.total?pl.critico/pl.total*100:null,10,25,-1),
     rsPts(pl.vencidos,0,2,-1), rsPts(pl.atraso,5,15,-1) ] } : null;
 
@@ -4623,13 +4668,13 @@ function rsRender(){
 
   // 1. Plazo
   const p=r.plazo;
-  html+=rsCard('1. Plazo', rsMes===hoyM?'Métricas · Proyectos (en vivo)':'Foto mensual guardada', r.score.plazo,
+  html+=rsCard('1. Plazo', rsMes===hoyM?'Métricas · Proyectos (en vivo)':`Reconstruido al ${rsFinMes(rsMes).slice(8)}/${rsMes.slice(5)} con el historial de estados de Jira`, r.score.plazo,
     p ? `<div style="display:flex;align-items:center;gap:10px">${rsDonut([['Crítico',p.critico,RS_R],['Alerta',p.alerta,RS_A],['En control',p.control,RS_G]],p.total,'proyectos')}
       <div style="flex:1">${rsGauge(p.spi,1.1,rsColPts(rsPts(p.spi,0.95,0.90)),rsFmt(p.spi,2),'cumplimiento (SPI)',120)}</div></div>
       ${rsLeg([[`Crítico ${p.critico}`,RS_R],[`Alerta ${p.alerta}`,RS_A],[`En control ${p.control}`,RS_G]])}
       ${rsBar('Proyectos vencidos',p.vencidos,Math.max(p.total,1),rsColPts(rsPts(p.vencidos,0,2,-1)),`${p.vencidos} de ${p.total}`)}
       ${rsBar('Atraso promedio',p.atraso,60,rsColPts(rsPts(p.atraso,5,15,-1)),`${rsFmt(p.atraso)} días`)}`
-      : `<div class="mt-empty" style="padding:24px 0">Sin foto guardada para este mes. El plazo se registra automáticamente cada vez que se abre el Resumen durante el mes.</div>`,
+      : `<div class="mt-empty" style="padding:24px 0">${infProyectos?'No había proyectos en curso con entregables en este mes.':'Calculando el avance de los proyectos…'}</div>`,
     '', sp(x=>x.plazo?.spi??null,v=>rsColPts(rsPts(v,0.95,0.90)),v=>rsFmt(v,2),'SPI'));
 
   // 2. Entrega
@@ -4692,9 +4737,6 @@ function rsRender(){
 
   cont.innerHTML=html+'</div>';
 
-  // Foto del mes en curso (plazo) para el histórico
-  if(rsMes===hoyM && r.plazo) rsGuardarFoto(hoyM,{ plazo:{ total:r.plazo.total, control:r.plazo.control, alerta:r.plazo.alerta, critico:r.plazo.critico,
-    spi:r.plazo.spi, atraso:r.plazo.atraso, vencidos:r.plazo.vencidos } });
 }
 
 let rsFotoGuardada=null;
@@ -4717,8 +4759,7 @@ async function renderResumen(){
   cont.innerHTML='<div class="mt-empty">Calculando el resumen del portafolio…</div>';
   try{
     const pedir=b=>Sesion.pedir('/api/jira',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(async r=>{ const j=await r.json(); if(!r.ok) throw new Error(j.error||'Error de API'); return j; });
-    const [d,h]=await Promise.all([ pedir({type:'resumen',meses:6}), pedir({type:'resumenHistorico',accion:'leer'}).catch(()=>({historico:{}})) ]);
-    rsDatos=d; rsHist=h.historico||{};
+    rsDatos=await pedir({type:'resumen',meses:6}); rsHist={};
     // Capacidad necesita el registro de actividad; el plazo, el avance de los proyectos
     if(!capacityLoaded && typeof loadCapacity==='function') Promise.resolve(loadCapacity()).then(()=>rsRender()).catch(()=>{});
     if(typeof portAvanceCalcular==='function') Promise.resolve(portAvanceCalcular()).then(()=>rsRender()).catch(()=>{});
