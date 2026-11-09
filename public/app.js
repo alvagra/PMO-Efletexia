@@ -4648,9 +4648,9 @@ const rsBar=(l,v,max,c,txt)=>`<div style="display:flex;justify-content:space-bet
   <div style="height:7px;background:var(--border);border-radius:4px;overflow:hidden"><div style="width:${v===null?0:Math.max(0,Math.min(v/max*100,100))}%;height:100%;background:${c}"></div></div>`;
 const rsLeg=a=>`<div style="display:flex;gap:10px;flex-wrap:wrap;font-size:10px;color:var(--text-muted);margin-top:4px">${a.map(([l,c])=>`<span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${c};margin-right:3px"></i>${l}</span>`).join('')}</div>`;
 // Tendencia mensual de un indicador (el mes elegido se resalta)
-function rsSpark(vals,meses,sel,colFn,fmt,titulo){
+function rsSpark(vals,meses,sel,colFn,fmt,titulo,derecha=''){
   const W=300,h=46,pad=6, nums=vals.filter(v=>v!==null&&v!==undefined);
-  if(!nums.length) return '';
+  if(!nums.length) return derecha?`<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:6px;display:flex;justify-content:space-between"><span style="font-size:10px;color:var(--text-muted)">${titulo} · histórico (sin datos)</span>${derecha}</div>`:'';
   const min=Math.min(...nums), max=Math.max(...nums), rg=(max-min)||1;
   const x=i=>18+i*((W-36)/Math.max(1,vals.length-1)), y=v=>pad+(h-2*pad)*(1-(v-min)/rg);
   let pts=vals.map((v,i)=>v===null||v===undefined?null:`${x(i)},${y(v)}`).filter(Boolean).join(' ');
@@ -4658,7 +4658,7 @@ function rsSpark(vals,meses,sel,colFn,fmt,titulo){
   vals.forEach((v,i)=>{ if(v===null||v===undefined) return;
     s+=`<circle cx="${x(i)}" cy="${y(v)}" r="${i===sel?4.5:2.8}" fill="${colFn(v)}" stroke="${i===sel?'var(--text-primary)':'none'}" stroke-width="1.2"><title>${mtMesCorto(meses[i])}: ${fmt(v)}</title></circle>`; });
   meses.forEach((m,i)=>{ s+=`<text x="${x(i)}" y="${h+10}" font-size="9" text-anchor="middle" fill="${i===sel?'var(--text-primary)':'var(--text-muted)'}">${mtMesCorto(m).slice(0,3)}</text>`; });
-  return `<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:6px"><div style="font-size:10px;color:var(--text-muted)">${titulo} · histórico</div><svg viewBox="0 0 ${W} ${h+14}" width="100%">${s}</svg></div>`;
+  return `<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:6px"><div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:10px;color:var(--text-muted)">${titulo} · histórico</span>${derecha}</div><svg viewBox="0 0 ${W} ${h+14}" width="100%">${s}</svg></div>`;
 }
 
 function rsCard(titulo,fuente,score,body,nota,spark){
@@ -4677,7 +4677,7 @@ function rsRender(){
   const i=esTodos?-1:meses.indexOf(rsMes), r=esTodos?rsCalcular('todos'):all[i];
   const etiquetaMes=esTodos?`Acumulado ${mtMesCorto(meses[0]).toLowerCase()}–${mtMesCorto(meses[meses.length-1]).toLowerCase()} ${meses[meses.length-1].slice(0,4)}`:`${mtMesCorto(rsMes)} ${rsMes.slice(0,4)}`;
   const serie=fn=>all.map(x=>{ try{ return fn(x); }catch(_){ return null; } });
-  const sp=(fn,colFn,fmt,t)=>rsSpark(serie(fn),meses,i,colFn,fmt,t);
+  const sp=(fn,colFn,fmt,t,der)=>rsSpark(serie(fn),meses,i,colFn,fmt,t,der);
   const opc=`<option value="todos"${esTodos?' selected':''}>Todos (acumulado ${meses.length} meses)</option>`
     + meses.slice().reverse().map(m=>`<option value="${m}"${m===rsMes?' selected':''}>${mtMesCorto(m)} ${m.slice(0,4)}${m===hoyM?' (en curso)':''}</option>`).join('');
 
@@ -4703,16 +4703,21 @@ function rsRender(){
     <div><div style="font-size:10px;color:var(--text-muted);margin-bottom:4px">Histórico del índice (clic para ver el mes)</div><div style="display:flex;gap:2px">${hist}</div></div>
   </div><div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">`;
 
-  // 1. Plazo
-  const p=r.plazo;
-  html+=rsCard('1. Plazo', esTodos?'Estado actual de la cartera (en vivo)':rsMes===hoyM?'Métricas · Proyectos (en vivo)':`Reconstruido al ${rsFinMes(rsMes).slice(8)}/${rsMes.slice(5)} con el historial de estados de Jira`, r.score.plazo,
-    p ? `<div style="display:flex;align-items:center;gap:10px">${rsDonut([['Crítico',p.critico,RS_R],['Alerta',p.alerta,RS_A],['En control',p.control,RS_G]],p.total,'proyectos')}
-      <div style="flex:1">${rsGauge(p.spi,1.1,rsColPts(rsPts(p.spi,0.95,0.90)),rsFmt(p.spi,2),'cumplimiento (SPI)',120)}</div></div>
-      ${rsLeg([[`Crítico ${p.critico}`,RS_R],[`Alerta ${p.alerta}`,RS_A],[`En control ${p.control}`,RS_G]])}
-      ${rsBar('Proyectos vencidos',p.vencidos,Math.max(p.total,1),rsColPts(rsPts(p.vencidos,0,2,-1)),`${p.vencidos} de ${p.total}`)}
-      ${rsBar('Atraso promedio',p.atraso,60,rsColPts(rsPts(p.atraso,5,15,-1)),`${rsFmt(p.atraso)} días`)}`
-      : `<div class="mt-empty" style="padding:24px 0">${infProyectos?'No había proyectos en curso con entregables en este mes.':'Calculando el avance de los proyectos…'}</div>`,
-    rsTermBloque(all,meses,i,r), sp(x=>x.plazo?.spi??null,v=>rsColPts(rsPts(v,0.95,0.90)),v=>rsFmt(v,2),'SPI'));
+  // 1. Plazo: dona de proyectos terminados (En plazo · Replanificado · Retraso), medidor SPI de la
+  //    cartera en curso, vencidos y atraso; "Detalle" abre la ventana con los proyectos terminados
+  const p=r.plazo, t=r.term;
+  const donaTerm = t.total
+    ? rsDonut([['En plazo',t.enPlazo,RS_TERM['En plazo']],['Replanificado',t.replan,RS_TERM['Replanificado']],['Retraso',t.retraso,RS_TERM['Retraso']],['Sin plan',t.sinPlan,'#8b949e']],t.total,'terminados')
+    : `<div style="width:104px;text-align:center;font-size:11px;color:var(--text-muted)">Sin proyectos terminados</div>`;
+  html+=rsCard('1. Plazo', esTodos?'Proyectos terminados en el periodo · SPI de la cartera en curso':rsMes===hoyM?'Proyectos terminados en el mes · SPI en vivo':`Proyectos terminados en el mes · SPI reconstruido al ${rsFinMes(rsMes).slice(8)}/${rsMes.slice(5)}`, r.score.plazo,
+    `<div style="display:flex;align-items:center;gap:10px">${donaTerm}
+      <div style="flex:1">${p?rsGauge(p.spi,1.1,rsColPts(rsPts(p.spi,0.95,0.90)),rsFmt(p.spi,2),'cumplimiento (SPI)',120):`<div class="mt-empty" style="padding:10px 0">${infProyectos?'Sin proyectos en curso':'Calculando el SPI…'}</div>`}</div></div>
+     ${rsLeg([[`En plazo ${t.enPlazo}`,RS_TERM['En plazo']],[`Replanificado ${t.replan}`,RS_TERM['Replanificado']],[`Retraso ${t.retraso}`,RS_TERM['Retraso']]].concat(t.sinPlan?[[`Sin plan ${t.sinPlan}`,'#8b949e']]:[]))}
+     <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Cumplimiento de término (en plazo ÷ terminados con plan): <b style="color:${rsColPts(t.pt)}">${t.cumplimiento===null?'–':Math.round(t.cumplimiento)+'%'}</b></div>
+     ${p?`${rsBar('Proyectos vencidos (en curso)',p.vencidos,Math.max(p.total,1),rsColPts(rsPts(p.vencidos,0,2,-1)),`${p.vencidos} de ${p.total}`)}
+     ${rsBar('Atraso promedio (en curso)',p.atraso,60,rsColPts(rsPts(p.atraso,5,15,-1)),`${rsFmt(p.atraso)} días`)}`:''}`,
+    '', sp(x=>x.plazo?.spi??null,v=>rsColPts(rsPts(v,0.95,0.90)),v=>rsFmt(v,2),'SPI',
+      `<a href="#" onclick="event.preventDefault();rsDetalleTerminados()" style="font-size:11px;color:var(--accent,#58a6ff)">Detalle</a>`));
 
   // 2. Entrega
   const e=r.entrega;
