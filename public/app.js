@@ -4513,13 +4513,18 @@ function rsPlazoEn(fecha){
 
 // Indicadores de un mes
 function rsCalcular(mes){
-  const d=rsDatos, ini=mes+'-01', fin=rsFinMes(mes), hoyIso=rsIso(new Date());
+  // mes = 'AAAA-MM' o 'todos' (acumulado de los meses del rango)
+  const d=rsDatos, hoyIso=rsIso(new Date()), todos = mes==='todos';
+  const lista = todos ? rsMeses() : [mes];
+  const m0 = lista[0], m1 = lista[lista.length-1];
+  const fin=rsFinMes(m1);
   const corte = fin<hoyIso ? fin : hoyIso;
-  const enMes = x => x && x.slice(0,7)===mes;
+  const enMes = x => !!x && x.slice(0,7)>=m0 && x.slice(0,7)<=m1;
   const r={ mes };
 
-  // ── Plazo: en vivo para el mes actual; reconstruido con el historial de Jira para meses anteriores
-  const pl = mes===hoyIso.slice(0,7) ? rsPlazoActual() : rsPlazoEn(fin);
+  // ── Plazo: en vivo para el mes actual (y para "Todos": estado actual de la cartera);
+  //    reconstruido con el historial de Jira para meses anteriores
+  const pl = (todos || mes===hoyIso.slice(0,7)) ? rsPlazoActual() : rsPlazoEn(fin);
   r.plazo = pl ? { ...pl, pts:[ rsPts(pl.spi,0.95,0.90), rsPts(pl.total?pl.critico/pl.total*100:null,10,25,-1),
     rsPts(pl.vencidos,0,2,-1), rsPts(pl.atraso,5,15,-1) ] } : null;
 
@@ -4538,7 +4543,7 @@ function rsCalcular(mes){
   const bugs=d.bugs||[];
   const cierreDe=b=>b.cat==='done'&&b.cambio?b.cambio.slice(0,10):null;
   const mesBug=b=>(b.vence||b.inicio||b.creado||'').slice(0,7);
-  const delMes=bugs.filter(b=>mesBug(b)===mes);
+  const delMes=bugs.filter(b=>enMes(mesBug(b)+'-01'));
   const abiertos=bugs.filter(b=>b.creado<=corte && !(cierreDe(b) && cierreDe(b)<=corte));
   const prioN=p=>{ const t=(p||'').toLowerCase(); return t==='highest'?'Crítico':t==='high'?'Alto':t==='medium'?'Medio':'Bajo'; };
   const porPrio={Crítico:0,Alto:0,Medio:0,Bajo:0}; abiertos.forEach(b=>porPrio[prioN(b.prio)]++);
@@ -4557,9 +4562,9 @@ function rsCalcular(mes){
 
   // ── Capacidad: horas registradas (Registro de actividad) del equipo de Desarrollo
   const equipo=Object.values(NOMENCLATURA).filter(p=>p.area==='Desarrollo');
-  const [yy,mm]=mes.split('-').map(Number);
   const porPersona=equipo.map(p=>{
-    const dias=diasLaborablesDelMes(yy,mm-1,p.pais,p.nombre).filter(x=>x<=corte).length;
+    const dias=lista.reduce((a,m)=>{ const [yy,mm]=m.split('-').map(Number);
+      return a+diasLaborablesDelMes(yy,mm-1,p.pais,p.nombre).filter(x=>x<=corte).length; },0);
     const filas=(capRows||[]).filter(x=>x.persona===p.nombre && enMes(x.fecha));
     const h=filas.reduce((a,x)=>a+(x.horas||0),0), hb=filas.filter(x=>x.esBug).reduce((a,x)=>a+(x.horas||0),0);
     return { nombre:p.nombre, horas:h, horasBug:hb, cap:dias*8 };
@@ -4638,11 +4643,15 @@ function rsCard(titulo,fuente,score,body,nota,spark){
 
 function rsRender(){
   const cont=document.getElementById('rs-contenido'); if(!cont) return;
-  const meses=rsMeses(); if(!rsMes||!meses.includes(rsMes)) rsMes=meses[meses.length-1];
-  const all=meses.map(m=>rsCalcular(m)), i=meses.indexOf(rsMes), r=all[i], hoyM=rsIso(new Date()).slice(0,7);
+  const meses=rsMeses(); if(!rsMes||(rsMes!=='todos'&&!meses.includes(rsMes))) rsMes=meses[meses.length-1];
+  const all=meses.map(m=>rsCalcular(m)), hoyM=rsIso(new Date()).slice(0,7);
+  const esTodos=rsMes==='todos';
+  const i=esTodos?-1:meses.indexOf(rsMes), r=esTodos?rsCalcular('todos'):all[i];
+  const etiquetaMes=esTodos?`Acumulado ${mtMesCorto(meses[0]).toLowerCase()}–${mtMesCorto(meses[meses.length-1]).toLowerCase()} ${meses[meses.length-1].slice(0,4)}`:`${mtMesCorto(rsMes)} ${rsMes.slice(0,4)}`;
   const serie=fn=>all.map(x=>{ try{ return fn(x); }catch(_){ return null; } });
   const sp=(fn,colFn,fmt,t)=>rsSpark(serie(fn),meses,i,colFn,fmt,t);
-  const opc=meses.slice().reverse().map(m=>`<option value="${m}"${m===rsMes?' selected':''}>${mtMesCorto(m)} ${m.slice(0,4)}${m===hoyM?' (en curso)':''}</option>`).join('');
+  const opc=`<option value="todos"${esTodos?' selected':''}>Todos (acumulado ${meses.length} meses)</option>`
+    + meses.slice().reverse().map(m=>`<option value="${m}"${m===rsMes?' selected':''}>${mtMesCorto(m)} ${m.slice(0,4)}${m===hoyM?' (en curso)':''}</option>`).join('');
 
   // Cabecera: índice + dimensiones + histórico del índice
   const dims=Object.keys(RS_PESOS);
@@ -4657,7 +4666,7 @@ function rsRender(){
     <select onchange="rsMes=this.value;rsRender()">${opc}</select></div></div>
   <div class="mt-card" style="margin:0 0 12px;padding:14px 16px;display:grid;grid-template-columns:170px 1fr 260px;gap:18px;align-items:center">
     <div style="text-align:center">${rsGauge(r.salud,100,rsCol(r.salud),r.salud??'–',r.salud===null?'sin datos':`de 100 · ${r.salud>=75?'Saludable':r.salud>=50?'En observación':'En riesgo'}`,160)}</div>
-    <div><div style="font-size:14px;font-weight:700;color:var(--text-primary)">Índice de salud del portafolio · ${mtMesCorto(rsMes)} ${rsMes.slice(0,4)}</div>
+    <div><div style="font-size:14px;font-weight:700;color:var(--text-primary)">Índice de salud del portafolio · ${etiquetaMes}</div>
       <div style="font-size:10px;color:var(--text-muted);margin:2px 0 8px">Promedio ponderado de las dimensiones · cada KPI: verde 100, ámbar 60, rojo 20</div>
       ${dims.map(k=>`<div style="display:grid;grid-template-columns:130px 1fr 50px;gap:8px;align-items:center;font-size:11px;margin:3px 0">
         <span style="color:var(--text-muted)">${RS_NOMBRES[k]} · ${RS_PESOS[k]}%</span>
@@ -4668,7 +4677,7 @@ function rsRender(){
 
   // 1. Plazo
   const p=r.plazo;
-  html+=rsCard('1. Plazo', rsMes===hoyM?'Métricas · Proyectos (en vivo)':`Reconstruido al ${rsFinMes(rsMes).slice(8)}/${rsMes.slice(5)} con el historial de estados de Jira`, r.score.plazo,
+  html+=rsCard('1. Plazo', esTodos?'Estado actual de la cartera (en vivo)':rsMes===hoyM?'Métricas · Proyectos (en vivo)':`Reconstruido al ${rsFinMes(rsMes).slice(8)}/${rsMes.slice(5)} con el historial de estados de Jira`, r.score.plazo,
     p ? `<div style="display:flex;align-items:center;gap:10px">${rsDonut([['Crítico',p.critico,RS_R],['Alerta',p.alerta,RS_A],['En control',p.control,RS_G]],p.total,'proyectos')}
       <div style="flex:1">${rsGauge(p.spi,1.1,rsColPts(rsPts(p.spi,0.95,0.90)),rsFmt(p.spi,2),'cumplimiento (SPI)',120)}</div></div>
       ${rsLeg([[`Crítico ${p.critico}`,RS_R],[`Alerta ${p.alerta}`,RS_A],[`En control ${p.control}`,RS_G]])}
@@ -4679,7 +4688,7 @@ function rsRender(){
 
   // 2. Entrega
   const e=r.entrega;
-  html+=rsCard('2. Entrega','Historias entregables con fin plan en el mes', r.score.entrega,
+  html+=rsCard('2. Entrega',esTodos?'Historias entregables con fin plan en el periodo':'Historias entregables con fin plan en el mes', r.score.entrega,
     e ? `<div style="display:flex;align-items:center;gap:10px">${rsDonut([['A tiempo',e.aTiempo,RS_G],['Tarde',e.tarde,RS_R],['Pendientes',e.comp-e.entr,'#8b949e']],(e.pctTiempo===null?'–':Math.round(e.pctTiempo)+'%'),'a tiempo')}
       <div style="flex:1">${rsGauge(e.efic,100,rsColPts(rsPts(e.efic,90,75)),Math.round(e.efic)+'%','eficiencia de entrega',120)}</div></div>
       ${rsLeg([[`A tiempo ${e.aTiempo}`,RS_G],[`Tarde ${e.tarde}`,RS_R],[`Sin entregar ${e.comp-e.entr}`,'#8b949e']])}
@@ -4690,7 +4699,7 @@ function rsRender(){
 
   // 3. Calidad
   const c=r.calidad, pr=[['Crítico',RS_R],['Alto','#f0883e'],['Medio',RS_A],['Bajo','#8b949e']], mx=Math.max(1,...pr.map(([k])=>c.porPrio[k]));
-  html+=rsCard('3. Calidad',`Bugs PTS · abiertos al ${rsMes===hoyM?'día de hoy':'cierre del mes'}`, r.score.calidad,
+  html+=rsCard('3. Calidad',`Bugs PTS · abiertos al ${esTodos||rsMes===hoyM?'día de hoy':'cierre del mes'}${esTodos?' · resto acumulado del periodo':''}`, r.score.calidad,
     `<div style="font-size:11px;color:var(--text-muted)">Bugs abiertos por prioridad (${c.abiertos})</div>
      <svg viewBox="0 0 260 92" width="100%">${pr.map(([k,cc],j)=>{ const v=c.porPrio[k], hh=v/mx*60;
        return `<rect x="${12+j*62}" y="${78-hh}" width="40" height="${hh}" rx="3" fill="${cc}"/><text x="${32+j*62}" y="${73-hh}" text-anchor="middle" font-size="11" font-weight="700" fill="var(--text-primary)">${v}</text><text x="${32+j*62}" y="90" text-anchor="middle" font-size="9" fill="var(--text-muted)">${k}</text>`; }).join('')}</svg>
@@ -4714,7 +4723,7 @@ function rsRender(){
 
   // 5. Costos
   const o=r.costos;
-  html+=rsCard('5. Costos','Subtareas cerradas en el mes · estimado vs registrado', r.score.costos,
+  html+=rsCard('5. Costos',`Subtareas cerradas en el ${esTodos?'periodo':'mes'} · estimado vs registrado`, r.score.costos,
     o ? `<div style="display:flex;align-items:center;gap:10px">${rsGauge(o.cpi,1.2,rsColPts(rsPts(o.cpi,0.95,0.90)),rsFmt(o.cpi,2),'CPI',120)}
       <svg viewBox="0 0 130 100" width="130">${(()=>{ const m2=Math.max(o.est,o.reg)||1, he=o.est/m2*70, hr=o.reg/m2*70;
         return `<rect x="15" y="${88-he}" width="38" height="${he}" rx="3" fill="${RS_B}"/><rect x="72" y="${88-hr}" width="38" height="${hr}" rx="3" fill="${o.reg>o.est?RS_R:RS_G}"/>
@@ -4727,7 +4736,7 @@ function rsRender(){
 
   // 6. Gobierno y datos
   const g=r.gobierno;
-  html+=rsCard('6. Gobierno y datos','Calidad del registro en Jira en el mes', r.score.gobierno,
+  html+=rsCard('6. Gobierno y datos',`Calidad del registro en Jira en el ${esTodos?'periodo':'mes'}`, r.score.gobierno,
     `${rsBar('Entregables con fechas plan/real',g.pctFechas,100,rsColPts(rsPts(g.pctFechas,95,80)),g.pctFechas===null?'–':Math.round(g.pctFechas)+'%')}
      ${rsBar('Subtareas nuevas con horas estimadas',g.pctEst,100,rsColPts(rsPts(g.pctEst,95,80)),g.pctEst===null?'–':`${g.subEst} de ${g.subN} · ${Math.round(g.pctEst)}%`)}
      ${rsBar('Bugs cerrados con fecha de cierre',g.pctCierre,100,rsColPts(rsPts(g.pctCierre,90,60)),g.pctCierre===null?'–':`${c.conCierre} de ${c.cerrados} · ${Math.round(g.pctCierre)}%`)}
