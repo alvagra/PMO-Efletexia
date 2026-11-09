@@ -4511,6 +4511,21 @@ function rsPlazoEn(fecha){
     vencidos:lista.filter(x=>x.vencido).length, reconstruido:true };
 }
 
+// Proyectos terminados (pasaron a Producción): En plazo · Replanificado · Retraso
+// Retraso: producción más de 2 días hábiles después del término vigente.
+// Replanificado: en término, pero la Fecha de vencimiento cambió al menos una vez.
+// En plazo: en o antes del término (±2 días hábiles) y sin cambios de fecha.
+const RS_TERM = { 'En plazo':'#3fb950', 'Replanificado':'#F5B800', 'Retraso':'#ef4444' };
+function rsClasificarTerminado(t){
+  if(!t.termino || !t.produccion) return { ...t, clase:'Sin plan', dias:null };
+  const dias = t.produccion>t.termino ? avHabiles(avSumar(t.termino,1), t.produccion)
+             : t.produccion<t.termino ? -avHabiles(avSumar(t.produccion,1), t.termino) : 0;
+  const clase = dias>2 ? 'Retraso' : (t.replanificaciones>0 ? 'Replanificado' : 'En plazo');
+  const diasOriginal = t.original && t.original!==t.termino
+    ? (t.produccion>t.original ? avHabiles(avSumar(t.original,1), t.produccion) : -avHabiles(avSumar(t.produccion,1), t.original)) : dias;
+  return { ...t, clase, dias, diasOriginal };
+}
+
 // Indicadores de un mes
 function rsCalcular(mes){
   // mes = 'AAAA-MM' o 'todos' (acumulado de los meses del rango)
@@ -4527,6 +4542,17 @@ function rsCalcular(mes){
   const pl = (todos || mes===hoyIso.slice(0,7)) ? rsPlazoActual() : rsPlazoEn(fin);
   r.plazo = pl ? { ...pl, pts:[ rsPts(pl.spi,0.95,0.90), rsPts(pl.total?pl.critico/pl.total*100:null,10,25,-1),
     rsPts(pl.vencidos,0,2,-1), rsPts(pl.atraso,5,15,-1) ] } : null;
+
+  // ── Proyectos terminados en el mes (o en el periodo, con "Todos")
+  const term=(d.terminados||[]).map(rsClasificarTerminado).filter(t=>enMes(t.produccion));
+  const conPlanT=term.filter(t=>t.clase!=='Sin plan');
+  r.term={ lista:term, total:term.length,
+    enPlazo:term.filter(t=>t.clase==='En plazo').length,
+    replan:term.filter(t=>t.clase==='Replanificado').length,
+    retraso:term.filter(t=>t.clase==='Retraso').length,
+    sinPlan:term.length-conPlanT.length,
+    cumplimiento: conPlanT.length ? term.filter(t=>t.clase==='En plazo').length/conPlanT.length*100 : null };
+  r.term.pt = rsPts(r.term.cumplimiento,85,70);
 
   // ── Entrega: entregables con fin plan desarrollo en el mes
   const comp=(d.entregables||[]).filter(e=>enMes(e.plan));
@@ -4593,6 +4619,8 @@ function rsCalcular(mes){
   // ── Puntajes
   r.score={};
   Object.keys(RS_PESOS).forEach(k=>{ r.score[k]= r[k] ? rsProm(r[k].pts) : null; });
+  // Plazo también considera el cumplimiento de término de los proyectos terminados
+  r.score.plazo = rsProm([ ...(r.plazo?.pts||[]), r.term.pt ]);
   let sp=0, sw=0;
   Object.entries(RS_PESOS).forEach(([k,w])=>{ if(r.score[k]!==null){ sp+=r.score[k]*w; sw+=w; } });
   r.salud = sw ? Math.round(sp/sw) : null;
@@ -4684,7 +4712,7 @@ function rsRender(){
       ${rsBar('Proyectos vencidos',p.vencidos,Math.max(p.total,1),rsColPts(rsPts(p.vencidos,0,2,-1)),`${p.vencidos} de ${p.total}`)}
       ${rsBar('Atraso promedio',p.atraso,60,rsColPts(rsPts(p.atraso,5,15,-1)),`${rsFmt(p.atraso)} días`)}`
       : `<div class="mt-empty" style="padding:24px 0">${infProyectos?'No había proyectos en curso con entregables en este mes.':'Calculando el avance de los proyectos…'}</div>`,
-    '', sp(x=>x.plazo?.spi??null,v=>rsColPts(rsPts(v,0.95,0.90)),v=>rsFmt(v,2),'SPI'));
+    rsTermBloque(all,meses,i,r), sp(x=>x.plazo?.spi??null,v=>rsColPts(rsPts(v,0.95,0.90)),v=>rsFmt(v,2),'SPI'));
 
   // 2. Entrega
   const e=r.entrega;
@@ -4746,6 +4774,53 @@ function rsRender(){
 
   cont.innerHTML=html+'</div>';
 
+}
+
+// Bloque "Proyectos terminados" de la tarjeta Plazo: barras por mes y enlace al detalle
+function rsTermBloque(all,meses,sel,r){
+  const W=300,h=70, mx=Math.max(1,...all.map(x=>x.term.total));
+  const x=k=>16+k*((W-32)/Math.max(1,meses.length-1));
+  let svg='';
+  all.forEach((a,k)=>{ let y=h; const cx=x(k);
+    [['En plazo',a.term.enPlazo],['Replanificado',a.term.replan],['Retraso',a.term.retraso]].forEach(([c,v])=>{
+      if(!v) return; const hh=v/mx*(h-14); y-=hh;
+      svg+=`<rect x="${cx-10}" y="${y}" width="20" height="${hh}" fill="${RS_TERM[c]}" opacity="${sel===-1||k===sel?1:.4}"><title>${mtMesCorto(meses[k])}: ${c} ${v}</title></rect>`; });
+    svg+=`<text x="${cx}" y="${y-3}" text-anchor="middle" font-size="9" fill="var(--text-primary)">${a.term.total||''}</text>
+      <text x="${cx}" y="${h+11}" text-anchor="middle" font-size="9" fill="${k===sel?'var(--text-primary)':'var(--text-muted)'}">${mtMesCorto(meses[k]).slice(0,3)}</text>`; });
+  const t=r.term;
+  return `<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <span style="font-size:11px;color:var(--text-primary);font-weight:600">Proyectos terminados${sel===-1?' en el periodo':' en el mes'}: ${t.total}</span>
+      <a href="#" onclick="event.preventDefault();rsDetalleTerminados()" style="font-size:11px;color:var(--accent,#58a6ff)">Detalle</a></div>
+    <div style="display:flex;gap:10px;font-size:10px;color:var(--text-muted);margin:4px 0">
+      ${Object.entries(RS_TERM).map(([c,col])=>`<span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${col};margin-right:3px"></i>${c} ${c==='En plazo'?t.enPlazo:c==='Replanificado'?t.replan:t.retraso}</span>`).join('')}
+      <span style="margin-left:auto">Cumplimiento <b style="color:${rsColPts(t.pt)}">${t.cumplimiento===null?'–':Math.round(t.cumplimiento)+'%'}</b></span></div>
+    <svg viewBox="0 0 ${W} ${h+14}" width="100%">${svg}</svg></div>`;
+}
+// Popup con el detalle de los proyectos terminados del mes elegido (o del periodo)
+function rsDetalleTerminados(){
+  const r=rsCalcular(rsMes||'todos'), lst=r.term.lista.slice().sort((a,b)=>(a.produccion||'').localeCompare(b.produccion||''));
+  const fC=v=>{ if(!v) return '–'; const [y,m,d]=v.split('-'); return `${d}-${['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][+m-1]}`; };
+  const col=c=>RS_TERM[c]||'var(--text-muted)';
+  document.getElementById('rs-modal')?.remove();
+  const m=document.createElement('div'); m.id='rs-modal';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  m.innerHTML=`<div style="background:var(--bg-surface,#161b22);border:1px solid var(--border);border-radius:12px;max-width:980px;width:100%;max-height:85vh;overflow:auto;padding:16px 18px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <span style="font-size:14px;font-weight:700;color:var(--text-primary)">Proyectos terminados · ${rsMes==='todos'?'periodo completo':mtMesCorto(rsMes)+' '+rsMes.slice(0,4)}</span>
+      <button onclick="document.getElementById('rs-modal').remove()" style="background:none;border:none;color:var(--text-muted);font-size:18px;cursor:pointer">✕</button></div>
+    ${lst.length?`<table class="mt-tabla"><thead><tr><th>Código</th><th>Proyecto</th><th>Término original</th><th>Término vigente</th><th>Producción</th>
+      <th style="text-align:right">Días</th><th style="text-align:right">Replan.</th><th>Clasificación</th></tr></thead><tbody>
+      ${lst.map(t=>`<tr><td><a class="jlink" href="${JIRA_BASE}${t.key}" target="_blank">${esc(t.codigo)}</a></td>
+        <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(t.nombre)}">${esc(t.nombre)}</td>
+        <td>${fC(t.original)}</td><td>${fC(t.termino)}</td><td>${fC(t.produccion)}</td>
+        <td style="text-align:right">${t.dias===null?'–':(t.dias>0?'+':'')+t.dias}</td>
+        <td style="text-align:right">${t.replanificaciones||0}</td>
+        <td style="color:${col(t.clase)};font-weight:600">${t.clase}${t.clase==='Replanificado'&&t.diasOriginal>0?` · +${t.diasOriginal} d sobre el original`:''}</td></tr>`).join('')}
+      </tbody></table>`:'<div class="mt-empty">No hay proyectos terminados en este periodo.</div>'}
+    <div style="font-size:10px;color:var(--text-muted);margin-top:8px">Producción: Fecha fin real producción de la épica o, si no tiene, fecha en que pasó a Producción. Días hábiles sin domingos frente al término vigente; tolerancia de 2 días. Replanificaciones: cambios de la Fecha de vencimiento en el historial de Jira.</div></div>`;
+  m.addEventListener('click',ev=>{ if(ev.target===m) m.remove(); });
+  document.body.appendChild(m);
 }
 
 let rsFotoGuardada=null;
