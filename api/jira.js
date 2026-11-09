@@ -606,7 +606,7 @@ module.exports = async function handler(req, res) {
       }
       let CF_ENT = await idCampoEntregable(auth, JIRA_CLOUD, epicKey);
       const CAMPOS = ['summary', 'status', 'issuetype', 'parent', 'assignee', 'priority',
-                      'timespent', 'duedate', 'issuelinks',
+                      'timespent', 'duedate', 'issuelinks', 'statuscategorychangedate', 'created',
                       'customfield_10934',   // Código
                       'customfield_11136',   // Horas estimadas (enteras)
                       'customfield_11451'];  // Resp. Desarrollo (selección múltiple)
@@ -637,7 +637,7 @@ module.exports = async function handler(req, res) {
         .forEach(id => { if (id && !CAMPOS.includes(id)) CAMPOS.push(id); });
 
       const epicaRes = await fetchAllPages(auth, JIRA_CLOUD, `key = ${epicKey}`,
-        ['summary', 'status', 'customfield_10934', 'issuetype', 'duedate', 'customfield_10015',
+        ['summary', 'status', 'customfield_10934', 'issuetype', 'duedate', 'customfield_10015', 'created',
          'customfield_10862']);   // Próximos pasos (texto enriquecido)
       const epica = epicaRes[0];
       if (!epica) return res.status(404).json({ error: 'No se encontró el proyecto' });
@@ -756,6 +756,8 @@ module.exports = async function handler(req, res) {
           estadoCat: x.fields.status?.statusCategory?.key || '',
           inicio: x.fields.customfield_10015 || null,
           vence: x.fields.duedate || null,
+          // Fecha en que pasó a "Listo" (para reconstruir el avance de meses anteriores)
+          cierre: x.fields.status?.statusCategory?.key === 'done' ? (x.fields.statuscategorychangedate || '').slice(0, 10) || null : null,
         }));
       const num = v => (v === null || v === undefined || v === '' ? null : Number(v));
       const entregables = lista.filter(i => entregableKeys.has(i.key)).map(i => ({
@@ -826,13 +828,32 @@ module.exports = async function handler(req, res) {
         return { entregable: ek || null, autor, seg };
       });
 
+      // Historial de estados (changelog) de la épica y de cada entregable, para reconstruir
+      // el avance y el plazo a la fecha de cierre de meses anteriores
+      const historialEstados = async (key) => {
+        const r = await jiraGet(auth, JIRA_CLOUD, `/rest/api/3/issue/${key}/changelog?maxResults=100`);
+        if (r.status !== 200) return [];
+        return (r.body?.values || []).flatMap(h => (h.items || [])
+          .filter(it => it.field === 'status')
+          .map(it => ({ fecha: (h.created || '').slice(0, 10), de: it.fromString || '', a: it.toString || '' })))
+          .sort((a, b) => a.fecha.localeCompare(b.fecha));
+      };
+      const [histEpica, ...histEnt] = await Promise.all([epica.key, ...entregables.map(e => e.key)]
+        .map(k => historialEstados(k).catch(() => [])));
+      entregables.forEach((e, idx) => {
+        const it = lista.find(x => x.key === e.key);
+        e.creado = (it?.fields?.created || '').slice(0, 10) || null;
+        e.estados = histEnt[idx] || [];
+      });
+
       return res.status(200).json({
         type: 'informe',
         epica: { key: epica.key, summary: epica.fields?.summary || epica.key,
                  vence: epica.fields?.duedate || null,   // Fecha de vencimiento del proyecto
                  inicio: epica.fields?.customfield_10015 || null,   // Fecha de inicio del proyecto
                  codigo: epica.fields?.customfield_10934 || '', estado: epica.fields?.status?.name || '',
-                 proximosPasos: epica.fields?.customfield_10862 || null },
+                 proximosPasos: epica.fields?.customfield_10862 || null,
+                 creado: (epica.fields?.created || '').slice(0, 10) || null, estados: histEpica || [] },
         campoEntregable: CF_ENT || null,
         camposResponsable: CF_RESP,
         camposAvance: CF_AV,
