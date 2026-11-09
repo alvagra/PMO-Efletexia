@@ -1076,42 +1076,6 @@ module.exports = async function handler(req, res) {
         `project = PTS AND issuetype in subTaskIssueTypes() AND created >= "${iniIso}"`,
         ['customfield_11136', 'created']);
 
-      // 5) Proyectos terminados: épicas que pasaron a Producción en el rango, con su historial
-      //    (fecha del pase a Producción y cambios de la Fecha de vencimiento = replanificaciones)
-      const hoyIso = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
-      const epT = await fetchAllPages(auth, JIRA_CLOUD,
-        `project = PTS AND issuetype = Epic AND status CHANGED TO "Producción" DURING ("${iniIso}", "${hoyIso}")`,
-        ['summary', 'status', 'duedate', 'customfield_10934', 'statuscategorychangedate']);
-      const changelogDe = async (key) => {
-        let startAt = 0, todos = [];
-        for (let i = 0; i < 10; i++) {
-          const r = await jiraGet(auth, JIRA_CLOUD, `/rest/api/3/issue/${key}/changelog?startAt=${startAt}&maxResults=100`);
-          if (r.status !== 200) break;
-          const vals = r.body?.values || [];
-          todos = todos.concat(vals);
-          if (r.body?.isLast !== false || !vals.length) break;
-          startAt += vals.length;
-        }
-        return todos;
-      };
-      const terminados = [];
-      for (let i = 0; i < epT.length; i += 8) {
-        const lote = epT.slice(i, i + 8);
-        const logs = await Promise.all(lote.map(e => changelogDe(e.key).catch(() => [])));
-        lote.forEach((e, k) => {
-          const items = logs[k].flatMap(h => (h.items || []).map(it => ({ ...it, fecha: (h.created || '').slice(0, 10) })))
-            .sort((a, b) => a.fecha.localeCompare(b.fecha));
-          const aProd = items.filter(it => it.field === 'status' && /producci/i.test(it.toString || ''));
-          const prod = aProd.length ? aProd[aProd.length - 1].fecha : (f(e, 'statuscategorychangedate') || '').slice(0, 10);
-          const cambios = items.filter(it => it.field === 'duedate');
-          // Término original: primera fecha que tuvo; replanificación = cada cambio entre dos fechas
-          const original = cambios.length ? ((cambios[0].from || cambios[0].to || '').slice(0, 10) || null) : f(e, 'duedate');
-          const replanes = cambios.filter(c => c.from && c.to && c.from.slice(0, 10) !== c.to.slice(0, 10)).length;
-          proyTerminados.push({ key: e.key, codigo: (f(e, 'customfield_10934') || '').trim() || e.key, nombre: f(e, 'summary') || e.key,
-            prod, vigente: f(e, 'duedate'), original, replanes });
-        });
-      }
-
       // 5) Proyectos terminados: épicas que pasaron a Producción en el rango, con su término
       //    vigente y el historial de cambios de la Fecha de vencimiento (replanificaciones)
       const CF_PROD_REAL = await cfPor(['Fecha fin real producción'], null);
@@ -1140,7 +1104,7 @@ module.exports = async function handler(req, res) {
       }
 
       return res.status(200).json({
-        type: 'resumen', desde: iniIso, meses, terminados: proyTerminados, terminados,
+        type: 'resumen', desde: iniIso, meses, terminados: proyTerminados,
         entregables: ent.map(i => ({ key: i.key, estado: f(i, 'status')?.name || '', cat: f(i, 'status')?.statusCategory?.key || '',
           inicio: f(i, 'customfield_10015'), plan: f(i, CF_PLAN), real: f(i, CF_REAL) })),
         bugs: bugs.map(i => ({ key: i.key, prio: f(i, 'priority')?.name || '', cat: f(i, 'status')?.statusCategory?.key || '',
