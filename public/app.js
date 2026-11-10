@@ -4826,13 +4826,13 @@ function rsDetalleTerminados(){
       <th style="text-align:right">Desvío</th><th>Clasificación</th></tr></thead><tbody>
       ${lst.map(t=>`<tr><td><a class="jlink" href="${JIRA_BASE}${t.key}" target="_blank">${esc(t.codigo)}</a></td>
         <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(t.nombre)}">${esc(t.nombre)}</td>
-        <td title="${t.inicioCampo?'Fecha inicio '+t.inicioCampo:''}">${fC(t.inicio)}</td>
+        <td title="Fecha de inicio de la épica">${fC(t.inicio)}</td>
         <td title="Fecha fin plan producción">${t.finPlanProd?fC(t.finPlanProd):'<span style="color:var(--text-muted)">–</span>'}</td>
         <td title="Fecha fin real producción">${t.finRealProd?fC(t.finRealProd):`<span style="color:var(--text-muted)" title="Sin Fecha fin real producción · pasó a Producción el ${fC(t.produccion)}">–</span>`}</td>
         <td style="text-align:right;color:${t.dias===null?'var(--text-muted)':t.dias>2?RS_R:RS_G}">${t.dias===null?'–':(t.dias>0?'+':'')+t.dias+' d'}</td>
         <td style="color:${col(t.clase)};font-weight:600">${t.clase}${t.clase==='Replanificado'&&t.diasOriginal>0?` · +${t.diasOriginal} d sobre el original`:''}</td></tr>`).join('')}
       </tbody></table>`:'<div class="mt-empty">No hay proyectos terminados en este periodo.</div>'}
-    <div style="font-size:10px;color:var(--text-muted);margin-top:8px">Fechas de la épica. Inicio: Fecha inicio análisis (o Fecha inicio desarrollo). Fin: Fecha fin plan producción. Producción: Fecha fin real producción. Desvío: Fecha fin real producción − Fecha fin plan producción, en días hábiles sin domingos; tolerancia de 2 días. Sin alguna de las dos fechas no se calcula el desvío (“Sin plan”). Replanificado: la fecha Fin cambió en el historial de Jira.</div></div>`;
+    <div style="font-size:10px;color:var(--text-muted);margin-top:8px">Fechas de la épica. Inicio: Fecha de inicio. Fin: Fecha fin plan producción. Producción: Fecha fin real producción. Desvío: Fecha fin real producción − Fecha fin plan producción, en días hábiles sin domingos; tolerancia de 2 días. Sin alguna de las dos fechas no se calcula el desvío (“Sin plan”). Replanificado: la fecha Fin cambió en el historial de Jira.</div></div>`;
   m.addEventListener('click',ev=>{ if(ev.target===m) m.remove(); });
   document.body.appendChild(m);
 }
