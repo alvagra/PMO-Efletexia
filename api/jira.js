@@ -1041,7 +1041,7 @@ module.exports = async function handler(req, res) {
       // Se devuelven datos compactos; los indicadores se calculan en el navegador.
       if (!(user.permisos || []).includes('tab.resumen'))
         return res.status(403).json({ error: 'No tienes permiso para ver el Resumen del portafolio.' });
-      const meses = Math.min(Math.max(+(req.body?.meses) || 6, 1), 12);
+      const meses = Math.min(Math.max(+(req.body?.meses) || 6, 1), 24);
       const hoy = new Date();
       const ini = new Date(hoy.getFullYear(), hoy.getMonth() - (meses - 1), 1);
       const iniIso = `${ini.getFullYear()}-${String(ini.getMonth() + 1).padStart(2, '0')}-01`;
