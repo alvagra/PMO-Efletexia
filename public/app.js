@@ -4517,12 +4517,16 @@ function rsPlazoEn(fecha){
 // En plazo: en o antes del término (±2 días hábiles) y sin cambios de fecha.
 const RS_TERM = { 'En plazo':'#3fb950', 'Replanificado':'#F5B800', 'Retraso':'#ef4444' };
 function rsClasificarTerminado(t){
-  if(!t.termino || !t.produccion) return { ...t, clase:'Sin plan', dias:null };
-  const dias = t.produccion>t.termino ? avHabiles(avSumar(t.termino,1), t.produccion)
-             : t.produccion<t.termino ? -avHabiles(avSumar(t.produccion,1), t.termino) : 0;
+  // Desvío = Fecha fin real producción − Fecha fin plan producción (días hábiles sin domingos).
+  // Si la épica no tiene alguna de las dos fechas, no hay desvío ni clasificación.
+  const real = t.finRealProd!==undefined ? t.finRealProd : t.produccion;
+  const plan = t.finPlanProd!==undefined ? t.finPlanProd : t.termino;
+  if(!real || !plan) return { ...t, clase:'Sin plan', dias:null };
+  const dias = real>plan ? avHabiles(avSumar(plan,1), real)
+             : real<plan ? -avHabiles(avSumar(real,1), plan) : 0;
   const clase = dias>2 ? 'Retraso' : (t.replanificaciones>0 ? 'Replanificado' : 'En plazo');
-  const diasOriginal = t.original && t.original!==t.termino
-    ? (t.produccion>t.original ? avHabiles(avSumar(t.original,1), t.produccion) : -avHabiles(avSumar(t.produccion,1), t.original)) : dias;
+  const diasOriginal = t.original && t.original!==plan
+    ? (real>t.original ? avHabiles(avSumar(t.original,1), real) : -avHabiles(avSumar(real,1), t.original)) : dias;
   return { ...t, clase, dias, diasOriginal };
 }
 
@@ -4814,16 +4818,17 @@ function rsDetalleTerminados(){
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
       <span style="font-size:14px;font-weight:700;color:var(--text-primary)">Proyectos terminados · ${rsMes==='todos'?'periodo completo':mtMesCorto(rsMes)+' '+rsMes.slice(0,4)}</span>
       <button onclick="document.getElementById('rs-modal').remove()" style="background:none;border:none;color:var(--text-muted);font-size:18px;cursor:pointer">✕</button></div>
-    ${lst.length?`<table class="mt-tabla"><thead><tr><th>Código</th><th>Proyecto</th><th>Término original</th><th>Término vigente</th><th>Producción</th>
-      <th style="text-align:right">Días</th><th style="text-align:right">Replan.</th><th>Clasificación</th></tr></thead><tbody>
+    ${lst.length?`<table class="mt-tabla"><thead><tr><th>Código</th><th>Proyecto</th><th>Inicio</th><th>Fin</th><th>Producción</th>
+      <th style="text-align:right">Desvío</th><th>Clasificación</th></tr></thead><tbody>
       ${lst.map(t=>`<tr><td><a class="jlink" href="${JIRA_BASE}${t.key}" target="_blank">${esc(t.codigo)}</a></td>
         <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(t.nombre)}">${esc(t.nombre)}</td>
-        <td>${fC(t.original)}</td><td>${fC(t.termino)}</td><td>${fC(t.produccion)}</td>
-        <td style="text-align:right">${t.dias===null?'–':(t.dias>0?'+':'')+t.dias}</td>
-        <td style="text-align:right">${t.replanificaciones||0}</td>
+        <td title="${t.inicioCampo?'Fecha inicio '+t.inicioCampo:''}">${fC(t.inicio)}</td>
+        <td title="Fecha fin plan producción">${t.finPlanProd?fC(t.finPlanProd):'<span style="color:var(--text-muted)">–</span>'}</td>
+        <td title="Fecha fin real producción">${t.finRealProd?fC(t.finRealProd):`<span style="color:var(--text-muted)" title="Sin Fecha fin real producción · pasó a Producción el ${fC(t.produccion)}">–</span>`}</td>
+        <td style="text-align:right;color:${t.dias===null?'var(--text-muted)':t.dias>2?RS_R:RS_G}">${t.dias===null?'–':(t.dias>0?'+':'')+t.dias+' d'}</td>
         <td style="color:${col(t.clase)};font-weight:600">${t.clase}${t.clase==='Replanificado'&&t.diasOriginal>0?` · +${t.diasOriginal} d sobre el original`:''}</td></tr>`).join('')}
       </tbody></table>`:'<div class="mt-empty">No hay proyectos terminados en este periodo.</div>'}
-    <div style="font-size:10px;color:var(--text-muted);margin-top:8px">Producción: Fecha fin real producción de la épica o, si no tiene, fecha en que pasó a Producción. Días hábiles sin domingos frente al término vigente; tolerancia de 2 días. Replanificaciones: cambios de la Fecha de vencimiento en el historial de Jira.</div></div>`;
+    <div style="font-size:10px;color:var(--text-muted);margin-top:8px">Fechas de la épica. Inicio: Fecha inicio análisis (o Fecha inicio desarrollo). Fin: Fecha fin plan producción. Producción: Fecha fin real producción. Desvío: Fecha fin real producción − Fecha fin plan producción, en días hábiles sin domingos; tolerancia de 2 días. Sin alguna de las dos fechas no se calcula el desvío (“Sin plan”). Replanificado: la fecha Fin cambió en el historial de Jira.</div></div>`;
   m.addEventListener('click',ev=>{ if(ev.target===m) m.remove(); });
   document.body.appendChild(m);
 }
