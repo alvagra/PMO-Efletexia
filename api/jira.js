@@ -1077,17 +1077,15 @@ module.exports = async function handler(req, res) {
         ['customfield_11136', 'created']);
 
       // 5) Proyectos terminados: épicas que pasaron a Producción en el rango. Fechas de la épica:
-      //    Inicio = Fecha inicio análisis (o Fecha inicio desarrollo) · Fin = Fecha fin plan producción
+      //    Inicio = Fecha de inicio de la épica · Fin = Fecha fin plan producción
       //    (o Fecha de vencimiento) · Producción = Fecha fin real producción (o pase a Producción).
       //    El historial de cambios de la fecha Fin indica si el proyecto fue replanificado.
       const CF_PROD_REAL = await cfPor(['Fecha fin real producción'], null);
       const CF_PROD_PLAN = await cfPor(['Fecha fin plan producción'], null);
-      const CF_INI_AN    = await cfPor(['Fecha inicio análisis', 'Fecha inicio analisis'], null);
-      const CF_INI_DEV   = await cfPor(['Fecha inicio desarrollo'], null);
       const epTerm = await fetchAllPages(auth, JIRA_CLOUD,
         `project = PTS AND issuetype = Epic AND status = "Producción" AND statusCategoryChangedDate >= "${iniIso}"`,
-        ['summary', 'duedate', 'customfield_10934', 'statuscategorychangedate',
-         CF_PROD_REAL, CF_PROD_PLAN, CF_INI_AN, CF_INI_DEV].filter(Boolean));
+        ['summary', 'duedate', 'customfield_10934', 'statuscategorychangedate', 'customfield_10015',   // 10015 = Fecha de inicio
+         CF_PROD_REAL, CF_PROD_PLAN].filter(Boolean));
       const proyTerminados = [];
       for (let k = 0; k < epTerm.length; k += 8) {
         const lote = epTerm.slice(k, k + 8);
@@ -1105,8 +1103,7 @@ module.exports = async function handler(req, res) {
           const primero = cambios.find(c => c.a);
           const original = cambios.length ? (cambios[0].de || primero?.a || fin) : fin;
           proyTerminados.push({ key: e.key, codigo: (f(e, 'customfield_10934') || e.key).trim(), nombre: f(e, 'summary') || e.key,
-            inicio: (CF_INI_AN && f(e, CF_INI_AN)) || (CF_INI_DEV && f(e, CF_INI_DEV)) || null,
-            inicioCampo: (CF_INI_AN && f(e, CF_INI_AN)) ? 'análisis' : ((CF_INI_DEV && f(e, CF_INI_DEV)) ? 'desarrollo' : null),
+            inicio: f(e, 'customfield_10015') || null,   // Fecha de inicio de la épica
             termino: fin, finCampo: finPlan ? 'plan producción' : (fin ? 'vencimiento' : null),
             original,
             produccion: (CF_PROD_REAL && f(e, CF_PROD_REAL)) || (f(e, 'statuscategorychangedate') || '').slice(0, 10),
