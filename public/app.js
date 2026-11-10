@@ -4426,6 +4426,10 @@ async function portAvanceCalcular(){
 //  Cada KPI puntúa verde 100 · ámbar 60 · rojo 20; dimensión = promedio de sus KPI;
 //  índice = promedio ponderado de las dimensiones con datos.
 // ═══════════════════════════════════════════════════════════
+// Periodo del Resumen: desde marzo de 2026 hasta el mes en curso
+const RS_DESDE = '2026-03';
+const rsMesesDesde = () => { const h=new Date(), [y,m]=RS_DESDE.split('-').map(Number);
+  return Math.max(1,(h.getFullYear()-y)*12+(h.getMonth()+1-m)+1); };
 const RS_PESOS = { plazo:25, entrega:20, calidad:20, capacidad:15, costos:15, gobierno:5 };
 const RS_NOMBRES = { plazo:'Plazo', entrega:'Entrega', calidad:'Calidad', capacidad:'Capacidad', costos:'Costos', gobierno:'Gobierno y datos' };
 const RS_G='#3fb950', RS_A='#F5B800', RS_R='#ef4444', RS_B='#58a6ff';
@@ -4682,7 +4686,7 @@ function rsRender(){
   const etiquetaMes=esTodos?`Acumulado ${mtMesCorto(meses[0]).toLowerCase()}–${mtMesCorto(meses[meses.length-1]).toLowerCase()} ${meses[meses.length-1].slice(0,4)}`:`${mtMesCorto(rsMes)} ${rsMes.slice(0,4)}`;
   const serie=fn=>all.map(x=>{ try{ return fn(x); }catch(_){ return null; } });
   const sp=(fn,colFn,fmt,t,der)=>rsSpark(serie(fn),meses,i,colFn,fmt,t,der);
-  const opc=`<option value="todos"${esTodos?' selected':''}>Todos (acumulado ${meses.length} meses)</option>`
+  const opc=`<option value="todos"${esTodos?' selected':''}>Todos (desde ${mtMesCorto(meses[0]).toLowerCase()} ${meses[0].slice(0,4)})</option>`
     + meses.slice().reverse().map(m=>`<option value="${m}"${m===rsMes?' selected':''}>${mtMesCorto(m)} ${m.slice(0,4)}${m===hoyM?' (en curso)':''}</option>`).join('');
 
   // Cabecera: índice + dimensiones + histórico del índice
@@ -4853,7 +4857,7 @@ async function renderResumen(){
   cont.innerHTML='<div class="mt-empty">Calculando el resumen del portafolio…</div>';
   try{
     const pedir=b=>Sesion.pedir('/api/jira',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(async r=>{ const j=await r.json(); if(!r.ok) throw new Error(j.error||'Error de API'); return j; });
-    rsDatos=await pedir({type:'resumen',meses:6}); rsHist={};
+    rsDatos=await pedir({type:'resumen',meses:rsMesesDesde()}); rsHist={};
     // Capacidad necesita el registro de actividad; el plazo, el avance de los proyectos
     if(!capacityLoaded && typeof loadCapacity==='function') Promise.resolve(loadCapacity()).then(()=>rsRender()).catch(()=>{});
     if(typeof portAvanceCalcular==='function') Promise.resolve(portAvanceCalcular()).then(()=>rsRender()).catch(()=>{});
