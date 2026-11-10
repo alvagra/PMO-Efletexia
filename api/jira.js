@@ -1076,30 +1076,44 @@ module.exports = async function handler(req, res) {
         `project = PTS AND issuetype in subTaskIssueTypes() AND created >= "${iniIso}"`,
         ['customfield_11136', 'created']);
 
-      // 5) Proyectos terminados: épicas que pasaron a Producción en el rango, con su término
-      //    vigente y el historial de cambios de la Fecha de vencimiento (replanificaciones)
+      // 5) Proyectos terminados: épicas que pasaron a Producción en el rango. Fechas de la épica:
+      //    Inicio = Fecha inicio análisis (o Fecha inicio desarrollo) · Fin = Fecha fin plan producción
+      //    (o Fecha de vencimiento) · Producción = Fecha fin real producción (o pase a Producción).
+      //    El historial de cambios de la fecha Fin indica si el proyecto fue replanificado.
       const CF_PROD_REAL = await cfPor(['Fecha fin real producción'], null);
+      const CF_PROD_PLAN = await cfPor(['Fecha fin plan producción'], null);
+      const CF_INI_AN    = await cfPor(['Fecha inicio análisis', 'Fecha inicio analisis'], null);
+      const CF_INI_DEV   = await cfPor(['Fecha inicio desarrollo'], null);
       const epTerm = await fetchAllPages(auth, JIRA_CLOUD,
         `project = PTS AND issuetype = Epic AND status = "Producción" AND statusCategoryChangedDate >= "${iniIso}"`,
-        ['summary', 'duedate', 'customfield_10934', 'statuscategorychangedate', CF_PROD_REAL].filter(Boolean));
+        ['summary', 'duedate', 'customfield_10934', 'statuscategorychangedate',
+         CF_PROD_REAL, CF_PROD_PLAN, CF_INI_AN, CF_INI_DEV].filter(Boolean));
       const proyTerminados = [];
       for (let k = 0; k < epTerm.length; k += 8) {
         const lote = epTerm.slice(k, k + 8);
         const hist = await Promise.all(lote.map(e =>
           jiraGet(auth, JIRA_CLOUD, `/rest/api/3/issue/${e.key}/changelog?maxResults=100`).catch(() => null)));
         lote.forEach((e, idx) => {
+          const finPlan = CF_PROD_PLAN ? f(e, CF_PROD_PLAN) : null;
+          // Cambios de la fecha Fin: de "Fecha fin plan producción" si la épica la tiene; si no, de la Fecha de vencimiento
+          const campoFin = finPlan ? CF_PROD_PLAN : 'duedate';
           const cambios = (hist[idx]?.body?.values || []).flatMap(h => (h.items || [])
-            .filter(it => it.field === 'duedate')
+            .filter(it => (campoFin === 'duedate' ? it.field === 'duedate' : it.fieldId === campoFin))
             .map(it => ({ fecha: (h.created || '').slice(0, 10), de: (it.from || '').slice(0, 10) || null, a: (it.to || '').slice(0, 10) || null })))
             .sort((a, b) => a.fecha.localeCompare(b.fecha));
-          const vigente = f(e, 'duedate');
-          // Término original: el primer valor que tuvo la fecha (el "a" del primer cambio que la fija)
+          const fin = finPlan || f(e, 'duedate');
           const primero = cambios.find(c => c.a);
-          const original = cambios.length ? (cambios[0].de || primero?.a || vigente) : vigente;
-          const replan = cambios.filter(c => c.de && c.a && c.de !== c.a).length;
+          const original = cambios.length ? (cambios[0].de || primero?.a || fin) : fin;
           proyTerminados.push({ key: e.key, codigo: (f(e, 'customfield_10934') || e.key).trim(), nombre: f(e, 'summary') || e.key,
+            inicio: (CF_INI_AN && f(e, CF_INI_AN)) || (CF_INI_DEV && f(e, CF_INI_DEV)) || null,
+            inicioCampo: (CF_INI_AN && f(e, CF_INI_AN)) ? 'análisis' : ((CF_INI_DEV && f(e, CF_INI_DEV)) ? 'desarrollo' : null),
+            termino: fin, finCampo: finPlan ? 'plan producción' : (fin ? 'vencimiento' : null),
+            original,
             produccion: (CF_PROD_REAL && f(e, CF_PROD_REAL)) || (f(e, 'statuscategorychangedate') || '').slice(0, 10),
-            termino: vigente, original, replanificaciones: replan });
+            // Valores propios de la épica (sin respaldos), para el Desvío
+            finPlanProd: finPlan || null,
+            finRealProd: (CF_PROD_REAL && f(e, CF_PROD_REAL)) || null,
+            replanificaciones: cambios.filter(c => c.de && c.a && c.de !== c.a).length });
         });
       }
 
