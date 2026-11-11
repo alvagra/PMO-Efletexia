@@ -86,6 +86,26 @@ async function idCampoPorNombre(auth, cloud, nombre) {
   return _cfPorNombre[clave] || null;
 }
 
+// Todos los ids de campo con ese nombre. En Jira puede haber campos duplicados
+// con el mismo nombre (p. ej. dos "Responsable análisis"); el informe lee el
+// primero que tenga valor en cada incidencia.
+const _idsPorNombre = {};
+async function idsCampoPorNombre(auth, cloud, nombre) {
+  const clave = nombre.toLowerCase();
+  if (_idsPorNombre[clave]) return _idsPorNombre[clave];
+  const norm = t => (t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ').trim().toLowerCase();
+  const objetivo = norm(nombre);
+  try {
+    const r = await jiraGet(auth, cloud, '/rest/api/3/field');
+    if (r.status === 200 && Array.isArray(r.body)) {
+      _idsPorNombre[clave] = r.body.filter(f => norm(f.name) === objetivo).map(f => f.id);
+      return _idsPorNombre[clave];
+    }
+  } catch (e) { /* sin catálogo: no se cachea */ }
+  return [];
+}
+
 // "Sí" en cualquiera de las formas en que Jira devuelve el campo
 function esEntregable(v) {
   if (v === true) return true;
@@ -648,6 +668,19 @@ module.exports = async function handler(req, res) {
         for (const n of nombres) { const id = await idCampoPorNombre(auth, JIRA_CLOUD, n); if (id) return id; }
         return null;
       };
+      // Todos los ids de los campos con alguno de esos nombres (puede haber duplicados)
+      const idsTodos = async nombres => {
+        const out = [];
+        for (const n of nombres) (await idsCampoPorNombre(auth, JIRA_CLOUD, n))
+          .forEach(id => { if (!out.includes(id)) out.push(id); });
+        return out;
+      };
+      // Fase de Análisis: "Responsable análisis" y "Fecha fin plan análisis"
+      const CF_ANALISIS = {
+        resp: await idsTodos(['Responsable análisis', 'Resp. Análisis', 'Resp Análisis']),
+        fin:  await idsTodos(['Fecha fin plan análisis']),
+      };
+      CF_ANALISIS.resp.concat(CF_ANALISIS.fin).forEach(id => { if (!CAMPOS.includes(id)) CAMPOS.push(id); });
       const CF_RESP = {
         analisis:   await idPrimero(['Resp. Análisis', 'Resp Análisis', 'Responsable Análisis']),
         qa:         await idPrimero(['Resp. QA', 'Resp QA', 'Responsable QA']),
@@ -803,13 +836,17 @@ module.exports = async function handler(req, res) {
         estado: i.fields.status?.name || '',
         estadoCat: i.fields.status?.statusCategory?.key || '',
         respDesarrollo: respDe(i.fields),
-        respAnalisis: respCampo(i.fields, CF_RESP.analisis),
+        // Primer campo "Responsable análisis" con valor (hay campos duplicados en Jira)
+        respAnalisis: (CF_ANALISIS.resp.map(id => nombresDe(i.fields[id])).find(v => v.length))
+                      || respCampo(i.fields, CF_RESP.analisis),
         respQA: respCampo(i.fields, CF_RESP.qa),
         respUAT: respCampo(i.fields, CF_RESP.uat),
         respProduccion: respCampo(i.fields, CF_RESP.produccion),
         // Avance por fases
         inicio: i.fields.customfield_10015 || null,
         finQA: CF_AV.finQA ? (i.fields[CF_AV.finQA] || null) : null,
+        // Fase de Análisis: Vence = "Fecha fin plan análisis" (Responsable = respAnalisis)
+        finPlanAnalisis: CF_ANALISIS.fin.map(id => i.fields[id]).find(Boolean) || null,
         // Análisis: documento (Doc Funcional = Sí), matriz (Matriz de casos de prueba = Sí) y
         // estimación (Fecha inicio desarrollo y Fecha fin plan desarrollo registradas).
         // Si ninguno de esos campos existe se usa "Entregables de análisis"; null = sin datos
