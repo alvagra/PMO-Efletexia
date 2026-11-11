@@ -4433,7 +4433,7 @@ const RS_DESDE = '2026-03';
 const rsMesesDesde = () => { const h=new Date(), [y,m]=RS_DESDE.split('-').map(Number);
   return Math.max(1,(h.getFullYear()-y)*12+(h.getMonth()+1-m)+1); };
 const RS_PESOS = { plazo:25, entrega:20, calidad:20, capacidad:15, costos:15, gobierno:5 };
-const RS_NOMBRES = { plazo:'Plazo', entrega:'Entrega', calidad:'Calidad', capacidad:'Capacidad', costos:'Costos', gobierno:'Gobierno y datos' };
+const RS_NOMBRES = { plazo:'Plazo', entrega:'Entrega de desarrollo', calidad:'Calidad', capacidad:'Capacidad', costos:'Costos', gobierno:'Gobierno y datos' };
 const RS_G='#3fb950', RS_A='#F5B800', RS_R='#ef4444', RS_B='#58a6ff';
 let rsDatos=null, rsHist=null, rsMes=null, rsCargando=false;
 
@@ -4731,13 +4731,13 @@ function rsRender(){
 
   // 2. Entrega
   const e=r.entrega;
-  html+=rsCard('2. Entrega',esTodos?'Historias entregables con fin plan en el periodo':'Historias entregables con fin plan en el mes', r.score.entrega,
+  html+=rsCard('2. Entrega de desarrollo',esTodos?'Entregables con fin de desarrollo en el periodo':'Entregables con fin de desarrollo en el mes', r.score.entrega,
     e ? `<div style="display:flex;align-items:center;gap:10px">${rsDonut([['A tiempo',e.aTiempo,RS_G],['Tarde',e.tarde,RS_R],['Pendientes',e.comp-e.entr,'#8b949e']],(e.pctTiempo===null?'–':Math.round(e.pctTiempo)+'%'),'a tiempo')}
       <div style="flex:1">${rsGauge(e.efic,100,rsColPts(rsPts(e.efic,90,75)),Math.round(e.efic)+'%','eficiencia de entrega',120)}</div></div>
       ${rsLeg([[`A tiempo ${e.aTiempo}`,RS_G],[`Tarde ${e.tarde}`,RS_R],[`Sin entregar ${e.comp-e.entr}`,'#8b949e']])}
       ${rsBar('En producción',e.prod,e.comp,RS_B,`${e.prod} de ${e.comp}`)}
       ${rsBar('Lead time (inicio → fin real)',e.lead,45,rsColPts(rsPts(e.lead,30,45,-1)),`${rsFmt(e.lead)} días`)}`
-      : `<div class="mt-empty" style="padding:24px 0">No hay entregables con fin plan en este mes.</div>`,
+      : `<div class="mt-empty" style="padding:24px 0">No hay entregables con fin de desarrollo en este mes.</div>`,
     '', sp(x=>x.entrega?.pctTiempo??null,v=>rsColPts(rsPts(v,85,70)),v=>Math.round(v)+'%','Entrega a tiempo',
       `<a href="#" onclick="event.preventDefault();rsDetalleEntregables()" style="font-size:11px;color:var(--accent,#58a6ff)">Detalle</a>`));
 
@@ -4873,7 +4873,7 @@ const rsPeriodoTxt = () => rsMes==='todos' ? 'periodo completo' : `${mtMesCorto(
 function rsDetalleEntregables(){
   const r=rsCalcular(rsMes||'todos'), lst=(r.entrega?.lista||[]).map(e=>({ ...e, d:rsDesv(e.plan,e.real) }))
     .sort((a,b)=>(b.d??-999)-(a.d??-999));
-  rsModal(`Entregables · ${rsPeriodoTxt()}`,
+  rsModal(`Entregables con fin de desarrollo · ${rsPeriodoTxt()}`,
     `<th>Código</th><th>Proyecto</th><th>Entregable</th><th>Responsable</th><th>Vence</th><th>Entrega</th><th style="text-align:right">Desvío</th>`,
     lst.map(e=>`<tr><td style="white-space:nowrap"><a class="jlink" href="${JIRA_BASE}${e.key}" target="_blank">${esc(e.codigo||e.key)}</a></td>
       <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(e.proyecto||'')}">${esc(e.proyecto||'')}</td>
