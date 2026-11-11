@@ -1150,7 +1150,7 @@ module.exports = async function handler(req, res) {
       // Subtareas + worklogs por fecha
       // 1. Traer todas las subtareas (mínimo de campos necesarios)
       const CAP_FIELDS = [
-        'summary', 'assignee', 'parent', 'issuetype',
+        'summary', 'assignee', 'parent', 'issuetype', 'customfield_10934',   // Código (para épicas)
         'customfield_10015', // Fecha inicio
         'duedate',
         'customfield_10930', // Área
@@ -1161,7 +1161,7 @@ module.exports = async function handler(req, res) {
       ];
       const subtareas = await fetchAllPages(
         auth, JIRA_CLOUD,
-        'project = PTS AND issuetype in (Subtarea, Bug, Error) ORDER BY created ASC',
+        'project = PTS AND timespent > 0 ORDER BY created ASC',   // toda incidencia con horas registradas (épicas, historias, tareas, subtareas, bugs)
         CAP_FIELDS
       );
 
@@ -1258,6 +1258,12 @@ module.exports = async function handler(req, res) {
 
       // Inyectar epicName en cada subtarea
       subtareas.forEach(s => {
+        // Horas registradas directamente en una épica: la épica es ella misma
+        if (s.fields?.issuetype?.hierarchyLevel === 1 || s.fields?.issuetype?.name === 'Epic') {
+          s.fields._epicName   = s.fields.summary || s.key;
+          s.fields._epicCodigo = s.fields.customfield_10934 || '';
+          return;
+        }
         const storyKey = s.fields?.parent?.key;
         s.fields._epicName   = storyKey ? (epicNameMap[storyKey]   || '') : '';
         s.fields._epicCodigo = storyKey ? (epicCodigoMap[storyKey] || '') : '';
@@ -1267,9 +1273,17 @@ module.exports = async function handler(req, res) {
       //    GET /rest/api/3/issue/{key}/worklog
       //    Limitamos a 100 entradas por issue (suficiente para registros de actividad)
       async function fetchWorklog(key) {
-        const result = await jiraGet(auth, JIRA_CLOUD, `/rest/api/3/issue/${key}/worklog?maxResults=100`);
-        if (result.status !== 200) return [];
-        return result.body.worklogs || [];
+        // Todas las entradas del registro de actividad (paginado de 100 en 100)
+        let todos = [], inicio = 0;
+        for (let vuelta = 0; vuelta < 20; vuelta++) {
+          const result = await jiraGet(auth, JIRA_CLOUD, `/rest/api/3/issue/${key}/worklog?startAt=${inicio}&maxResults=100`);
+          if (result.status !== 200) break;
+          const lote = result.body.worklogs || [];
+          todos = todos.concat(lote);
+          inicio += lote.length;
+          if (!lote.length || inicio >= (result.body.total || 0)) break;
+        }
+        return todos;
       }
 
       // Fetch worklogs en lotes de 10 en paralelo para no saturar la API
