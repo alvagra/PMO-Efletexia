@@ -1062,11 +1062,11 @@ module.exports = async function handler(req, res) {
       const entJql = `project = PTS AND issuetype != Error AND cf[${n(CF_PLAN)}] >= "${iniIso}"`
         + (CF_ENT ? ` AND cf[${n(CF_ENT)}] = "Sí"` : '');
       const ent = await fetchAllPages(auth, JIRA_CLOUD, entJql,
-        ['status', 'customfield_10015', CF_PLAN, CF_REAL, CF_ENT].filter(Boolean));
+        ['status', 'customfield_10015', 'summary', 'parent', 'customfield_11451', CF_PLAN, CF_REAL, CF_ENT].filter(Boolean));
       // 2) Bugs: recientes o aún abiertos (para reconstruir los abiertos al cierre de cada mes)
       const bugs = await fetchAllPages(auth, JIRA_CLOUD,
         `project = PTS AND issuetype = Error AND key not in (PTS-1398, PTS-1399) AND (created >= "${ini2Iso}" OR statusCategory != Done)`,
-        ['status', 'priority', 'created', 'duedate', 'customfield_10015', 'statuscategorychangedate', 'parent', CF_CIERRE]);
+        ['status', 'priority', 'created', 'duedate', 'customfield_10015', 'statuscategorychangedate', 'parent', 'summary', 'assignee', 'customfield_11203', CF_CIERRE]);   // 11203 = Aplicación
       // 3) Subtareas cerradas en el rango (estimado vs registrado)
       const subC = await fetchAllPages(auth, JIRA_CLOUD,
         `project = PTS AND issuetype in subTaskIssueTypes() AND statusCategory = Done AND statusCategoryChangedDate >= "${iniIso}"`,
@@ -1114,13 +1114,27 @@ module.exports = async function handler(req, res) {
         });
       }
 
+      // Épicas de entregables y bugs (código y nombre del proyecto para los detalles)
+      const epKeys = [...new Set([...ent, ...bugs].map(i => f(i, 'parent')?.key).filter(Boolean))];
+      const epInfo = {};
+      for (let k = 0; k < epKeys.length; k += 80) {
+        const lote = await fetchAllPages(auth, JIRA_CLOUD, `key in (${epKeys.slice(k, k + 80).join(',')})`, ['summary', 'customfield_10934']);
+        lote.forEach(e => { epInfo[e.key] = { codigo: (f(e, 'customfield_10934') || e.key).trim(), nombre: f(e, 'summary') || e.key }; });
+      }
+      const proy = i => { const k = f(i, 'parent')?.key; return epInfo[k] || { codigo: k || '', nombre: f(i, 'parent')?.fields?.summary || 'Sin épica' }; };
+      const nombres = v => (Array.isArray(v) ? v : (v ? [v] : [])).map(o => o?.value || o?.displayName || o?.name || '').filter(Boolean);
+
       return res.status(200).json({
         type: 'resumen', desde: iniIso, meses, terminados: proyTerminados,
         entregables: ent.map(i => ({ key: i.key, estado: f(i, 'status')?.name || '', cat: f(i, 'status')?.statusCategory?.key || '',
-          inicio: f(i, 'customfield_10015'), plan: f(i, CF_PLAN), real: f(i, CF_REAL) })),
+          inicio: f(i, 'customfield_10015'), plan: f(i, CF_PLAN), real: f(i, CF_REAL),
+          resumen: f(i, 'summary') || i.key, codigo: proy(i).codigo, proyecto: proy(i).nombre,
+          responsable: nombres(f(i, 'customfield_11451')) })),
         bugs: bugs.map(i => ({ key: i.key, prio: f(i, 'priority')?.name || '', cat: f(i, 'status')?.statusCategory?.key || '',
           creado: (f(i, 'created') || '').slice(0, 10), inicio: f(i, 'customfield_10015'), vence: f(i, 'duedate'),
-          cambio: f(i, 'statuscategorychangedate'), cierreBug: f(i, CF_CIERRE), epica: f(i, 'parent')?.key || null })),
+          cambio: f(i, 'statuscategorychangedate'), cierreBug: f(i, CF_CIERRE), epica: f(i, 'parent')?.key || null,
+          estado: f(i, 'status')?.name || '', resumen: f(i, 'summary') || i.key, codigo: proy(i).codigo, proyecto: proy(i).nombre,
+          responsable: f(i, 'assignee')?.displayName || null, aplicacion: f(i, 'customfield_11203')?.value || null })),
         subCerradas: subC.map(i => ({ est: f(i, 'customfield_11136'), seg: f(i, 'timespent') || 0, cierre: (f(i, 'statuscategorychangedate') || '').slice(0, 10) })),
         subNuevas: subN.map(i => ({ est: f(i, 'customfield_11136'), creado: (f(i, 'created') || '').slice(0, 10) })),
       });
