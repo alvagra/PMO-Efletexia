@@ -4568,7 +4568,7 @@ function rsCalcular(mes){
   const aTiempo=entr.filter(e=>e.real<=e.plan);
   const leads=entr.filter(e=>e.inicio).map(e=>Math.max(0,rsDias(e.inicio,e.real)));
   const prod=comp.filter(e=>e.cat==='done'||/produc/i.test(e.estado)).length;
-  r.entrega = comp.length ? { comp:comp.length, entr:entr.length, aTiempo:aTiempo.length, tarde:entr.length-aTiempo.length,
+  r.entrega = comp.length ? { lista:comp, comp:comp.length, entr:entr.length, aTiempo:aTiempo.length, tarde:entr.length-aTiempo.length,
     efic:entr.length/comp.length*100, pctTiempo:entr.length?aTiempo.length/entr.length*100:null,
     lead:leads.length?leads.reduce((a,b)=>a+b,0)/leads.length:null, prod } : null;
   if(r.entrega) r.entrega.pts=[ rsPts(r.entrega.efic,90,75), rsPts(r.entrega.pctTiempo,85,70), rsPts(r.entrega.lead,30,45,-1) ];
@@ -4589,7 +4589,7 @@ function rsCalcular(mes){
   const tts=cerrReal.map(b=>Math.max(0,rsDias(b.inicio||b.creado,cierreDe(b))));
   const mttr=tts.length?tts.reduce((a,b)=>a+b,0)/tts.length:null;
   const dens=comp.length?delMes.length/comp.length:null;
-  r.calidad={ delMes:delMes.length, dens, abiertos:abiertos.length, porPrio, critAlto:porPrio.Crítico+porPrio.Alto, viejos, mttr,
+  r.calidad={ lista:delMes, delMes:delMes.length, dens, abiertos:abiertos.length, porPrio, critAlto:porPrio.Crítico+porPrio.Alto, viejos, mttr,
     masivos:cerr.length-cerrReal.length, cerrados:cerr.length,
     conCierre:cerr.filter(b=>b.cierreBug).length };
   r.calidad.pts=[ rsPts(dens,2,4,-1), rsPts(r.calidad.critAlto,5,10,-1), rsPts(mttr,3,7,-1), rsPts(viejos,0,3,-1) ];
@@ -4736,19 +4736,28 @@ function rsRender(){
       ${rsBar('En producción',e.prod,e.comp,RS_B,`${e.prod} de ${e.comp}`)}
       ${rsBar('Lead time (inicio → fin real)',e.lead,45,rsColPts(rsPts(e.lead,30,45,-1)),`${rsFmt(e.lead)} días`)}`
       : `<div class="mt-empty" style="padding:24px 0">No hay entregables con fin plan en este mes.</div>`,
-    '', sp(x=>x.entrega?.pctTiempo??null,v=>rsColPts(rsPts(v,85,70)),v=>Math.round(v)+'%','Entrega a tiempo'));
+    '', sp(x=>x.entrega?.pctTiempo??null,v=>rsColPts(rsPts(v,85,70)),v=>Math.round(v)+'%','Entrega a tiempo',
+      `<a href="#" onclick="event.preventDefault();rsDetalleEntregables()" style="font-size:11px;color:var(--accent,#58a6ff)">Detalle</a>`));
 
   // 3. Calidad
   const c=r.calidad, pr=[['Crítico',RS_R],['Alto','#f0883e'],['Medio',RS_A],['Bajo','#8b949e']], mx=Math.max(1,...pr.map(([k])=>c.porPrio[k]));
   html+=rsCard('3. Calidad',`Bugs PTS · abiertos al ${esTodos||rsMes===hoyM?'día de hoy':'cierre del mes'}${esTodos?' · resto acumulado del periodo':''}`, r.score.calidad,
-    `<div style="font-size:11px;color:var(--text-muted)">Bugs abiertos por prioridad (${c.abiertos})</div>
-     <svg viewBox="0 0 260 92" width="100%">${pr.map(([k,cc],j)=>{ const v=c.porPrio[k], hh=v/mx*60;
-       return `<rect x="${12+j*62}" y="${78-hh}" width="40" height="${hh}" rx="3" fill="${cc}"/><text x="${32+j*62}" y="${73-hh}" text-anchor="middle" font-size="11" font-weight="700" fill="var(--text-primary)">${v}</text><text x="${32+j*62}" y="90" text-anchor="middle" font-size="9" fill="var(--text-muted)">${k}</text>`; }).join('')}</svg>
+    `${(()=>{ // Bugs del periodo por aplicación (mismo gráfico de la pestaña Métricas)
+        const mapa={};
+        c.lista.forEach(b=>{ const k=b.aplicacion||'Sin aplicación'; const m=mapa[k]=mapa[k]||{v:0,ab:0,ce:0};
+          m.v++; b.cat==='done'?m.ce++:m.ab++; });
+        const items=mtTop(mapa,'Otras',x=>`${x.ab} abiertos · ${x.ce} cerrados`,null,7);
+        const ab=c.lista.filter(b=>b.cat!=='done').length;
+        return `<div style="font-size:11px;color:var(--text-muted)">Bugs ${esTodos?'del periodo':'del mes'} por aplicación (${c.delMes}) · ${ab} abiertos</div>
+          ${c.delMes?`<div style="display:flex;justify-content:center">${mtDona(items,c.delMes,'BUGS',v=>v)}</div>
+          <div style="margin-top:4px">${items.map(x=>`<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin:2px 0"><span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${x.c};margin-right:4px"></i>${esc(x.lbl)}</span><span>${x.v} · ${x.sub||''}</span></div>`).join('')}</div>`
+          :'<div class="mt-empty" style="padding:16px 0">Sin bugs en el periodo</div>'}`; })()}
      ${rsBar('Abiertos con más de 15 días',c.viejos,Math.max(c.abiertos,1),rsColPts(rsPts(c.viejos,0,3,-1)),`${c.viejos} de ${c.abiertos}`)}
      ${rsBar('MTTR (meta ≤ 3 d)',c.mttr,12,rsColPts(rsPts(c.mttr,3,7,-1)),`${rsFmt(c.mttr,1)} días`)}
      ${rsBar('Bugs del mes por entregable',c.dens,8,rsColPts(rsPts(c.dens,2,4,-1)),`${c.delMes} · ${rsFmt(c.dens,1)}`)}`,
     c.masivos?`MTTR sin ${c.masivos} cierres masivos (10 o más en la misma hora).`:'',
-    sp(x=>x.calidad?.critAlto??null,v=>rsColPts(rsPts(v,5,10,-1)),v=>v,'Bugs críticos y altos abiertos'));
+    sp(x=>x.calidad?.critAlto??null,v=>rsColPts(rsPts(v,5,10,-1)),v=>v,'Bugs críticos y altos abiertos',
+      `<a href="#" onclick="event.preventDefault();rsDetalleBugs()" style="font-size:11px;color:var(--accent,#58a6ff)">Detalle</a>`));
 
   // 4. Capacidad
   const k=r.capacidad;
@@ -4835,6 +4844,56 @@ function rsDetalleTerminados(){
     <div style="font-size:10px;color:var(--text-muted);margin-top:8px">Fechas de la épica. Inicio: Fecha de inicio. Fin: Fecha fin plan producción. Producción: Fecha fin real producción. Desvío: Fecha fin real producción − Fecha fin plan producción, en días hábiles sin domingos; tolerancia de 2 días. Sin alguna de las dos fechas no se calcula el desvío (“Sin plan”). Replanificado: la fecha Fin cambió en el historial de Jira.</div></div>`;
   m.addEventListener('click',ev=>{ if(ev.target===m) m.remove(); });
   document.body.appendChild(m);
+}
+
+// ── Ventanas de detalle (mismo formato que las tablas de la pestaña Métricas) ──
+function rsModal(titulo, cabecera, filas, nota){
+  document.getElementById('rs-modal')?.remove();
+  const m=document.createElement('div'); m.id='rs-modal';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  m.innerHTML=`<div style="background:var(--bg-surface,#161b22);border:1px solid var(--border);border-radius:12px;max-width:1200px;width:100%;max-height:85vh;overflow:auto;padding:16px 18px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <span style="font-size:14px;font-weight:700;color:var(--text-primary)">${titulo}</span>
+      <button onclick="document.getElementById('rs-modal').remove()" style="background:none;border:none;color:var(--text-muted);font-size:18px;cursor:pointer">✕</button></div>
+    ${filas.length?`<div style="overflow-x:auto"><table class="mt-tabla"><thead><tr>${cabecera}</tr></thead><tbody>${filas.join('')}</tbody></table></div>`:'<div class="mt-empty">Sin registros en este periodo.</div>'}
+    ${nota?`<div style="font-size:10px;color:var(--text-muted);margin-top:8px">${nota}</div>`:''}</div>`;
+  m.addEventListener('click',ev=>{ if(ev.target===m) m.remove(); });
+  document.body.appendChild(m);
+}
+const rsFC = v => { if(!v) return '–'; const [y,m,d]=v.slice(0,10).split('-'); return `${d} ${['ene','feb','mar','abr','may','jun','jul','ago','set','oct','nov','dic'][+m-1]}. ${y}`; };
+// Desvío en días hábiles sin domingos (igual que Métricas): positivo = tarde
+const rsDesv = (plan, real) => !plan || !real ? null
+  : real>plan ? avHabiles(avSumar(plan,1), real) : real<plan ? -avHabiles(avSumar(real,1), plan) : 0;
+const rsDesvTd = d => d===null?'<td style="text-align:right;color:var(--text-muted)">–</td>'
+  : `<td style="text-align:right;font-weight:700;white-space:nowrap;color:${d>0?RS_R:RS_G}">${d>0?'+':''}${d} d</td>`;
+const rsPeriodoTxt = () => rsMes==='todos' ? 'periodo completo' : `${mtMesCorto(rsMes)} ${rsMes.slice(0,4)}`;
+
+function rsDetalleEntregables(){
+  const r=rsCalcular(rsMes||'todos'), lst=(r.entrega?.lista||[]).map(e=>({ ...e, d:rsDesv(e.plan,e.real) }))
+    .sort((a,b)=>(b.d??-999)-(a.d??-999));
+  rsModal(`Entregables · ${rsPeriodoTxt()}`,
+    `<th>Código</th><th>Proyecto</th><th>Entregable</th><th>Responsable</th><th>Vence</th><th>Entrega</th><th style="text-align:right">Desvío</th>`,
+    lst.map(e=>`<tr><td style="white-space:nowrap"><a class="jlink" href="${JIRA_BASE}${e.key}" target="_blank">${esc(e.codigo||e.key)}</a></td>
+      <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(e.proyecto||'')}">${esc(e.proyecto||'')}</td>
+      <td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(e.resumen||'')}">${esc(e.resumen||e.key)}</td>
+      <td>${esc((e.responsable||[]).join?.(', ')||e.responsable||'Sin asignar')}</td>
+      <td style="white-space:nowrap">${rsFC(e.plan)}</td><td style="white-space:nowrap">${e.real?rsFC(e.real):'<span style="color:var(--text-muted)">sin entregar</span>'}</td>${rsDesvTd(e.d)}</tr>`),
+    'Vence: Fecha fin plan desarrollo · Entrega: Fecha fin real desarrollo · Desvío en días hábiles sin domingos.');
+}
+function rsDetalleBugs(){
+  const r=rsCalcular(rsMes||'todos'), lst=(r.calidad?.lista||[]).map(b=>({ ...b, d:rsDesv(b.vence,b.cierreBug) }))
+    .sort((a,b)=>(b.d??-999)-(a.d??-999));
+  const prio=p=>{ const t=(p||'').toLowerCase(); return t==='highest'?'Crítico':t==='high'?'Alto':t==='medium'?'Medio':t?'Bajo':'—'; };
+  rsModal(`Bugs · ${rsPeriodoTxt()}`,
+    `<th>Código</th><th>Proyecto</th><th>Bug</th><th>Aplicación</th><th>Prioridad</th><th>Estado</th><th>Responsable</th><th>Vence</th><th>Entrega</th><th style="text-align:right">Desvío</th>`,
+    lst.map(b=>`<tr><td style="white-space:nowrap"><a class="jlink" href="${JIRA_BASE}${b.key}" target="_blank">${esc(b.codigo||b.key)}</a></td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(b.proyecto||'')}">${esc(b.proyecto||'')}</td>
+      <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(b.resumen||'')}">${esc(b.resumen||b.key)}</td>
+      <td>${esc(b.aplicacion||'Sin aplicación')}</td><td>${prio(b.prio)}</td><td>${esc(b.estado||'')}</td>
+      <td>${esc(b.responsable?((typeof resolveNombreDesdeJira==='function'&&resolveNombreDesdeJira(b.responsable)?.nombre)||b.responsable):'Sin asignar')}</td>
+      <td style="white-space:nowrap">${b.vence?rsFC(b.vence):'<span style="color:var(--text-muted)">sin vencimiento</span>'}</td>
+      <td style="white-space:nowrap">${rsFC(b.cierreBug)}</td>${rsDesvTd(b.d)}</tr>`),
+    'Mes del bug: Fecha de vencimiento (o Fecha de inicio). Entrega: Fecha cierre bug. Desvío en días hábiles sin domingos.');
 }
 
 let rsFotoGuardada=null;
