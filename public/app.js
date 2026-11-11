@@ -4250,7 +4250,8 @@ function avReal(e){
     fases.analisis=mAn??0; fases.desarrollo=mDev??0; fases.qa=mQA??0; fases.uat=mUAT??0;
   } else {
     fases.analisis = f>1 ? pasada(1,mAn,'Análisis') : (f===1 ? (mAn??0) : 0);
-    fases.desarrollo = f>2 ? pasada(2,mDev,'Desarrollo') : (mDev??0);
+    // Desarrollo cuenta solo desde que la historia está en esa fase (antes es una fase futura = 0%)
+    fases.desarrollo = f>2 ? pasada(2,mDev,'Desarrollo') : (f===2 ? (mDev??0) : 0);
     fases.qa = f>3 ? pasada(3,mQA,'Pruebas QA') : (f===3 ? (mQA??0) : 0);
     fases.uat = f===4 ? (mUAT??0) : 0;
     if(f===2 && mDev===null) avisos.push('En Desarrollo sin subtareas');
