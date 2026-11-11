@@ -168,6 +168,9 @@ let recursosLoaded = false;
 (function quitarPestanaSeguimiento(){
   document.querySelector('.tabs .tab[data-tab="seguimiento"]')?.remove();
   document.getElementById('panel-seguimiento')?.remove();
+  // Pestaña "Métricas" retirada: sus indicadores están en Resumen
+  document.querySelector('.tabs .tab[data-tab="metricas"]')?.remove();
+  document.getElementById('panel-metricas')?.remove();
 })();
 
 // Pestaña "Resumen" (se crea aquí para no depender de una versión nueva de index.html)
@@ -203,7 +206,6 @@ document.querySelectorAll('.tabs .tab').forEach(tab => {
     if(tab.dataset.tab==='recursos' && !recursosLoaded) loadRecursos();
     if(tab.dataset.tab==='capacity' && !capacityLoaded) loadCapacity();
     if(tab.dataset.tab==='entregables') renderEntregables();
-    if(tab.dataset.tab==='metricas' && !metricasLoaded) loadMetricas();
     if(tab.dataset.tab==='informe') renderInforme();
     if(tab.dataset.tab==='resumen') renderResumen();
   });
