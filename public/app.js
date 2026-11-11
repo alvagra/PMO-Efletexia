@@ -5105,7 +5105,9 @@ function infHtml(d){
       : (e.respDesarrollo&&e.respDesarrollo.length?e.respDesarrollo:(e.asignado?[e.asignado]:[])))
       .map(n=>resolveNombreDesdeJira(n)?.nombre||n);
     const plan=avPlanEn(vent,hoy);
-    return { ...e, abiertos:ab.length, totalBugs:bugs.filter(b=>b.entregable===e.key).length,
+    // En Análisis, Vence = "Fecha fin plan análisis" de Jira (la Desviación se mide contra ella)
+    const enAnalisis=esp.resp==='respAnalisis';
+    return { ...e, vence:enAnalisis?(e.finPlanAnalisis||null):e.vence, abiertos:ab.length, totalBugs:bugs.filter(b=>b.entregable===e.key).length,
       real, vent, plan, av:{pct:Math.round(real.pct)}, est:infEstadoJira(e), esp, resp:resp.length?resp.join(', '):'Sin asignar' };
   }).sort((a,b)=>(a.vence?0:1)-(b.vence?0:1) || (a.vence||'').localeCompare(b.vence||'')
                  || b.av.pct-a.av.pct || a.summary.localeCompare(b.summary,'es'));
