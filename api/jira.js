@@ -632,6 +632,11 @@ module.exports = async function handler(req, res) {
         uatConformes: await idPrimero(['Casos UAT conformes']),
         finQA:        await idPrimero(['Fecha fin plan QA', 'Fecha fin QA']),
         conformidad:  await idPrimero(['Conformidad', 'Conformidad UAT', 'Conformidad usuario']),
+        // Entregables de análisis registrados en campos propios de la historia
+        docFuncional: await idPrimero(['Doc Funcional', 'Documento funcional']),
+        matrizCasos:  await idPrimero(['Matriz de casos de prueba', 'Matriz de casos']),
+        iniDev:       await idPrimero(['Fecha inicio desarrollo']),
+        finPlanDev:   await idPrimero(['Fecha fin plan desarrollo']),
       };
       ['customfield_10015'].concat(Object.values(CF_AV))   // 10015 = Fecha de inicio
         .forEach(id => { if (id && !CAMPOS.includes(id)) CAMPOS.push(id); });
@@ -773,7 +778,20 @@ module.exports = async function handler(req, res) {
         // Avance por fases
         inicio: i.fields.customfield_10015 || null,
         finQA: CF_AV.finQA ? (i.fields[CF_AV.finQA] || null) : null,
-        analisis: CF_AV.analisis ? nombresDe(i.fields[CF_AV.analisis]) : null,   // null = campo no existe
+        // Análisis: documento (Doc Funcional = Sí), matriz (Matriz de casos de prueba = Sí) y
+        // estimación (Fecha inicio desarrollo y Fecha fin plan desarrollo registradas).
+        // Si ninguno de esos campos existe se usa "Entregables de análisis"; null = sin datos
+        analisis: (() => {
+          const si = v => nombresDe(v).some(x => /^s[ií]$|^yes$|^true$/i.test(String(x).trim()));
+          if (CF_AV.docFuncional || CF_AV.matrizCasos || (CF_AV.iniDev && CF_AV.finPlanDev)) {
+            const out = [];
+            if (CF_AV.docFuncional && si(i.fields[CF_AV.docFuncional])) out.push('documento');
+            if (CF_AV.matrizCasos && si(i.fields[CF_AV.matrizCasos])) out.push('matriz');
+            if (CF_AV.iniDev && CF_AV.finPlanDev && i.fields[CF_AV.iniDev] && i.fields[CF_AV.finPlanDev]) out.push('estimacion');
+            return out;
+          }
+          return CF_AV.analisis ? nombresDe(i.fields[CF_AV.analisis]) : null;
+        })(),
         casosQA:  { total: CF_AV.qaTotal ? num(i.fields[CF_AV.qaTotal]) : null,
                     conformes: CF_AV.qaConformes ? num(i.fields[CF_AV.qaConformes]) : null },
         casosUAT: { total: CF_AV.uatTotal ? num(i.fields[CF_AV.uatTotal]) : null,
