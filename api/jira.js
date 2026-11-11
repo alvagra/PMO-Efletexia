@@ -93,6 +93,38 @@ function esEntregable(v) {
   return ['si', 'sí', 'yes', 'true'].includes(String(t || '').trim().toLowerCase());
 }
 
+// ── Equivalencia de responsables en subtareas ────────────────────────────
+// En Jira las subtareas del soporte figuran a nombre de la cuenta genérica
+// "Soporte Efletexia"; el responsable real es Hamhner Remuzgo, que no tiene
+// cuenta asignable en Jira. Solo se cambia lo que muestra el dashboard:
+// Jira no se modifica. Aplica únicamente a subtareas (no a historias ni bugs).
+const EQUIV_RESPONSABLE_SUBTAREA = {
+  'soporte efletexia': 'Hamhner Remuzgo',
+};
+const normEquiv = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .replace(/\s+/g, ' ').trim().toLowerCase();
+
+// Subtarea: por su tipo; si la consulta no trajo el tipo, porque su padre es
+// una historia/bug (nivel 0) y no una épica (nivel 1).
+function esSubtarea(issue) {
+  const it = issue?.fields?.issuetype;
+  if (it) return it.subtask === true;
+  const pit = issue?.fields?.parent?.fields?.issuetype;
+  return !!pit && pit.subtask !== true && pit.hierarchyLevel === 0;
+}
+
+// Persona (assignee o autor de worklog) con el nombre equivalente, si aplica
+function personaEquivalente(persona) {
+  const nuevo = persona && EQUIV_RESPONSABLE_SUBTAREA[normEquiv(persona.displayName)];
+  return nuevo ? { ...persona, displayName: nuevo } : persona;
+}
+
+function aplicarEquivalenciaSubtarea(issue) {
+  if (issue?.fields?.assignee && esSubtarea(issue))
+    issue.fields.assignee = personaEquivalente(issue.fields.assignee);
+  return issue;
+}
+
 async function fetchAllPages(auth, cloud, jql, fields) {
   const fieldsStr = Array.isArray(fields) ? fields.join(',') : fields;
   let allIssues = [];
@@ -103,7 +135,7 @@ async function fetchAllPages(auth, cloud, jql, fields) {
     const result = await jiraGet(auth, cloud, `/rest/api/3/search/jql?${params.toString()}`);
     if (result.status !== 200) throw new Error(`Jira ${result.status}: ${JSON.stringify(result.body)}`);
     const page = result.body;
-    allIssues = allIssues.concat(page.issues || []);
+    allIssues = allIssues.concat((page.issues || []).map(aplicarEquivalenciaSubtarea));
     nextPageToken = page.isLast ? null : page.nextPageToken;
     if (allIssues.length >= 10000) break;
   } while (nextPageToken);
@@ -834,8 +866,9 @@ module.exports = async function handler(req, res) {
         const logs = await Promise.all(lote.map(x => traerWorklogs(x.key).catch(() => [])));
         lote.forEach((x, idx) => {
           const ek = entregableDe(x) || '';
+          const sub = esSubtarea(x);
           logs[idx].forEach(w => {
-            const autor = w.author?.displayName || 'Sin autor';
+            const autor = (sub ? personaEquivalente(w.author) : w.author)?.displayName || 'Sin autor';
             const k = `${ek}|${autor}`;
             acum[k] = (acum[k] || 0) + (w.timeSpentSeconds || 0);
           });
@@ -1001,7 +1034,8 @@ module.exports = async function handler(req, res) {
           logs[idx].forEach(w => {
             const mes = (w.started || '').slice(0, 7);
             if (!/^\d{4}-\d{2}$/.test(mes)) return;
-            const autor = w.author?.displayName || 'Sin autor';
+            const aw = x.key !== x.bug ? personaEquivalente(w.author) : w.author;   // subtarea del bug
+            const autor = aw?.displayName || 'Sin autor';
             const k = `${x.bug}|${autor}|${mes}`;
             acum[k] = (acum[k] || 0) + (w.timeSpentSeconds || 0);
           });
@@ -1323,7 +1357,11 @@ module.exports = async function handler(req, res) {
       for (let i = 0; i < subtareas.length; i += BATCH) {
         const batch = subtareas.slice(i, i + BATCH);
         const logs = await Promise.all(batch.map(s => fetchWorklog(s.key)));
-        batch.forEach((s, idx) => { s.fields._worklogs = logs[idx]; });
+        batch.forEach((s, idx) => {
+          s.fields._worklogs = esSubtarea(s)
+            ? logs[idx].map(w => ({ ...w, author: personaEquivalente(w.author) }))
+            : logs[idx];
+        });
       }
 
       // El analista solo ve su propio capacity: se descartan los registros de
