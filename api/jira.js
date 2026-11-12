@@ -679,8 +679,12 @@ module.exports = async function handler(req, res) {
       const CF_ANALISIS = {
         resp: await idsTodos(['Responsable análisis', 'Resp. Análisis', 'Resp Análisis']),
         fin:  await idsTodos(['Fecha fin plan análisis']),
+        ini:  await idsTodos(['Fecha inicio análisis']),
+        // Puede haber campos duplicados con estos nombres: se revisan todos
+        doc:    await idsTodos(['Doc Funcional', 'Documento funcional']),
+        matriz: await idsTodos(['Matriz de casos de prueba', 'Matriz de casos']),
       };
-      CF_ANALISIS.resp.concat(CF_ANALISIS.fin).forEach(id => { if (!CAMPOS.includes(id)) CAMPOS.push(id); });
+      CF_ANALISIS.resp.concat(CF_ANALISIS.fin, CF_ANALISIS.ini, CF_ANALISIS.doc, CF_ANALISIS.matriz).forEach(id => { if (!CAMPOS.includes(id)) CAMPOS.push(id); });
       const CF_RESP = {
         analisis:   await idPrimero(['Resp. Análisis', 'Resp Análisis', 'Responsable Análisis']),
         qa:         await idPrimero(['Resp. QA', 'Resp QA', 'Responsable QA']),
@@ -850,13 +854,20 @@ module.exports = async function handler(req, res) {
         // Análisis: documento (Doc Funcional = Sí), matriz (Matriz de casos de prueba = Sí) y
         // estimación (Fecha inicio desarrollo y Fecha fin plan desarrollo registradas).
         // Si ninguno de esos campos existe se usa "Entregables de análisis"; null = sin datos
+        // Análisis: Doc Funcional = Sí (40%), Matriz de casos de prueba = Sí (30%) y
+        // planificación (30%) = Responsable análisis + Fecha inicio análisis + Fecha fin plan análisis.
+        // Si ninguno de esos campos existe se usa "Entregables de análisis"; null = sin datos
         analisis: (() => {
           const si = v => nombresDe(v).some(x => /^s[ií]$|^yes$|^true$/i.test(String(x).trim()));
-          if (CF_AV.docFuncional || CF_AV.matrizCasos || (CF_AV.iniDev && CF_AV.finPlanDev)) {
+          const conValor = ids => ids.some(id => nombresDe(i.fields[id]).length || (i.fields[id] && typeof i.fields[id] === 'string'));
+          const hayPlan = CF_ANALISIS.resp.length && CF_ANALISIS.ini.length && CF_ANALISIS.fin.length;
+          const siEn = ids => ids.some(id => si(i.fields[id]));
+          if (CF_ANALISIS.doc.length || CF_ANALISIS.matriz.length || hayPlan) {
             const out = [];
-            if (CF_AV.docFuncional && si(i.fields[CF_AV.docFuncional])) out.push('documento');
-            if (CF_AV.matrizCasos && si(i.fields[CF_AV.matrizCasos])) out.push('matriz');
-            if (CF_AV.iniDev && CF_AV.finPlanDev && i.fields[CF_AV.iniDev] && i.fields[CF_AV.finPlanDev]) out.push('estimacion');
+            if (siEn(CF_ANALISIS.doc)) out.push('documento');
+            if (siEn(CF_ANALISIS.matriz)) out.push('matriz');
+            if (hayPlan && conValor(CF_ANALISIS.resp) && conValor(CF_ANALISIS.ini) && conValor(CF_ANALISIS.fin))
+              out.push('planificacion');
             return out;
           }
           return CF_AV.analisis ? nombresDe(i.fields[CF_AV.analisis]) : null;
