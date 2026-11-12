@@ -5167,7 +5167,10 @@ function infHtml(d){
     <div class="mt-kpi-val" style="color:${c||'var(--text-primary)'}">${v}</div>${sub?`<div class="mt-kpi-sub">${sub}</div>`:''}</div>`;
   const bloqueProy = pr ? `<div class="mt-kpis" style="margin-bottom:12px">
       ${kpiAv('AVANCE PLAN',pctTxt(pr.plan),null,pr.sinPlan?`${pr.sinPlan} sin fechas, excluido${pr.sinPlan===1?'':'s'}`:'a la fecha de corte')}
-      ${kpiAv('AVANCE REAL',pctTxt(pr.real),null,`${pr.n} entregable${pr.n===1?'':'s'}`)}
+      ${(pr.sinPlan && pr.plan!==null)
+        // Misma base que el Avance plan: solo las historias con fechas estimadas
+        ? kpiAv('AVANCE REAL',pctTxt(pr.realSub),null,`${pr.n-pr.sinPlan} con plan · ${pr.sinPlan} sin fechas, excluido${pr.sinPlan===1?'':'s'}`)
+        : kpiAv('AVANCE REAL',pctTxt(pr.real),null,`${pr.n} entregable${pr.n===1?'':'s'}`)}
       ${kpiAv('DESVÍO',pr.plan===null?'–':`${pr.desvio>=0?'+':'−'}${pctTxt(Math.abs(pr.desvio))}`,pr.semaforo,
         pr.plan===null?'':`${pr.estadoDesvio}${pr.indice?` · cumplimiento ${(Math.round(pr.indice*100)/100).toFixed(2).replace('.',',')}`:''}`)}
       ${kpiAv('ATRASO',pr.plan===null?'–':pr.atraso?`${pr.atraso} día${pr.atraso===1?'':'s'}`:'Al día',pr.atrasoDesdeVence?'#ef4444':pr.atraso?pr.semaforo:'#3fb950',
