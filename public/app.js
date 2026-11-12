@@ -4173,7 +4173,7 @@ function infEspecificacion(e, bugsProyecto){
 // Pesos por fase: el 5% del pase a producción hace que el 100% solo se alcance en Producción
 const AV_PESOS = { analisis:15, desarrollo:45, qa:20, uat:15, produccion:5 };
 const AV_FASES = ['analisis','desarrollo','qa','uat','produccion'];
-const AV_ANALISIS = [ {k:'documento', p:40}, {k:'estimacion', p:30}, {k:'matriz', p:30} ];
+const AV_ANALISIS = [ {k:'documento', p:40}, {k:'planificacion', p:30}, {k:'matriz', p:30} ];
 
 const avD = s => new Date(s+'T00:00:00');
 const avISO = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -4264,15 +4264,16 @@ function avReal(e){
 
 // Ventanas de plan de una historia (null si no hay fechas suficientes)
 function avVentanas(e, ref){
-  // Fecha fin del plan: el vencimiento de la historia o, si no tiene, el Término estimado (épica)
-  const fin = e.vence || ref?.vence || null;
+  // Fecha fin del plan: el vencimiento de la historia. Una historia sin fechas propias
+  // aún no está estimada: queda fuera del plan (no hereda las fechas de la épica).
+  const fin = e.vence || null;
   if(!fin) return null;
-  const finEpica = !e.vence;
+  const finEpica = false;
   const dev=avSubDev(e).filter(st=>st.vence && st.vence<=fin);
   if(!dev.length){
     // Sin fechas en las subtareas: las fases se reparten entre el inicio y la fecha fin
     // según sus pesos (Análisis 15, Desarrollo 45, QA 20, UAT 15); producción en la fecha fin
-    const ini = e.inicio || ref?.inicio || null;
+    const ini = e.inicio || null;
     if(!ini || ini>fin) return null;
     const tot=Math.max(1,avHabiles(ini,fin));
     const pesos=[AV_PESOS.analisis,AV_PESOS.desarrollo,AV_PESOS.qa,AV_PESOS.uat];
@@ -5191,7 +5192,7 @@ function infHtml(d){
   const avisos=[];
   filas.forEach(f=>{
     f.real.avisos.forEach(a=>avisos.push(`<b>${esc(f.key)}</b>: ${esc(a)}`));
-    if(!f.vent) avisos.push(`<b>${esc(f.key)}</b>: sin fechas para el plan (ni la historia ni la épica tienen fecha de inicio y vencimiento)`);
+    if(!f.vent) avisos.push(`<b>${esc(f.key)}</b>: sin fechas estimadas (Fecha de inicio y Fecha de vencimiento): queda fuera del plan y del desvío`);
     else {
       if(f.vent.finEpica) avisos.push(`<b>${esc(f.key)}</b>: sin fecha de vencimiento, el plan usa el Término estimado de la épica`);
       if(f.vent.repartido && f.real.fase<5) avisos.push(`<b>${esc(f.key)}</b>: subtareas sin fechas, plan repartido entre inicio y fin según los pesos de cada fase`);
@@ -5213,7 +5214,7 @@ function infHtml(d){
       <thead><tr><th>Clave</th><th>Entregable</th><th>Estado</th><th>Especificación</th><th style="text-align:center">% Real</th><th style="text-align:center">% Plan</th>
         <th>Responsable</th><th style="text-align:center">Vence</th><th style="text-align:center">Desviación</th></tr></thead>
       <tbody>${filasHtml}</tbody></table></div>
-    <p class="inf-nota">% Real = 15% Análisis (documento 40%, estimación 30%, matriz de casos 30%) + 45% Desarrollo (subtareas cerradas ÷ total) + 20% Pruebas QA + 15% Pruebas UAT (casos conformes ÷ total; 100% con Conformidad = Sí) + 5% pase a Producción. % Plan: lo que debería estar hecho a la fecha de corte según las fechas de la historia y sus subtareas (días sin domingos). El avance del proyecto es el promedio de sus entregables; desvío (Real − Plan): de 0% a −5% en control (verde), de −5% a −10% alerta (ámbar), menor a −10% crítico (rojo); positivo = adelantado. ${hayFechas?'Desviación: días entre la fecha de vencimiento del entregable en Jira y la fecha de corte (negativo = vencido).':'Los entregables no tienen fecha de vencimiento registrada en Jira, por lo que no se calcula desviación.'}</p>${calidad}
+    <p class="inf-nota">% Real = 15% Análisis (Doc Funcional 40%, matriz de casos 30%, planificación del análisis 30%: responsable, fecha inicio y fecha fin plan) + 45% Desarrollo (subtareas cerradas ÷ total) + 20% Pruebas QA + 15% Pruebas UAT (casos conformes ÷ total; 100% con Conformidad = Sí) + 5% pase a Producción. % Plan: lo que debería estar hecho a la fecha de corte según las fechas de la historia y sus subtareas (días sin domingos). El avance del proyecto es el promedio de sus entregables; desvío (Real − Plan): de 0% a −5% en control (verde), de −5% a −10% alerta (ámbar), menor a −10% crítico (rojo); positivo = adelantado. ${hayFechas?'Desviación: días entre la fecha de vencimiento del entregable en Jira y la fecha de corte (negativo = vencido).':'Los entregables no tienen fecha de vencimiento registrada en Jira, por lo que no se calcula desviación.'}</p>${calidad}
     <p class="inf-p">${filas.length===1?'El único entregable está':`De los ${filas.length} entregables,`} ${filas.length===1?resumenEst[0].replace(/^1 /,''):unir(resumenEst)}.</p>`
     : `<div class="mt-empty" style="padding:24px 0">El proyecto no tiene historias marcadas como Entregable.</div>
        ${sinTiene?`<p class="inf-p">Hay ${sinAb.length} bug${sinAb.length===1?'':'s'} abierto${sinAb.length===1?'':'s'} sin entregable asignado.</p>`:''}`;
