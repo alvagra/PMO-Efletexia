@@ -5434,12 +5434,12 @@ function infCronogramaHtml(filas, hoy, proy={}){
     const w=Math.max(x(b.b)-x(b.a),0.8);
     const borde=b.inv?`1.5px dashed ${ROJO}`:b.venc?`1.5px solid ${ROJO}`:`1.5px solid ${b.col}`;
     const tip=`${b.lbl}${b.inv?' · fechas invertidas en Jira':''} · ${fmt(b.fa)} → ${fmt(b.fb-DIA)} · avance ${b.real}%`;
-    // Sigla de la fase dentro de la figura (AN, DEV, QA, UAT); banderita del color de la fase en la esquina si está terminada (hecha solo con CSS para que también salga en la imagen copiada).
+    // Sigla de la fase dentro de la figura (AN, DEV, QA, UAT); banderita del color de la fase en la esquina si está terminada (el mismo símbolo ⚑ del rótulo Término; al ser texto, también sale en la imagen copiada).
     // Si el periodo es muy corto, la figura se ensancha lo justo para que quepa, centrada en sus fechas.
     const hecha=b.hecha, color=b.venc||b.inv?ROJO:b.col;
     const SIGLA={analisis:'AN',desarrollo:'DEV',qa:'QA',uat:'UAT'};
     const centro=x(b.a)+w/2;
-    return `<div title="${tip}" style="position:absolute;top:50%;height:20px;margin-top:-10px;left:${centro}%;transform:translateX(-50%);width:calc(${w}% - 3px);min-width:max-content;padding:0 5px;border-radius:10px;border:${borde};box-sizing:border-box;display:flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:700;letter-spacing:.02em;color:${color};white-space:nowrap;background:var(--bg-card,#161b22)">${SIGLA[b.k]}${hecha?`<span style="position:absolute;top:-11px;right:2px;width:2px;height:14px;border-radius:1px;background:${color}"></span><span style="position:absolute;top:-11px;right:-7px;width:0;height:0;border-top:4px solid transparent;border-bottom:4px solid transparent;border-left:9px solid ${color}"></span>`:''}</div>`;
+    return `<div title="${tip}" style="position:absolute;top:50%;height:20px;margin-top:-10px;left:${centro}%;transform:translateX(-50%);width:calc(${w}% - 3px);min-width:max-content;padding:0 5px;border-radius:10px;border:${borde};box-sizing:border-box;display:flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:700;letter-spacing:.02em;color:${color};white-space:nowrap;background:var(--bg-card,#161b22)">${SIGLA[b.k]}${hecha?`<span style="position:absolute;top:-17px;right:-7px;font-size:16px;line-height:17px;font-weight:400;color:${color}">⚑</span>`:''}</div>`;
   };
   const riel=bs=>{ if(bs.length<2) return ''; const a=Math.min(...bs.map(b=>b.a)), b=Math.max(...bs.map(b=>b.b));
     return `<div style="position:absolute;top:50%;left:${x(a)}%;width:${x(b)-x(a)}%;border-top:1px dashed var(--border)"></div>`; };
