@@ -4584,15 +4584,20 @@ function rsCalcular(mes){
     sinPlan:term.length-conPlanT.length,
     cumplimiento: conPlanT.length ? term.filter(t=>t.clase==='En plazo').length/conPlanT.length*100 : null };
   r.term.pt = rsPts(r.term.cumplimiento,85,70);
-  // Proyectos con retraso y atraso promedio: solo proyectos cerrados en el mes (o periodo) con plan.
-  // Con retraso = desvío > 2 días hábiles (misma tolerancia que la clasificación "Retraso");
-  // atraso promedio = promedio de días de desvío de esos proyectos (0 si ninguno se retrasó)
-  const atrasados=term.filter(t=>t.clase==='Retraso');
+  // Cumplimiento contra la fecha ORIGINAL (línea base): solo proyectos cerrados en el mes (o periodo) con plan.
+  // diasOriginal = Fecha fin real producción − primera Fecha fin plan producción registrada
+  // (si nunca se replanificó, es el mismo desvío de la clasificación).
+  // Fuera de la fecha original = diasOriginal > 2 días hábiles (misma tolerancia que "Retraso"),
+  // incluye replanificados que terminaron después de su compromiso inicial.
+  // Desvío promedio = promedio de diasOriginal de todos los cerrados con plan (adelantos restan).
+  const dOrig=t=>(t.diasOriginal!==undefined && t.diasOriginal!==null) ? t.diasOriginal : t.dias;
+  const fueraOrig=conPlanT.filter(t=>dOrig(t)>2);
   r.term.conPlan=conPlanT.length;
-  r.term.atrasoProm = conPlanT.length
-    ? (atrasados.length ? atrasados.reduce((a,t)=>a+t.dias,0)/atrasados.length : 0) : null;
-  r.term.ptVenc   = conPlanT.length ? rsPts(atrasados.length,0,2,-1) : null;
-  r.term.ptAtraso = rsPts(r.term.atrasoProm,5,15,-1);
+  r.term.fueraOrig=fueraOrig.length;
+  r.term.pctFueraOrig = conPlanT.length ? fueraOrig.length/conPlanT.length*100 : null;
+  r.term.desvioOrig = conPlanT.length ? conPlanT.reduce((a,t)=>a+dOrig(t),0)/conPlanT.length : null;
+  r.term.ptVenc   = rsPts(r.term.pctFueraOrig,15,30,-1);   // ≤15% verde · ≤30% ámbar · >30% rojo
+  r.term.ptAtraso = rsPts(r.term.desvioOrig,2,5,-1);       // ≤2 d verde · ≤5 d ámbar · >5 d rojo
 
   // ── Entrega: entregables con fin plan desarrollo en el mes
   const comp=(d.entregables||[]).filter(e=>enMes(e.plan));
@@ -4754,8 +4759,8 @@ function rsRender(){
       <div style="flex:1">${p?rsGauge(p.spi,1.1,rsColPts(rsPts(p.spi,0.95,0.90)),rsFmt(p.spi,2),'cumplimiento (SPI)',120):`<div class="mt-empty" style="padding:10px 0">${infProyectos?'Sin proyectos en curso':'Calculando el SPI…'}</div>`}</div></div>
      ${rsLeg([[`En plazo ${t.enPlazo}`,RS_TERM['En plazo']],[`Replanificado ${t.replan}`,RS_TERM['Replanificado']],[`Retraso ${t.retraso}`,RS_TERM['Retraso']]].concat(t.sinPlan?[[`Sin plan ${t.sinPlan}`,'#8b949e']]:[]))}
      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Cumplimiento de término (en plazo ÷ terminados con plan): <b style="color:${rsColPts(t.pt)}">${t.cumplimiento===null?'–':Math.round(t.cumplimiento)+'%'}</b></div>
-     ${t.conPlan?`${rsBar(`Proyectos con retraso (cerrados ${esTodos?'en el periodo':'en el mes'})`,t.retraso,t.conPlan,rsColPts(t.ptVenc),`${t.retraso} de ${t.conPlan}`)}
-     ${rsBar(`Atraso promedio (cerrados con retraso)`,t.atrasoProm,60,rsColPts(t.ptAtraso),`${rsFmt(t.atrasoProm)} días`)}`:''}`,
+     ${t.conPlan?`${rsBar(`Cerrados fuera de la fecha original`,t.fueraOrig,t.conPlan,rsColPts(t.ptVenc),`${t.fueraOrig} de ${t.conPlan}`)}
+     ${rsBar(`Desvío promedio vs fecha original (cerrados)`,t.desvioOrig,20,rsColPts(t.ptAtraso),`${t.desvioOrig>0?'+':''}${rsFmt(t.desvioOrig,1)} días`)}`:''}`,
     '', sp(x=>x.plazo?.spi??null,v=>rsColPts(rsPts(v,0.95,0.90)),v=>rsFmt(v,2),'SPI',
       `<a href="#" onclick="event.preventDefault();rsDetalleTerminados()" style="font-size:11px;color:var(--accent,#58a6ff)">Detalle</a>`));
 
