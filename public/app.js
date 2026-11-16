@@ -4220,11 +4220,16 @@ const avSubCerrada = st => st.estadoCat==='done' || esEstadoCerrado(st.estado);
 function avFase(e){
   const s=ganttNorm(e.estado);
   if(s.includes('marcha blanca')||s.includes('produccion')||e.estadoCat==='done') return 5;
+  // Estados del flujo anterior de historias (antes de "EDP2 - Flujo Historias", set-2026),
+  // necesarios para reconstruir meses pasados con el historial de Jira:
+  // Done/Finalizada/Listo/Cerrado = terminada · In Progress/En curso/Review = en desarrollo
+  if(/^(done|finalizada|finalizado|listo|cerrado|cerrada|closed|resolved|resuelta)$/.test(s)) return 5;
   if(s.includes('blocked')||s.includes('bloque')) return -1;
   if(s.includes('uat')) return 4;
   if(s.includes('qa')||s.includes('prueba')) return 3;
   if(s.includes('desarrollo')) return 2;
   if(s.includes('analisis')) return 1;
+  if(/^(in progress|en curso|en progreso|en proceso|review|in review|en revision)$/.test(s)) return 2;
   return 0;
 }
 
