@@ -5351,31 +5351,49 @@ function infCronogramaHtml(filas, hoy){
     const barras=INF_FASES_CRONO.map(([k,lbl,col])=>{
       let [a,b]=ff[k]||[];
       if(!a&&!b) return null;
-      a=ms(a||b); b=ms(b||a); if(b<a) b=a;
+      const ia=a||b, ib=b||a; a=ms(ia); b=ms(ib);
+      // Fecha inicio posterior a la Fecha fin plan: error de registro en Jira. Solo se marca
+      // el día de la Fecha fin plan, con borde punteado, para que se corrija.
+      const inv=b<a; if(inv) a=b;
       const real=k==='produccion' ? (f.real?.fase===5?100:0) : Math.round(f.real?.fases?.[k]||0);
-      return {k,lbl,col,a,b:b+DIA,real,venc:(b+DIA)<=corte && real<100};
+      return {k,lbl,col,a,b:b+DIA,real,inv,venc:!inv && (b+DIA)<=corte && real<100};
     }).filter(Boolean);
-    return {f,barras};
+    // Entregado (Producción o Marcha blanca): marca en la fecha de pase. Se toma la
+    // Fecha fin real producción; si no hay, el fin plan de producción o el vencimiento.
+    let entrega=null;
+    if(f.real?.fase===5){
+      const fe=f.finRealProduccion || (ff.produccion||[])[1] || f.vence || null;
+      if(fe) entrega=ms(fe);
+    }
+    return {f,barras,entrega};
   });
-  const todas=datos.flatMap(x=>x.barras);
+  const todas=datos.flatMap(x=>x.barras.concat(x.entrega?[{a:x.entrega,b:x.entrega+DIA}]:[]));
   if(!todas.length) return '<div class="mt-empty" style="padding:18px 0">Ningún entregable tiene fechas por fase registradas en Jira.</div>';
   const D0=Math.min(corte,...todas.map(b=>b.a))-DIA, D1=Math.max(corte+DIA,...todas.map(b=>b.b))+DIA;
   const x=t=>((t-D0)/(D1-D0)*100).toFixed(2);
   const dias=Math.round((D1-D0)/DIA), paso=dias<=45?7:dias<=120?14:30;
   let eje='';
-  for(let t=D0+DIA;t<D1;t+=paso*DIA) eje+=`<div style="position:absolute;left:${x(t)}%;top:3px;font-size:11px;color:var(--text-muted);transform:translateX(-50%);white-space:nowrap">${fmt(t)}</div>`;
+  // Se omiten las marcas del eje que chocan con el rótulo de la fecha de corte
+  for(let t=D0+DIA;t<D1;t+=paso*DIA) if(Math.abs(x(t)-x(corte))>6) eje+=`<div style="position:absolute;left:${x(t)}%;top:3px;font-size:11px;color:var(--text-muted);transform:translateX(-50%);white-space:nowrap">${fmt(t)}</div>`;
   eje+=`<div style="position:absolute;left:${x(corte)}%;top:2px;font-size:11px;color:#f85149;transform:translateX(-50%);white-space:nowrap;background:var(--bg-card,#161b22);padding:0 3px">corte ${fmt(corte)}</div>`;
   const linea=`<div style="position:absolute;left:${x(corte)}%;top:0;bottom:0;width:1.5px;background:#f85149;opacity:.7"></div>`;
-  const seg=b=>`<div title="${b.lbl}: ${fmt(b.a)} → ${fmt(b.b-DIA)} · ${b.real}%" style="position:absolute;top:10px;height:16px;border-radius:3px;overflow:hidden;left:${x(b.a)}%;width:${Math.max(x(b.b)-x(b.a),0.6)}%;background:${b.col}33;border:${b.venc?'1.5px solid #f85149':'1px solid '+b.col};box-sizing:border-box"><div style="height:100%;width:${b.real}%;background:${b.col}"></div></div>`;
+  const seg=b=>`<div title="${b.lbl}: ${b.inv?'fechas invertidas en Jira (la Fecha inicio es posterior a la Fecha fin plan) · ':''}${fmt(b.a)} → ${fmt(b.b-DIA)} · ${b.real}%" style="position:absolute;top:10px;height:16px;border-radius:3px;overflow:hidden;left:${x(b.a)}%;width:${Math.max(x(b.b)-x(b.a),0.6)}%;background:${b.col}33;border:${b.inv?'1.5px dashed #f85149':b.venc?'1.5px solid #f85149':'1px solid '+b.col};box-sizing:border-box"><div style="height:100%;width:${b.real}%;background:${b.col}"></div></div>`;
   const fila=(lbl,track)=>`<div style="display:grid;grid-template-columns:190px minmax(0,1fr);align-items:center;border-top:1px solid var(--border);min-height:36px"><div style="padding:6px 8px 6px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px" title="${esc(lbl)}">${esc(lbl)}</div><div style="position:relative;height:36px">${track}</div></div>`;
-  const filasHtml=datos.map(({f,barras})=>fila(f.summary, linea+(barras.length?barras.map(seg).join('')
-    :'<div style="position:absolute;left:4px;top:11px;font-size:11px;color:var(--text-muted)">Sin fechas por fase en Jira</div>'))).join('');
-  const leyenda=INF_FASES_CRONO.map(([,lbl,col])=>`<span style="display:inline-flex;align-items:center;gap:5px;margin-right:14px;font-size:11px;color:var(--text-muted)"><span style="width:10px;height:10px;border-radius:2px;background:${col};display:inline-block"></span>${lbl}</span>`).join('');
+  // Si dos fases se cruzan, la más corta se dibuja encima para que no quede oculta
+  const PROD_COL=INF_FASES_CRONO[4][2];
+  // La marca va al final del día de entrega, para no quedar debajo de la barra de Producción
+  const marca=t=>`<div title="Entregado en producción: ${fmt(t)}" style="position:absolute;top:11px;left:calc(${x(t+DIA)}% - 7px);width:14px;height:14px;border-radius:50%;background:${PROD_COL};color:#fff;font-size:10px;line-height:14px;text-align:center">✓</div><div style="position:absolute;top:11px;left:calc(${x(t+DIA)}% + 10px);font-size:11px;color:${PROD_COL};white-space:nowrap">Entregado ${fmt(t)}</div>`;
+  const filasHtml=datos.map(({f,barras,entrega})=>fila(f.summary, linea
+    +(barras.length?[...barras].sort((p,q)=>(q.b-q.a)-(p.b-p.a)).map(seg).join('')
+      :(entrega?'':'<div style="position:absolute;left:4px;top:11px;font-size:11px;color:var(--text-muted)">Sin fechas por fase en Jira</div>'))
+    +(entrega?marca(entrega):''))).join('');
+  const leyenda=INF_FASES_CRONO.map(([,lbl,col])=>`<span style="display:inline-flex;align-items:center;gap:5px;margin-right:14px;font-size:11px;color:var(--text-muted)"><span style="width:10px;height:10px;border-radius:2px;background:${col};display:inline-block"></span>${lbl}</span>`).join('')
+    +`<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted)"><span style="width:12px;height:12px;border-radius:50%;background:${PROD_COL};color:#fff;font-size:9px;line-height:12px;text-align:center">✓</span>Entregado</span>`;
   return `<div style="font-size:12px;color:var(--text-primary)">
     <div style="display:grid;grid-template-columns:190px minmax(0,1fr);min-height:22px"><div></div><div style="position:relative;height:22px">${eje}</div></div>
     ${filasHtml}
     <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border)">${leyenda}</div>
-    <p class="inf-nota">Barra clara = plan (Fecha inicio y Fecha fin plan de cada fase en Jira) · relleno = avance real de la fase · borde rojo = fase vencida sin terminar · línea vertical = fecha de corte. Producción va del fin plan de UAT al fin plan de producción.</p>
+    <p class="inf-nota">Barra clara = plan (Fecha inicio y Fecha fin plan de cada fase en Jira) · relleno = avance real de la fase · borde rojo = fase vencida sin terminar · borde rojo punteado = fechas invertidas en Jira · línea vertical = fecha de corte · ✓ = pase a producción (Fecha fin real producción; si no hay, fin plan de producción o vencimiento). Si Producción no tiene Fecha inicio, su barra empieza en el fin plan de UAT.</p>
   </div>`;
 }
 
