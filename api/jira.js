@@ -685,6 +685,18 @@ module.exports = async function handler(req, res) {
         matriz: await idsTodos(['Matriz de casos de prueba', 'Matriz de casos']),
       };
       CF_ANALISIS.resp.concat(CF_ANALISIS.fin, CF_ANALISIS.ini, CF_ANALISIS.doc, CF_ANALISIS.matriz).forEach(id => { if (!CAMPOS.includes(id)) CAMPOS.push(id); });
+      // Cronograma: fechas de inicio y fin plan de cada fase (todos los campos con ese nombre)
+      const CF_FASES = {
+        iniDev:  await idsTodos(['Fecha inicio desarrollo']),
+        finDev:  await idsTodos(['Fecha fin plan desarrollo']),
+        iniQA:   await idsTodos(['Fecha inicio QA']),
+        finQA:   await idsTodos(['Fecha fin plan QA']),
+        iniUAT:  await idsTodos(['Fecha inicio UAT']),
+        finUAT:  await idsTodos(['Fecha fin plan UAT']),
+        finProd: await idsTodos(['Fecha fin plan producción', 'Fecha fin plan produccion']),
+      };
+      Object.values(CF_FASES).flat().forEach(id => { if (!CAMPOS.includes(id)) CAMPOS.push(id); });
+      const fechaDe = (f, ids) => ids.map(id => f[id]).find(Boolean) || null;
       const CF_RESP = {
         analisis:   await idPrimero(['Resp. Análisis', 'Resp Análisis', 'Responsable Análisis']),
         qa:         await idPrimero(['Resp. QA', 'Resp QA', 'Responsable QA']),
@@ -851,6 +863,15 @@ module.exports = async function handler(req, res) {
         finQA: CF_AV.finQA ? (i.fields[CF_AV.finQA] || null) : null,
         // Fase de Análisis: Vence = "Fecha fin plan análisis" (Responsable = respAnalisis)
         finPlanAnalisis: CF_ANALISIS.fin.map(id => i.fields[id]).find(Boolean) || null,
+        // Cronograma por fases: [inicio, fin plan]. Producción no tiene inicio propio:
+        // empieza donde termina el plan de UAT.
+        fechasFases: {
+          analisis:   [fechaDe(i.fields, CF_ANALISIS.ini), fechaDe(i.fields, CF_ANALISIS.fin)],
+          desarrollo: [fechaDe(i.fields, CF_FASES.iniDev), fechaDe(i.fields, CF_FASES.finDev)],
+          qa:         [fechaDe(i.fields, CF_FASES.iniQA),  fechaDe(i.fields, CF_FASES.finQA)],
+          uat:        [fechaDe(i.fields, CF_FASES.iniUAT), fechaDe(i.fields, CF_FASES.finUAT)],
+          produccion: [fechaDe(i.fields, CF_FASES.finUAT), fechaDe(i.fields, CF_FASES.finProd)],
+        },
         // Análisis: documento (Doc Funcional = Sí), matriz (Matriz de casos de prueba = Sí) y
         // estimación (Fecha inicio desarrollo y Fecha fin plan desarrollo registradas).
         // Si ninguno de esos campos existe se usa "Entregables de análisis"; null = sin datos
