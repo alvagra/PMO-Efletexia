@@ -222,7 +222,7 @@ const JIRA_FIELDS = [
   "customfield_10829","customfield_10862","customfield_10969","customfield_11336",
   "customfield_10970","customfield_11003","customfield_11004",
   "customfield_11037","customfield_11070","customfield_11170","customfield_11269",
-  "customfield_11203","customfield_11335","customfield_11559","customfield_11570"
+  "customfield_11203","customfield_11335","customfield_11559","customfield_11570","customfield_11560"
 ];
 
 function parseIssue(i){
@@ -255,6 +255,7 @@ function parseIssue(i){
     fechaInicio:f.customfield_10015||null,
     finPlanProd:f.customfield_11559||null,   // Fecha fin plan producción
     vencReplan:f.customfield_11570||null,    // Fecha de vencimiento replanificada
+    finRealProdEp:f.customfield_11560||null, // Fecha fin real producción
     pais:f.customfield_10592?f.customfield_10592.value:null,
     area:f.customfield_10930?f.customfield_10930.value:null,
     categoria:f.customfield_10659?f.customfield_10659.value:null,
@@ -4490,7 +4491,7 @@ function rsPlazoActual(){
     control:lista.filter(x=>x.semaforo==='En control').length,
     alerta:lista.filter(x=>x.semaforo==='Alerta').length,
     critico:lista.filter(x=>x.semaforo==='Crítico').length,
-    spi:prom(conPlan.filter(x=>x.pr.indice).map(x=>x.pr.indice)),
+    spi:prom(conPlan.filter(x=>x.pr.indice!==null&&x.pr.indice!==undefined).map(x=>x.pr.indice)),
     atraso:prom(conPlan.map(x=>x.pr.atraso||0)),
     vencidos:lista.filter(x=>x.vencido).length };
 }
@@ -4512,8 +4513,18 @@ function rsPlazoEn(fecha){
   infProyectos.forEach(p=>{
     const d=infCache[p.key]; if(!d) return;
     const ep=d.epica||{};
-    const fase=mtEstadoEpica(rsEstadoEn(ep.estado, ep.estados, ep.creado, fecha)||'');
-    if(!fase || fase==='Producción') return;           // solo proyectos en curso a esa fecha
+    // ¿En curso a esa fecha? Por campos de la épica en Jira (no por el historial de estados):
+    //  · Estado actual válido (Pendiente, Análisis, Desarrollo, Pruebas o Producción; no Stand by/Desestimado)
+    //  · Fecha de inicio ≤ fecha de corte
+    //  · Sin Fecha fin real producción, o posterior a la fecha de corte
+    const epG=(typeof epics!=='undefined'&&Array.isArray(epics)?epics:[]).find(e=>e.key===p.key)||{};
+    const faseHoy=mtEstadoEpica(epG.status||ep.estado||'');
+    if(!faseHoy) return;
+    const inicioEp=epG.fechaInicio||ep.inicio||null;
+    const finRealEp=epG.finRealProdEp||null;
+    if(!inicioEp || inicioEp>fecha) return;            // aún no iniciaba
+    if(finRealEp && finRealEp<=fecha) return;          // ya estaba en producción
+    if(faseHoy==='Producción' && !finRealEp) return;   // en producción sin fecha real: no se puede ubicar
     const ents=(d.entregables||[]).map(e=>{
       const est=rsEstadoEn(e.estado, e.estados, e.creado, fecha);
       if(est===null) return null;
@@ -4535,7 +4546,7 @@ function rsPlazoEn(fecha){
     control:lista.filter(x=>x.semaforo==='En control').length,
     alerta:lista.filter(x=>x.semaforo==='Alerta').length,
     critico:lista.filter(x=>x.semaforo==='Crítico').length,
-    spi:prom(conPlan.filter(x=>x.pr.indice).map(x=>x.pr.indice)),
+    spi:prom(conPlan.filter(x=>x.pr.indice!==null&&x.pr.indice!==undefined).map(x=>x.pr.indice)),
     atraso:prom(conPlan.map(x=>x.pr.atraso||0)),
     vencidos:lista.filter(x=>x.vencido).length, reconstruido:true };
 }
