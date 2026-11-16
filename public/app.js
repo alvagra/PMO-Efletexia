@@ -5329,7 +5329,54 @@ function infHtml(d){
     <div class="mt-card"><div class="inf-sec">3. Horas invertidas</div>${sec3}</div>
     <div class="mt-card"><div class="inf-sec">4. Próximos pasos</div>${
       infProximosHtml(d.epica.proximosPasos)||`<div class="mt-empty" style="padding:18px 0">El proyecto no tiene próximos pasos registrados en Jira.</div>`}</div>
+    <div class="mt-card"><div class="inf-sec">5. Cronograma</div>${infCronogramaHtml(filas, hoy)}</div>
     ${d.campoEntregable?'':'<p class="inf-nota">No se encontró el campo "Entregable" en Jira.</p>'}`;
+}
+
+// ── 5. Cronograma: una fila por entregable con la barra de cada fase ──
+// Barra clara = plan (Fecha inicio → Fecha fin plan de la fase en Jira), relleno = avance
+// real de la fase (mismo cálculo del % Real), borde rojo = fase con fin plan anterior al
+// corte y sin terminar, línea roja = fecha de corte.
+const INF_FASES_CRONO=[
+  ['analisis','Análisis','#38BDF8'],['desarrollo','Desarrollo','#EF8A27'],
+  ['qa','Pruebas QA','#C5E89A'],['uat','Pruebas UAT','#4ADE80'],['produccion','Producción','#3B82F6']];
+function infCronogramaHtml(filas, hoy){
+  const DIA=86400000, MESES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  const ms=v=>new Date(v+'T00:00:00').getTime();
+  const fmt=t=>{const d=new Date(t);return `${d.getDate()} ${MESES[d.getMonth()]}`;};
+  const corte=ms(hoy);
+  // Barras por entregable: [ini, fin] de cada fase; con una sola fecha, la barra es de un día
+  const datos=filas.map(f=>{
+    const ff=f.fechasFases||{};
+    const barras=INF_FASES_CRONO.map(([k,lbl,col])=>{
+      let [a,b]=ff[k]||[];
+      if(!a&&!b) return null;
+      a=ms(a||b); b=ms(b||a); if(b<a) b=a;
+      const real=k==='produccion' ? (f.real?.fase===5?100:0) : Math.round(f.real?.fases?.[k]||0);
+      return {k,lbl,col,a,b:b+DIA,real,venc:(b+DIA)<=corte && real<100};
+    }).filter(Boolean);
+    return {f,barras};
+  });
+  const todas=datos.flatMap(x=>x.barras);
+  if(!todas.length) return '<div class="mt-empty" style="padding:18px 0">Ningún entregable tiene fechas por fase registradas en Jira.</div>';
+  const D0=Math.min(corte,...todas.map(b=>b.a))-DIA, D1=Math.max(corte+DIA,...todas.map(b=>b.b))+DIA;
+  const x=t=>((t-D0)/(D1-D0)*100).toFixed(2);
+  const dias=Math.round((D1-D0)/DIA), paso=dias<=45?7:dias<=120?14:30;
+  let eje='';
+  for(let t=D0+DIA;t<D1;t+=paso*DIA) eje+=`<div style="position:absolute;left:${x(t)}%;top:3px;font-size:11px;color:var(--text-muted);transform:translateX(-50%);white-space:nowrap">${fmt(t)}</div>`;
+  eje+=`<div style="position:absolute;left:${x(corte)}%;top:2px;font-size:11px;color:#f85149;transform:translateX(-50%);white-space:nowrap;background:var(--bg-card,#161b22);padding:0 3px">corte ${fmt(corte)}</div>`;
+  const linea=`<div style="position:absolute;left:${x(corte)}%;top:0;bottom:0;width:1.5px;background:#f85149;opacity:.7"></div>`;
+  const seg=b=>`<div title="${b.lbl}: ${fmt(b.a)} → ${fmt(b.b-DIA)} · ${b.real}%" style="position:absolute;top:10px;height:16px;border-radius:3px;overflow:hidden;left:${x(b.a)}%;width:${Math.max(x(b.b)-x(b.a),0.6)}%;background:${b.col}33;border:${b.venc?'1.5px solid #f85149':'1px solid '+b.col};box-sizing:border-box"><div style="height:100%;width:${b.real}%;background:${b.col}"></div></div>`;
+  const fila=(lbl,track)=>`<div style="display:grid;grid-template-columns:190px minmax(0,1fr);align-items:center;border-top:1px solid var(--border);min-height:36px"><div style="padding:6px 8px 6px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px" title="${esc(lbl)}">${esc(lbl)}</div><div style="position:relative;height:36px">${track}</div></div>`;
+  const filasHtml=datos.map(({f,barras})=>fila(f.summary, linea+(barras.length?barras.map(seg).join('')
+    :'<div style="position:absolute;left:4px;top:11px;font-size:11px;color:var(--text-muted)">Sin fechas por fase en Jira</div>'))).join('');
+  const leyenda=INF_FASES_CRONO.map(([,lbl,col])=>`<span style="display:inline-flex;align-items:center;gap:5px;margin-right:14px;font-size:11px;color:var(--text-muted)"><span style="width:10px;height:10px;border-radius:2px;background:${col};display:inline-block"></span>${lbl}</span>`).join('');
+  return `<div style="font-size:12px;color:var(--text-primary)">
+    <div style="display:grid;grid-template-columns:190px minmax(0,1fr);min-height:22px"><div></div><div style="position:relative;height:22px">${eje}</div></div>
+    ${filasHtml}
+    <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border)">${leyenda}</div>
+    <p class="inf-nota">Barra clara = plan (Fecha inicio y Fecha fin plan de cada fase en Jira) · relleno = avance real de la fase · borde rojo = fase vencida sin terminar · línea vertical = fecha de corte. Producción va del fin plan de UAT al fin plan de producción.</p>
+  </div>`;
 }
 
 // Próximos pasos de la épica (campo "Próximos pasos", ADF o texto) → HTML
