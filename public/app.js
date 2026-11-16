@@ -5371,8 +5371,10 @@ function infCronogramaHtml(filas, hoy, proy={}){
   const todas=datos.flatMap(x=>x.barras.map(b=>({a:b.a,b:b.b})).concat(x.entrega?[{a:x.entrega,b:x.entrega+DIA}]:[]));
   if(!todas.length) return '<div class="mt-empty" style="padding:18px 0">Ningún entregable tiene fechas por fase registradas en Jira.</div>';
   const pFin=proy.vence?ms(proy.vence):null;
-  const D0=Math.min(corte,...todas.map(b=>b.a))-3*DIA;
-  const D1=Math.max(corte+DIA,...todas.map(b=>b.b),...(pFin?[pFin+DIA]:[]))+4*DIA;
+  // Proyecto con todos sus entregables en producción: sin línea "Hoy" y la escala termina en lo entregado
+  const verHoy=!datos.every(d=>d.entrega);
+  const D0=Math.min(...(verHoy?[corte]:[]),...todas.map(b=>b.a))-3*DIA;
+  const D1=Math.max(...(verHoy?[corte+DIA]:[]),...todas.map(b=>b.b),...(pFin?[pFin+DIA]:[]))+4*DIA;
   const x=t=>+((t-D0)/(D1-D0)*100).toFixed(3);
   const dias=Math.round((D1-D0)/DIA), paso=dias<=50?7:dias<=130?14:28;
 
@@ -5404,11 +5406,11 @@ function infCronogramaHtml(filas, hoy, proy={}){
   const lunes=new Date(D0); lunes.setDate(lunes.getDate()+((8-lunes.getDay())%7||7));
   for(let t=lunes.getTime(); t<D1; t+=paso*DIA){
     guias+=`<div style="position:absolute;left:${x(t)}%;top:0;bottom:0;border-left:1px dotted var(--border)"></div>`;
-    if(Math.abs(x(t)-x(corte))>6 && !(pFin && Math.abs(x(t)-x(pFin+DIA))<6)) semanas+=`<div style="position:absolute;left:${x(t)}%;top:24px;font-size:10.5px;color:var(--text-muted);transform:translateX(-50%);white-space:nowrap">${fmt(t)}</div>`;
+    if(!(verHoy && Math.abs(x(t)-x(corte))<=7) && !(pFin && Math.abs(x(t)-x(pFin+DIA))<10)) semanas+=`<div style="position:absolute;left:${x(t)}%;top:24px;font-size:10.5px;color:var(--text-muted);transform:translateX(-50%);white-space:nowrap">${fmt(t)}</div>`;
   }
-  const marcaHoy=`<div style="position:absolute;left:${x(corte)}%;top:21px;transform:translateX(-50%);white-space:nowrap;font-size:10.5px;font-weight:700;color:${ROJO};border:1px solid ${ROJO};border-radius:10px;padding:0 8px;background:var(--bg-card,#161b22)">Hoy ${fmt(corte)}</div>`;
+  const marcaHoy=!verHoy?'':`<div style="position:absolute;left:${x(corte)}%;top:21px;transform:translateX(-50%);white-space:nowrap;font-size:10.5px;font-weight:700;color:${ROJO};border:1px solid ${ROJO};border-radius:10px;padding:0 8px;background:var(--bg-card,#161b22)">Hoy ${fmt(corte)}</div>`;
   const marcaFin=pFin?`<div style="position:absolute;left:${x(pFin+DIA)}%;top:21px;transform:translateX(-50%);white-space:nowrap;font-size:10.5px;font-weight:700;color:${AZUL};border:1px dashed ${AZUL};border-radius:10px;padding:0 8px;background:var(--bg-card,#161b22)">⚑ Término ${fmt(pFin)}</div>`:'';
-  const fondo=`${guias}<div style="position:absolute;left:${x(corte)}%;top:0;bottom:0;width:1.5px;margin-left:-.75px;background:${ROJO}"></div>${pFin?`<div style="position:absolute;left:${x(pFin+DIA)}%;top:0;bottom:0;border-left:1.5px dashed ${AZUL};opacity:.8"></div>`:''}`;
+  const fondo=`${guias}${verHoy?`<div style="position:absolute;left:${x(corte)}%;top:0;bottom:0;width:1.5px;margin-left:-.75px;background:${ROJO}"></div>`:''}${pFin?`<div style="position:absolute;left:${x(pFin+DIA)}%;top:0;bottom:0;border-left:1.5px dashed ${AZUL};opacity:.8"></div>`:''}`;
 
   // ── Barras: solo contorno, con el nombre de la fase cuando cabe ──
   const seg=b=>{
