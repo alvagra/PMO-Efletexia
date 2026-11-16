@@ -5358,7 +5358,11 @@ function infCronogramaHtml(filas, hoy, proy={}){
       const ia=a||b, ib=b||a; a=ms(ia); b=ms(ib);
       const inv=b<a; if(inv) a=b;   // fechas invertidas en Jira: solo el día del fin plan
       const real=Math.round(f.real?.fases?.[k]||0);
-      return {k,lbl,col,a,b:b+DIA,fa:a,fb:b+DIA,real,inv,venc:!inv && (b+DIA)<=corte && real<100};
+      // ✓ de fase terminada según su fecha de fin: con Fecha fin real registrada, cuando esa fecha
+      // ya llegó; sin ella, cuando la fase está completa y su Fecha fin plan ya llegó
+      const fr=(f.finRealFases||{})[k];
+      const hecha=fr ? ms(fr)<=corte : (real>=100 && b<=corte);
+      return {k,lbl,col,a,b:b+DIA,fa:a,fb:b+DIA,real,inv,hecha,venc:!inv && (b+DIA)<=corte && real<100 && !fr};
     }).filter(Boolean);
     // Fases que se cruzan: en el dibujo se colocan una tras otra (el detalle conserva las fechas de Jira).
     // Si empiezan el mismo día, la más corta va primero y la otra empieza donde esta termina.
@@ -5430,8 +5434,12 @@ function infCronogramaHtml(filas, hoy, proy={}){
     const w=Math.max(x(b.b)-x(b.a),0.8);
     const borde=b.inv?`1.5px dashed ${ROJO}`:b.venc?`1.5px solid ${ROJO}`:`1.5px solid ${b.col}`;
     const tip=`${b.lbl}${b.inv?' · fechas invertidas en Jira':''} · ${fmt(b.fa)} → ${fmt(b.fb-DIA)} · avance ${b.real}%`;
-    const etiqueta=w>=7?ABR[b.k]:w>=3.5?ABR[b.k].slice(0,3):'';
-    return `<div title="${tip}" style="position:absolute;top:50%;height:22px;margin-top:-11px;left:calc(${x(b.a)}% + 1.5px);width:calc(${w}% - 3px);min-width:7px;border-radius:11px;border:${borde};box-sizing:border-box;display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:600;color:${b.venc||b.inv?ROJO:b.col};white-space:nowrap;overflow:hidden">${etiqueta}${b.real>=100&&w>=7?' ✓':''}</div>`;
+    // Sigla de la fase dentro de la figura (AN, DEV, QA, UAT); ✓ en una insignia en la esquina si está terminada.
+    // Si el periodo es muy corto, la figura se ensancha lo justo para que quepa, centrada en sus fechas.
+    const hecha=b.hecha, color=b.venc||b.inv?ROJO:b.col;
+    const SIGLA={analisis:'AN',desarrollo:'DEV',qa:'QA',uat:'UAT'};
+    const centro=x(b.a)+w/2;
+    return `<div title="${tip}" style="position:absolute;top:50%;height:20px;margin-top:-10px;left:${centro}%;transform:translateX(-50%);width:calc(${w}% - 3px);min-width:max-content;padding:0 5px;border-radius:10px;border:${borde};box-sizing:border-box;display:flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:700;letter-spacing:.02em;color:${color};white-space:nowrap;background:var(--bg-card,#161b22)">${SIGLA[b.k]}${hecha?`<span style="position:absolute;top:-6px;right:-5px;width:12px;height:12px;border-radius:50%;background:${color};color:#0d1117;font-size:8px;line-height:12px;text-align:center;font-weight:800">✓</span>`:''}</div>`;
   };
   const riel=bs=>{ if(bs.length<2) return ''; const a=Math.min(...bs.map(b=>b.a)), b=Math.max(...bs.map(b=>b.b));
     return `<div style="position:absolute;top:50%;left:${x(a)}%;width:${x(b)-x(a)}%;border-top:1px dashed var(--border)"></div>`; };
