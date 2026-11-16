@@ -222,7 +222,7 @@ const JIRA_FIELDS = [
   "customfield_10829","customfield_10862","customfield_10969","customfield_11336",
   "customfield_10970","customfield_11003","customfield_11004",
   "customfield_11037","customfield_11070","customfield_11170","customfield_11269",
-  "customfield_11203","customfield_11335","customfield_11559"
+  "customfield_11203","customfield_11335","customfield_11559","customfield_11570"
 ];
 
 function parseIssue(i){
@@ -254,6 +254,7 @@ function parseIssue(i){
     duedate:f.duedate||null,
     fechaInicio:f.customfield_10015||null,
     finPlanProd:f.customfield_11559||null,   // Fecha fin plan producción
+    vencReplan:f.customfield_11570||null,    // Fecha de vencimiento replanificada
     pais:f.customfield_10592?f.customfield_10592.value:null,
     area:f.customfield_10930?f.customfield_10930.value:null,
     categoria:f.customfield_10659?f.customfield_10659.value:null,
@@ -4541,21 +4542,28 @@ function rsPlazoEn(fecha){
 
 // Proyectos terminados (pasaron a Producción): En plazo · Replanificado · Retraso
 // Retraso: producción más de 2 días hábiles después del término vigente.
-// Replanificado: en término, pero la Fecha de vencimiento cambió al menos una vez.
-// En plazo: en o antes del término (±2 días hábiles) y sin cambios de fecha.
+// Retraso: Fecha de vencimiento replanificada más de 2 días hábiles después de la Fecha de vencimiento.
+// Replanificado: con Fecha de vencimiento replanificada, dentro de la tolerancia (±2 días hábiles).
+// En plazo: sin Fecha de vencimiento replanificada.
 const RS_TERM = { 'En plazo':'#3fb950', 'Replanificado':'#F5B800', 'Retraso':'#ef4444' };
 function rsClasificarTerminado(t){
   // Desvío = Fecha fin real producción − Fecha fin plan producción (días hábiles sin domingos).
   // Si la épica no tiene alguna de las dos fechas, no hay desvío ni clasificación.
-  const real = t.finRealProd!==undefined ? t.finRealProd : t.produccion;
-  const plan = t.finPlanProd!==undefined ? t.finPlanProd : t.termino;
-  if(!real || !plan) return { ...t, clase:'Sin plan', dias:null };
+  // Campos de la épica en Jira: Inicio = Fecha de inicio · Fin Plan = Fecha de vencimiento ·
+  // Fin Real = Fecha de vencimiento replanificada (customfield_11570); si está vacía, la épica
+  // no se replanificó y Fin Real = Fecha de vencimiento (desvío 0)
+  const ep=(typeof epics!=='undefined'&&Array.isArray(epics)?epics:[]).find(e=>e.key===t.key);
+  const inicio = ep ? (ep.fechaInicio||null) : (t.inicio||null);
+  const plan = ep ? (ep.duedate||null) : (t.vence||null);
+  const replanFecha = ep ? (ep.vencReplan||null) : null;
+  const real = replanFecha || plan;
+  if(!real || !plan) return { ...t, inicio, finPlanProd:plan, finRealProd:real, clase:'Sin plan', dias:null };
   const dias = real>plan ? avHabiles(avSumar(plan,1), real)
              : real<plan ? -avHabiles(avSumar(real,1), plan) : 0;
-  const clase = dias>2 ? 'Retraso' : (t.replanificaciones>0 ? 'Replanificado' : 'En plazo');
-  const diasOriginal = t.original && t.original!==plan
-    ? (real>t.original ? avHabiles(avSumar(t.original,1), real) : -avHabiles(avSumar(real,1), t.original)) : dias;
-  return { ...t, clase, dias, diasOriginal };
+  // Replanificado: tiene Fecha de vencimiento replanificada distinta del vencimiento, dentro de la tolerancia
+  const replan=!!(replanFecha && replanFecha!==plan);
+  const clase = dias>2 ? 'Retraso' : (replan ? 'Replanificado' : 'En plazo');
+  return { ...t, inicio, finPlanProd:plan, finRealProd:real, clase, dias };
 }
 
 // Indicadores de un mes
@@ -4584,18 +4592,14 @@ function rsCalcular(mes){
     sinPlan:term.length-conPlanT.length,
     cumplimiento: conPlanT.length ? term.filter(t=>t.clase==='En plazo').length/conPlanT.length*100 : null };
   r.term.pt = rsPts(r.term.cumplimiento,85,70);
-  // Cumplimiento contra la fecha ORIGINAL (línea base): solo proyectos cerrados en el mes (o periodo) con plan.
-  // diasOriginal = Fecha fin real producción − primera Fecha fin plan producción registrada
-  // (si nunca se replanificó, es el mismo desvío de la clasificación).
-  // Fuera de la fecha original = diasOriginal > 2 días hábiles (misma tolerancia que "Retraso"),
-  // incluye replanificados que terminaron después de su compromiso inicial.
-  // Desvío promedio = promedio de diasOriginal de todos los cerrados con plan (adelantos restan).
-  const dOrig=t=>(t.diasOriginal!==undefined && t.diasOriginal!==null) ? t.diasOriginal : t.dias;
-  const fueraOrig=conPlanT.filter(t=>dOrig(t)>2);
+  // Barras de los proyectos cerrados en el mes (o periodo) con plan, solo con campos de Jira:
+  // Desvío = Fecha fin real producción − Fecha fin plan producción (días hábiles sin domingos).
+  // Con retraso = desvío > 2 días (tolerancia); desvío promedio = promedio de todos (adelantos restan).
+  const conRetraso=conPlanT.filter(t=>t.dias>2);
   r.term.conPlan=conPlanT.length;
-  r.term.fueraOrig=fueraOrig.length;
-  r.term.pctFueraOrig = conPlanT.length ? fueraOrig.length/conPlanT.length*100 : null;
-  r.term.desvioOrig = conPlanT.length ? conPlanT.reduce((a,t)=>a+dOrig(t),0)/conPlanT.length : null;
+  r.term.fueraOrig=conRetraso.length;
+  r.term.pctFueraOrig = conPlanT.length ? conRetraso.length/conPlanT.length*100 : null;
+  r.term.desvioOrig = conPlanT.length ? conPlanT.reduce((a,t)=>a+t.dias,0)/conPlanT.length : null;
   r.term.ptVenc   = rsPts(r.term.pctFueraOrig,15,30,-1);   // ≤15% verde · ≤30% ámbar · >30% rojo
   r.term.ptAtraso = rsPts(r.term.desvioOrig,2,5,-1);       // ≤2 d verde · ≤5 d ámbar · >5 d rojo
 
@@ -4759,8 +4763,8 @@ function rsRender(){
       <div style="flex:1">${p?rsGauge(p.spi,1.1,rsColPts(rsPts(p.spi,0.95,0.90)),rsFmt(p.spi,2),'cumplimiento (SPI)',120):`<div class="mt-empty" style="padding:10px 0">${infProyectos?'Sin proyectos en curso':'Calculando el SPI…'}</div>`}</div></div>
      ${rsLeg([[`En plazo ${t.enPlazo}`,RS_TERM['En plazo']],[`Replanificado ${t.replan}`,RS_TERM['Replanificado']],[`Retraso ${t.retraso}`,RS_TERM['Retraso']]].concat(t.sinPlan?[[`Sin plan ${t.sinPlan}`,'#8b949e']]:[]))}
      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Cumplimiento de término (en plazo ÷ terminados con plan): <b style="color:${rsColPts(t.pt)}">${t.cumplimiento===null?'–':Math.round(t.cumplimiento)+'%'}</b></div>
-     ${t.conPlan?`${rsBar(`Cerrados fuera de la fecha original`,t.fueraOrig,t.conPlan,rsColPts(t.ptVenc),`${t.fueraOrig} de ${t.conPlan}`)}
-     ${rsBar(`Desvío promedio vs fecha original (cerrados)`,t.desvioOrig===null?null:Math.abs(t.desvioOrig),20,rsColPts(t.ptAtraso),`${t.desvioOrig>0?'+':''}${rsFmt(t.desvioOrig,1)} días`)}`:''}`,
+     ${t.conPlan?`${rsBar(`Cerrados con retraso (desvío > 2 días)`,t.fueraOrig,t.conPlan,rsColPts(t.ptVenc),`${t.fueraOrig} de ${t.conPlan}`)}
+     ${rsBar(`Desvío promedio (cerrados)`,t.desvioOrig===null?null:Math.abs(t.desvioOrig),20,rsColPts(t.ptAtraso),`${t.desvioOrig>0?'+':''}${rsFmt(t.desvioOrig,1)} días`)}`:''}`,
     '', sp(x=>x.plazo?.spi??null,v=>rsColPts(rsPts(v,0.95,0.90)),v=>rsFmt(v,2),'SPI',
       `<a href="#" onclick="event.preventDefault();rsDetalleTerminados()" style="font-size:11px;color:var(--accent,#58a6ff)">Detalle</a>`));
 
@@ -4868,19 +4872,17 @@ function rsDetalleTerminados(){
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
       <span style="font-size:14px;font-weight:700;color:var(--text-primary)">Proyectos terminados · ${rsMes==='todos'?'periodo completo':mtMesCorto(rsMes)+' '+rsMes.slice(0,4)}</span>
       <button onclick="document.getElementById('rs-modal').remove()" style="background:none;border:none;color:var(--text-muted);font-size:18px;cursor:pointer">✕</button></div>
-    ${lst.length?`<table class="mt-tabla"><thead><tr><th>Código</th><th>Proyecto</th><th>Inicio</th><th>Fin original</th><th>Fin</th><th>Producción</th>
-      <th style="text-align:right">vs original</th><th style="text-align:right">Desvío</th><th>Clasificación</th></tr></thead><tbody>
+    ${lst.length?`<table class="mt-tabla"><thead><tr><th>Código</th><th>Proyecto</th><th>Inicio</th><th>Fin Plan</th><th>Fin Real</th>
+      <th style="text-align:right">Desvío</th><th>Clasificación</th></tr></thead><tbody>
       ${lst.map(t=>`<tr><td><a class="jlink" href="${JIRA_BASE}${t.key}" target="_blank">${esc(t.codigo)}</a></td>
         <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(t.nombre)}">${esc(t.nombre)}</td>
         <td title="Fecha de inicio de la épica">${fC(t.inicio)}</td>
-        <td title="Primera Fecha fin plan producción registrada en Jira">${t.original?fC(t.original):(t.finPlanProd?fC(t.finPlanProd):'<span style="color:var(--text-muted)">–</span>')}</td>
-        <td title="Fecha fin plan producción">${t.finPlanProd?fC(t.finPlanProd):'<span style="color:var(--text-muted)">–</span>'}</td>
-        <td title="Fecha fin real producción">${t.finRealProd?fC(t.finRealProd):`<span style="color:var(--text-muted)" title="Sin Fecha fin real producción · pasó a Producción el ${fC(t.produccion)}">–</span>`}</td>
-        <td style="text-align:right;color:${t.dias===null?'var(--text-muted)':(t.diasOriginal??t.dias)>2?RS_R:RS_G}" title="Fecha fin real producción − fecha original">${t.dias===null?'–':((t.diasOriginal??t.dias)>0?'+':'')+(t.diasOriginal??t.dias)+' d'}</td>
+        <td title="Fecha de vencimiento de la épica">${t.finPlanProd?fC(t.finPlanProd):'<span style="color:var(--text-muted)">–</span>'}</td>
+        <td title="Fecha de vencimiento replanificada (o Fecha de vencimiento si no se replanificó)">${t.finRealProd?fC(t.finRealProd):'<span style="color:var(--text-muted)">–</span>'}</td>
         <td style="text-align:right;color:${t.dias===null?'var(--text-muted)':t.dias>2?RS_R:RS_G}">${t.dias===null?'–':(t.dias>0?'+':'')+t.dias+' d'}</td>
-        <td style="color:${col(t.clase)};font-weight:600">${t.clase}${t.clase==='Replanificado'&&t.diasOriginal>0?` · +${t.diasOriginal} d sobre el original`:''}</td></tr>`).join('')}
+        <td style="color:${col(t.clase)};font-weight:600">${t.clase}</td></tr>`).join('')}
       </tbody></table>`:'<div class="mt-empty">No hay proyectos terminados en este periodo.</div>'}
-    <div style="font-size:10px;color:var(--text-muted);margin-top:8px">Fechas de la épica. Inicio: Fecha de inicio. Fin: Fecha fin plan producción. Producción: Fecha fin real producción. Desvío: Fecha fin real producción − Fecha fin plan producción, en días hábiles sin domingos; tolerancia de 2 días. Sin alguna de las dos fechas no se calcula el desvío (“Sin plan”). Replanificado: la fecha Fin cambió en el historial de Jira.</div></div>`;
+    <div style="font-size:10px;color:var(--text-muted);margin-top:8px">Campos de la épica en Jira. Inicio: Fecha de inicio. Fin Plan: Fecha de vencimiento. Fin Real: Fecha de vencimiento replanificada (si está vacía, Fecha de vencimiento). Desvío: Fin Real − Fin Plan, en días hábiles sin domingos; tolerancia de 2 días. Sin alguna de las dos fechas no se calcula el desvío (“Sin plan”). Replanificado: con Fecha de vencimiento replanificada dentro de la tolerancia.</div></div>`;
   m.addEventListener('click',ev=>{ if(ev.target===m) m.remove(); });
   document.body.appendChild(m);
 }
