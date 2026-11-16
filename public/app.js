@@ -4760,7 +4760,7 @@ function rsRender(){
      ${rsLeg([[`En plazo ${t.enPlazo}`,RS_TERM['En plazo']],[`Replanificado ${t.replan}`,RS_TERM['Replanificado']],[`Retraso ${t.retraso}`,RS_TERM['Retraso']]].concat(t.sinPlan?[[`Sin plan ${t.sinPlan}`,'#8b949e']]:[]))}
      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Cumplimiento de término (en plazo ÷ terminados con plan): <b style="color:${rsColPts(t.pt)}">${t.cumplimiento===null?'–':Math.round(t.cumplimiento)+'%'}</b></div>
      ${t.conPlan?`${rsBar(`Cerrados fuera de la fecha original`,t.fueraOrig,t.conPlan,rsColPts(t.ptVenc),`${t.fueraOrig} de ${t.conPlan}`)}
-     ${rsBar(`Desvío promedio vs fecha original (cerrados)`,t.desvioOrig,20,rsColPts(t.ptAtraso),`${t.desvioOrig>0?'+':''}${rsFmt(t.desvioOrig,1)} días`)}`:''}`,
+     ${rsBar(`Desvío promedio vs fecha original (cerrados)`,t.desvioOrig===null?null:Math.abs(t.desvioOrig),20,rsColPts(t.ptAtraso),`${t.desvioOrig>0?'+':''}${rsFmt(t.desvioOrig,1)} días`)}`:''}`,
     '', sp(x=>x.plazo?.spi??null,v=>rsColPts(rsPts(v,0.95,0.90)),v=>rsFmt(v,2),'SPI',
       `<a href="#" onclick="event.preventDefault();rsDetalleTerminados()" style="font-size:11px;color:var(--accent,#58a6ff)">Detalle</a>`));
 
@@ -4868,13 +4868,15 @@ function rsDetalleTerminados(){
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
       <span style="font-size:14px;font-weight:700;color:var(--text-primary)">Proyectos terminados · ${rsMes==='todos'?'periodo completo':mtMesCorto(rsMes)+' '+rsMes.slice(0,4)}</span>
       <button onclick="document.getElementById('rs-modal').remove()" style="background:none;border:none;color:var(--text-muted);font-size:18px;cursor:pointer">✕</button></div>
-    ${lst.length?`<table class="mt-tabla"><thead><tr><th>Código</th><th>Proyecto</th><th>Inicio</th><th>Fin</th><th>Producción</th>
-      <th style="text-align:right">Desvío</th><th>Clasificación</th></tr></thead><tbody>
+    ${lst.length?`<table class="mt-tabla"><thead><tr><th>Código</th><th>Proyecto</th><th>Inicio</th><th>Fin original</th><th>Fin</th><th>Producción</th>
+      <th style="text-align:right">vs original</th><th style="text-align:right">Desvío</th><th>Clasificación</th></tr></thead><tbody>
       ${lst.map(t=>`<tr><td><a class="jlink" href="${JIRA_BASE}${t.key}" target="_blank">${esc(t.codigo)}</a></td>
         <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(t.nombre)}">${esc(t.nombre)}</td>
         <td title="Fecha de inicio de la épica">${fC(t.inicio)}</td>
+        <td title="Primera Fecha fin plan producción registrada en Jira">${t.original?fC(t.original):(t.finPlanProd?fC(t.finPlanProd):'<span style="color:var(--text-muted)">–</span>')}</td>
         <td title="Fecha fin plan producción">${t.finPlanProd?fC(t.finPlanProd):'<span style="color:var(--text-muted)">–</span>'}</td>
         <td title="Fecha fin real producción">${t.finRealProd?fC(t.finRealProd):`<span style="color:var(--text-muted)" title="Sin Fecha fin real producción · pasó a Producción el ${fC(t.produccion)}">–</span>`}</td>
+        <td style="text-align:right;color:${t.dias===null?'var(--text-muted)':(t.diasOriginal??t.dias)>2?RS_R:RS_G}" title="Fecha fin real producción − fecha original">${t.dias===null?'–':((t.diasOriginal??t.dias)>0?'+':'')+(t.diasOriginal??t.dias)+' d'}</td>
         <td style="text-align:right;color:${t.dias===null?'var(--text-muted)':t.dias>2?RS_R:RS_G}">${t.dias===null?'–':(t.dias>0?'+':'')+t.dias+' d'}</td>
         <td style="color:${col(t.clase)};font-weight:600">${t.clase}${t.clase==='Replanificado'&&t.diasOriginal>0?` · +${t.diasOriginal} d sobre el original`:''}</td></tr>`).join('')}
       </tbody></table>`:'<div class="mt-empty">No hay proyectos terminados en este periodo.</div>'}
