@@ -5409,14 +5409,21 @@ function infCronogramaHtml(filas, hoy, proy={}){
     if(b>a) meses+=`<div style="position:absolute;left:${x(a)}%;width:${x(b)-x(a)}%;top:0;height:20px;border-left:1px solid var(--border);box-sizing:border-box;padding-left:8px;font-size:10.5px;font-weight:700;letter-spacing:.08em;line-height:20px;white-space:nowrap;overflow:hidden;color:var(--text-muted);text-transform:uppercase">${MESES_L[d.getMonth()]} ${d.getFullYear()}</div>`;
     m=sig;
   }
-  const lunes=new Date(D0); lunes.setDate(lunes.getDate()+((8-lunes.getDay())%7||7));
-  for(let t=lunes.getTime(); t<D1; t+=paso*DIA){
-    guias+=`<div style="position:absolute;left:${x(t)}%;top:0;bottom:0;border-left:1px dotted var(--border)"></div>`;
-    if(!(verHoy && Math.abs(x(t)-x(corte))<=7) && !(pFin && Math.abs(x(t)-x(pFin+DIA))<10)) semanas+=`<div style="position:absolute;left:${x(t)}%;top:24px;font-size:10.5px;color:var(--text-muted);transform:translateX(-50%);white-space:nowrap">${fmt(t)}</div>`;
+  // Días del calendario: un número por día (cada 2 días en proyectos largos); sábados y
+  // domingos en tono más tenue y sombreados; líneas guía al inicio de cada semana (lunes)
+  const pasoDia=dias<=75?1:dias<=150?2:7;
+  const anchoDia=x(D0+DIA)-x(D0);
+  let ix=0;
+  for(let t=D0; t<D1; t+=DIA, ix++){
+    const d=new Date(t), w=d.getDay(), finDe=w===0||w===6, esHoy=verHoy&&t===corte;
+    if(finDe && pasoDia===1) guias+=`<div style="position:absolute;left:${x(t)}%;width:${anchoDia}%;top:0;bottom:0;background:rgba(139,148,158,.06)"></div>`;
+    if(w===1) guias+=`<div style="position:absolute;left:${x(t)}%;top:0;bottom:0;border-left:1px dotted var(--border)"></div>`;
+    if(ix%pasoDia===0 || esHoy)
+      semanas+=`<div style="position:absolute;left:${x(t)}%;width:${anchoDia*Math.max(pasoDia===7?1:pasoDia,1)}%;top:24px;text-align:center;font-size:${dias<=40?10.5:9.5}px;line-height:16px;${esHoy?`color:#fff;font-weight:700;background:${ROJO};border-radius:8px;`:`color:${finDe?'#6e7681':'var(--text-muted)'};`}white-space:nowrap">${d.getDate()}</div>`;
   }
-  const marcaHoy=!verHoy?'':`<div style="position:absolute;left:${x(corte)}%;top:21px;transform:translateX(-50%);white-space:nowrap;font-size:10.5px;font-weight:700;color:${ROJO};border:1px solid ${ROJO};border-radius:10px;padding:0 8px;background:var(--bg-card,#161b22)">Hoy ${fmt(corte)}</div>`;
-  const marcaFin=pFin?`<div style="position:absolute;left:${x(pFin+DIA)}%;top:21px;transform:translateX(-50%);white-space:nowrap;font-size:10.5px;font-weight:700;color:${AZUL};border:1px dashed ${AZUL};border-radius:10px;padding:0 8px;background:var(--bg-card,#161b22)">⚑ Término ${fmt(pFin)}</div>`:'';
-  const fondo=`${guias}${verHoy?`<div style="position:absolute;left:${x(corte)}%;top:0;bottom:0;width:1.5px;margin-left:-.75px;background:${ROJO}"></div>`:''}${pFin?`<div style="position:absolute;left:${x(pFin+DIA)}%;top:0;bottom:0;border-left:1.5px dashed ${AZUL};opacity:.8"></div>`:''}`;
+  const marcaHoy=!verHoy?'':`<div style="position:absolute;left:${x(corte)+anchoDia/2}%;top:44px;transform:translateX(-50%);white-space:nowrap;font-size:10.5px;font-weight:700;color:${ROJO};border:1px solid ${ROJO};border-radius:10px;padding:0 8px;background:var(--bg-card,#161b22)">Hoy ${fmt(corte)}</div>`;
+  const marcaFin=pFin?`<div style="position:absolute;left:${x(pFin+DIA)}%;top:44px;transform:translateX(-50%);white-space:nowrap;font-size:10.5px;font-weight:700;color:${AZUL};border:1px dashed ${AZUL};border-radius:10px;padding:0 8px;background:var(--bg-card,#161b22)">⚑ Término ${fmt(pFin)}</div>`:'';
+  const fondo=`${guias}${verHoy?`<div style="position:absolute;left:${x(corte)+anchoDia/2}%;top:0;bottom:0;width:1.5px;margin-left:-.75px;background:${ROJO}"></div>`:''}${pFin?`<div style="position:absolute;left:${x(pFin+DIA)}%;top:0;bottom:0;border-left:1.5px dashed ${AZUL};opacity:.8"></div>`:''}`;
 
   // ── Barras: solo contorno, con el nombre de la fase cuando cabe ──
   const seg=b=>{
@@ -5461,7 +5468,7 @@ function infCronogramaHtml(filas, hoy, proy={}){
     ${cabecera}
     <div style="display:grid;grid-template-columns:${COLS};min-height:44px">
       <div style="align-self:end;padding-bottom:6px;font-size:10.5px;font-weight:700;letter-spacing:.08em;color:var(--text-muted);text-transform:uppercase">Entregable</div>
-      <div style="position:relative;height:44px">${meses}${semanas}${marcaHoy}${marcaFin}</div>
+      <div style="position:relative;height:${(verHoy||pFin)?64:44}px">${meses}${semanas}${marcaHoy}${marcaFin}</div>
       <div style="align-self:end;padding:0 0 6px 16px;font-size:10.5px;font-weight:700;letter-spacing:.08em;color:var(--text-muted);text-transform:uppercase">Estado</div>
     </div>
     ${filasHtml}
