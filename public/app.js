@@ -3079,12 +3079,14 @@ function renderKpiEjecutivo() {
 
   const allEpics = (epics || []).filter(e => !SPECIAL_EPIC_KEYS.includes(e.key));
   const excluded = ['stand by','backlog','desestimado','planificado'];
+  // Indicadores y Cumplimiento General: todos los proyectos con fecha fin desde el 1 de enero
+  // del año en curso, sin límite final y sin importar el filtro Desde/Hasta (igual que el
+  // correo del Reporte PMO). El estado se calcula al corte de hoy.
+  const iniAnio = `${new Date().getFullYear()}-01-01`;
   const data = allEpics.filter(e => {
     if (!e.duedate) return false;
     if (excluded.includes((e.status||'').toLowerCase())) return false;
-    if (desde && e.duedate < desde) return false;
-    if (hasta && e.duedate > hasta) return false;
-    return true;
+    return e.duedate >= iniAnio;
   });
   const total = data.length;
   const nStandby = allEpics.filter(e => (e.status||'').toLowerCase()==='stand by').length;
@@ -3100,7 +3102,10 @@ function renderKpiEjecutivo() {
   });
 
   const pct = n => total ? Math.round(n/total*100) : 0;
+
   const cumplimiento = pct(nPlazo + nProd);
+  const hoyD = new Date();
+  const cumSub = `Proyectos desde ene ${hoyD.getFullYear()} · corte ${hoyD.toLocaleDateString('es-PE',{day:'2-digit',month:'2-digit',year:'numeric'})}`;
   const cumColor = cumplimiento>=80?'var(--green)':cumplimiento>=60?'var(--yellow)':'var(--red)';
 
   const rowInteractive = (onclick, icon, label, num, numColor) =>
@@ -3138,6 +3143,7 @@ function renderKpiEjecutivo() {
       <div class="ent-kpi-cumplimiento">
         <div class="ent-kpi-cum-lbl">📈 Cumplimiento General</div>
         <div class="ent-kpi-cum-val" style="color:${cumColor}">${cumplimiento}%</div>
+        <div class="ent-kpi-cum-lbl" style="margin-top:2px">${cumSub}</div>
       </div>
     </div>`;
 }
