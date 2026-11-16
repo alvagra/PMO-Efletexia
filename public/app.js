@@ -222,7 +222,7 @@ const JIRA_FIELDS = [
   "customfield_10829","customfield_10862","customfield_10969","customfield_11336",
   "customfield_10970","customfield_11003","customfield_11004",
   "customfield_11037","customfield_11070","customfield_11170","customfield_11269",
-  "customfield_11203","customfield_11335"
+  "customfield_11203","customfield_11335","customfield_11559"
 ];
 
 function parseIssue(i){
@@ -253,6 +253,7 @@ function parseIssue(i){
     labels:f.labels||[],
     duedate:f.duedate||null,
     fechaInicio:f.customfield_10015||null,
+    finPlanProd:f.customfield_11559||null,   // Fecha fin plan producción
     pais:f.customfield_10592?f.customfield_10592.value:null,
     area:f.customfield_10930?f.customfield_10930.value:null,
     categoria:f.customfield_10659?f.customfield_10659.value:null,
@@ -4376,11 +4377,12 @@ function avProyecto(hist, hoy, venceProyecto){
 
 // ── Avance de cada proyecto en Portafolio = mismo cálculo que el Informe ──
 // Resumen de una épica a partir de la respuesta del informe (avance por fases)
-function avResumenEpica(d, hoy){
+function avResumenEpica(d, hoy, venceOverride){
   const epPort = Array.isArray(typeof epics!=='undefined'?epics:null) ? epics.find(x=>x.key===d.epica?.key) : null;
   const ref = { vence: d.epica?.vence || epPort?.duedate || null, inicio: d.epica?.inicio || epPort?.fechaInicio || null };
   const hist=(d.entregables||[]).map(e=>({ ...e, real:avReal(e), vent:avVentanas(e, ref) }));
-  return avProyecto(hist, hoy, ref.vence);
+  // venceOverride: fecha fin a usar para vencido/atraso (Resumen › Plazo usa Fecha fin plan producción)
+  return avProyecto(hist, hoy, venceOverride || ref.vence);
 }
 let portAvanceEnCurso=false;
 async function portAvanceCalcular(){
@@ -4466,8 +4468,20 @@ function rsMeses(){
 }
 
 // Plazo del mes en curso: mismo cálculo del Informe sobre los proyectos en curso
+// Fecha fin de una épica para vencidos y atraso en Resumen › Plazo:
+// Fecha fin plan producción; si está vacía, la Fecha de vencimiento de la épica
+function rsFinPlanEpica(key){
+  const ep=(typeof epics!=='undefined'&&Array.isArray(epics)?epics:[]).find(e=>e.key===key)||{};
+  return ep.finPlanProd || ep.duedate || infCache[key]?.epica?.vence || null;
+}
 function rsPlazoActual(){
-  const lista=(typeof mtProyDatos==='function'?(mtProyDatos()||[]):[]).filter(x=>x.fase!=='Producción');
+  const hoy=new Date().toISOString().slice(0,10);
+  const lista=(typeof mtProyDatos==='function'?(mtProyDatos()||[]):[]).filter(x=>x.fase!=='Producción')
+    .map(x=>{
+      const fin=rsFinPlanEpica(x.key);
+      const pr=(infCache[x.key] && avResumenEpica(infCache[x.key],hoy,fin)) || x.pr;
+      return { ...x, pr, vencido: !!(fin && fin<hoy && pr.real<99.95) };
+    });
   if(!lista.length) return null;
   const conPlan=lista.filter(x=>x.pr.plan!==null);
   const prom=a=>a.length?a.reduce((s,v)=>s+v,0)/a.length:null;
@@ -4507,9 +4521,9 @@ function rsPlazoEn(fecha){
           return { ...st, estadoCat: ok?'done':'indeterminate', estado: ok?(st.estado||'Cerrado'):'En curso' }; }) };
     }).filter(Boolean);
     if(!ents.length) return;
-    const pr=avResumenEpica({ ...d, entregables:ents }, fecha);
+    const vence=rsFinPlanEpica(p.key) || ep.vence || null;   // Fecha fin plan producción (o vencimiento)
+    const pr=avResumenEpica({ ...d, entregables:ents }, fecha, vence);
     if(!pr) return;
-    const vence=ep.vence||null;
     lista.push({ pr, semaforo: pr.plan===null?'Sin plan':pr.desvio>=-5?'En control':pr.desvio>=-10?'Alerta':'Crítico',
       vencido: !!(vence && vence<fecha && pr.real<99.95) });
   });
