@@ -693,7 +693,9 @@ module.exports = async function handler(req, res) {
         finQA:   await idsTodos(['Fecha fin plan QA']),
         iniUAT:  await idsTodos(['Fecha inicio UAT']),
         finUAT:  await idsTodos(['Fecha fin plan UAT']),
+        iniProd: await idsTodos(['Fecha inicio producción', 'Fecha inicio produccion']),
         finProd: await idsTodos(['Fecha fin plan producción', 'Fecha fin plan produccion']),
+        realProd: await idsTodos(['Fecha fin real producción', 'Fecha fin real produccion']),
       };
       Object.values(CF_FASES).flat().forEach(id => { if (!CAMPOS.includes(id)) CAMPOS.push(id); });
       const fechaDe = (f, ids) => ids.map(id => f[id]).find(Boolean) || null;
@@ -863,14 +865,15 @@ module.exports = async function handler(req, res) {
         finQA: CF_AV.finQA ? (i.fields[CF_AV.finQA] || null) : null,
         // Fase de Análisis: Vence = "Fecha fin plan análisis" (Responsable = respAnalisis)
         finPlanAnalisis: CF_ANALISIS.fin.map(id => i.fields[id]).find(Boolean) || null,
-        // Cronograma por fases: [inicio, fin plan]. Producción no tiene inicio propio:
+        // Cronograma por fases: [inicio, fin plan]. Si Producción no tiene Fecha inicio,
         // empieza donde termina el plan de UAT.
+        finRealProduccion: fechaDe(i.fields, CF_FASES.realProd),
         fechasFases: {
           analisis:   [fechaDe(i.fields, CF_ANALISIS.ini), fechaDe(i.fields, CF_ANALISIS.fin)],
           desarrollo: [fechaDe(i.fields, CF_FASES.iniDev), fechaDe(i.fields, CF_FASES.finDev)],
           qa:         [fechaDe(i.fields, CF_FASES.iniQA),  fechaDe(i.fields, CF_FASES.finQA)],
           uat:        [fechaDe(i.fields, CF_FASES.iniUAT), fechaDe(i.fields, CF_FASES.finUAT)],
-          produccion: [fechaDe(i.fields, CF_FASES.finUAT), fechaDe(i.fields, CF_FASES.finProd)],
+          produccion: [fechaDe(i.fields, CF_FASES.iniProd) || fechaDe(i.fields, CF_FASES.finUAT), fechaDe(i.fields, CF_FASES.finProd)],
         },
         // Análisis: documento (Doc Funcional = Sí), matriz (Matriz de casos de prueba = Sí) y
         // estimación (Fecha inicio desarrollo y Fecha fin plan desarrollo registradas).
