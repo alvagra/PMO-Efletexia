@@ -4505,6 +4505,9 @@ function rsPlazoActual(){
     critico:lista.filter(x=>x.semaforo==='Crítico').length,
     indices:conPlan.filter(x=>x.pr.indice!==null&&x.pr.indice!==undefined).map(x=>x.pr.indice),
     evpv:conPlan.filter(x=>x.pr.pv>0).map(x=>({ ev:x.pr.ev, pv:x.pr.pv })),
+    detalle:conPlan.filter(x=>x.pr.pv>0).map(x=>{ const eg=(typeof epics!=='undefined'&&Array.isArray(epics)?epics:[]).find(e=>e.key===x.key)||{};
+      return { grupo:'En curso', key:x.key, codigo:x.codigo||eg.codigo||x.key, nombre:x.nombre||eg.summary||'',
+        plan:x.pr.plan, real:x.pr.realSub, bac:x.pr.bac, pv:x.pr.pv, ev:x.pr.ev, spi:x.pr.ev/x.pr.pv }; }),
     spi:prom(conPlan.filter(x=>x.pr.indice!==null&&x.pr.indice!==undefined).map(x=>x.pr.indice)),
     atraso:prom(conPlan.map(x=>x.pr.atraso||0)),
     vencidos:lista.filter(x=>x.vencido).length };
@@ -4529,17 +4532,22 @@ function rsEntregablesEn(d, fecha){
         return { ...st, estadoCat: ok?'done':'indeterminate', estado: ok?(st.estado||'Cerrado'):'En curso' }; }) };
   }).filter(Boolean);
 }
-// EV y PV de un proyecto cerrado en el mes, medidos en su Fin Plan (Fecha de vencimiento de la épica).
-// Cerró en plazo → EV = PV (SPI 1,00); cerró con retraso → EV < PV en esa fecha (SPI < 1).
-function rsEvPvCerrado(key, finPlan){
-  const d=infCache[key]; if(!d || !finPlan) return null;
-  const ents=rsEntregablesEn(d, finPlan);
-  if(!ents.length) return null;
-  const pr=avResumenEpica({ ...d, entregables:ents }, finPlan, finPlan);
-  if(!pr || !(pr.pv>0)) return null;
-  return { ev:Math.min(pr.ev,pr.bac), pv:pr.pv };
+// EV y PV de un proyecto cerrado en el mes, solo con campos de la épica en Jira (Earned Schedule, PMI):
+//   SPI(t) = duración plan ÷ duración real = (Fin Plan − Inicio) ÷ (Fin Real − Inicio), en días hábiles sin domingos
+//   Inicio = Fecha de inicio · Fin Plan = Fecha de vencimiento · Fin Real = Fecha de vencimiento replanificada
+//   (si está vacía, Fecha de vencimiento → SPI 1,00).
+//   BAC = entregables del proyecto; PV = BAC; EV = BAC × SPI(t)
+function rsEvPvCerrado(t){
+  const ini=t.inicio, plan=t.finPlanProd, real=t.finRealProd;
+  if(!ini || !plan || !real || plan<ini) return null;
+  const durPlan=avHabiles(ini, plan), durReal=avHabiles(ini, real);
+  if(!(durPlan>0) || !(durReal>0)) return null;
+  const d=infCache[t.key];
+  const bac=Math.max(1, (d?.entregables||[]).length);
+  const spi=durPlan/durReal;
+  return { ev:bac*spi, pv:bac, spi };
 }
-function rsSpiCerrado(key, finPlan){ const x=rsEvPvCerrado(key, finPlan); return x?x.ev/x.pv:null; }
+function rsSpiCerrado(t){ const x=rsEvPvCerrado(t); return x?x.spi:null; }
 // Plazo a una fecha pasada: el mismo cálculo del Informe sobre los proyectos y entregables
 // tal como estaban ese día (estados del changelog y subtareas cerradas hasta esa fecha)
 function rsPlazoEn(fecha){
@@ -4571,7 +4579,8 @@ function rsPlazoEn(fecha){
     const vence=rsFinPlanEpica(p.key) || ep.vence || null;   // Fecha fin plan producción (o vencimiento)
     const pr=avResumenEpica({ ...d, entregables:ents }, fecha, vence);
     if(!pr) return;
-    lista.push({ pr, semaforo: pr.plan===null?'Sin plan':pr.desvio>=-5?'En control':pr.desvio>=-10?'Alerta':'Crítico',
+    lista.push({ key:p.key, codigo:ep.codigo||epG.codigo||p.key, nombre:p.summary||epG.summary||'',
+      pr, semaforo: pr.plan===null?'Sin plan':pr.desvio>=-5?'En control':pr.desvio>=-10?'Alerta':'Crítico',
       vencido: !!(vence && vence<fecha && pr.real<99.95) });
   });
   if(!lista.length) return null;
@@ -4583,6 +4592,9 @@ function rsPlazoEn(fecha){
     critico:lista.filter(x=>x.semaforo==='Crítico').length,
     indices:conPlan.filter(x=>x.pr.indice!==null&&x.pr.indice!==undefined).map(x=>x.pr.indice),
     evpv:conPlan.filter(x=>x.pr.pv>0).map(x=>({ ev:x.pr.ev, pv:x.pr.pv })),
+    detalle:conPlan.filter(x=>x.pr.pv>0).map(x=>{ const eg=(typeof epics!=='undefined'&&Array.isArray(epics)?epics:[]).find(e=>e.key===x.key)||{};
+      return { grupo:'En curso', key:x.key, codigo:x.codigo||eg.codigo||x.key, nombre:x.nombre||eg.summary||'',
+        plan:x.pr.plan, real:x.pr.realSub, bac:x.pr.bac, pv:x.pr.pv, ev:x.pr.ev, spi:x.pr.ev/x.pr.pv }; }),
     spi:prom(conPlan.filter(x=>x.pr.indice!==null&&x.pr.indice!==undefined).map(x=>x.pr.indice)),
     atraso:prom(conPlan.map(x=>x.pr.atraso||0)),
     vencidos:lista.filter(x=>x.vencido).length, reconstruido:true };
@@ -4643,7 +4655,11 @@ function rsCalcular(mes){
   // SPI de la cartera (PMI): ΣEV ÷ ΣPV de los proyectos en curso al corte y de los cerrados en el mes
   // (estos medidos en su Fin Plan), para que un cierre con retraso baje el SPI
   if(r.plazo){
-    const cerr=term.map(t=>rsEvPvCerrado(t.key, t.finPlanProd)).filter(Boolean);
+    const cerrDet=term.map(t=>{ const x=rsEvPvCerrado(t); return x?{ grupo:'Cerrado', key:t.key, codigo:t.codigo, nombre:t.nombre,
+      inicio:t.inicio, finPlan:t.finPlanProd, finReal:t.finRealProd, bac:x.pv, pv:x.pv, ev:x.ev, spi:x.spi }:null; }).filter(Boolean);
+    const cerr=cerrDet;
+    r.plazo.detalleSpi=[...(r.plazo.detalle||[]), ...cerrDet];
+    r.plazo.corte=corte;
     const curso=r.plazo.evpv||[];
     const suma=(a,k)=>a.reduce((x,v)=>x+v[k],0);
     const todos=[...curso, ...cerr];
@@ -4828,7 +4844,7 @@ function rsRender(){
      ${t.conPlan?`${rsBar(`Cerrados con retraso (desvío > 2 días)`,t.fueraOrig,t.conPlan,rsColPts(t.ptVenc),`${t.fueraOrig} de ${t.conPlan}`)}
      ${rsBar(`Desvío promedio (cerrados)`,t.desvioOrig===null?null:Math.abs(t.desvioOrig),20,rsColPts(t.ptAtraso),`${t.desvioOrig>0?'+':''}${rsFmt(t.desvioOrig,1)} días`)}`:''}`,
     '', sp(x=>x.plazo?.spi??null,v=>rsColPts(rsPts(v,0.95,0.90)),v=>rsFmt(v,2),'SPI',
-      `<a href="#" onclick="event.preventDefault();rsDetalleTerminados()" style="font-size:11px;color:var(--accent,#58a6ff)">Detalle</a>`));
+      `<a href="#" onclick="event.preventDefault();rsDetalleSpi()" style="font-size:11px;color:var(--accent,#58a6ff)">Detalle</a>`));
 
   // 2. Entrega
   const e=r.entrega;
@@ -4921,6 +4937,46 @@ function rsTermBloque(all,meses,sel,r){
       ${Object.entries(RS_TERM).map(([c,col])=>`<span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${col};margin-right:3px"></i>${c} ${c==='En plazo'?t.enPlazo:c==='Replanificado'?t.replan:t.retraso}</span>`).join('')}
       <span style="margin-left:auto">Cumplimiento <b style="color:${rsColPts(t.pt)}">${t.cumplimiento===null?'–':Math.round(t.cumplimiento)+'%'}</b></span></div>
     <svg viewBox="0 0 ${W} ${h+14}" width="100%">${svg}</svg></div>`;
+}
+// Popup con el detalle del SPI (PMI) del mes elegido: EV, PV y SPI por proyecto y de la cartera
+function rsDetalleSpi(){
+  const r=rsCalcular(rsMes||'todos'), pl=r.plazo||{};
+  const lst=(pl.detalleSpi||[]).slice().sort((a,b)=>a.grupo.localeCompare(b.grupo)||a.spi-b.spi);
+  const fC=v=>{ if(!v) return '–'; const [y,m,d]=v.split('-'); return `${d}-${['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][+m-1]}`; };
+  const n1=v=>v===null||v===undefined?'–':rsFmt(v,1), n2=v=>v===null||v===undefined?'–':rsFmt(v,2);
+  const colSpi=v=>rsColPts(rsPts(v,0.95,0.90));
+  const sum=(a,k)=>a.reduce((x,v)=>x+(v[k]||0),0);
+  const ev=sum(lst,'ev'), pv=sum(lst,'pv');
+  document.getElementById('rs-modal')?.remove();
+  const m=document.createElement('div'); m.id='rs-modal';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  m.innerHTML=`<div style="background:var(--bg-surface,#161b22);border:1px solid var(--border);border-radius:12px;max-width:1100px;width:100%;max-height:85vh;overflow:auto;padding:16px 18px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <span style="font-size:14px;font-weight:700;color:var(--text-primary)">Cumplimiento (SPI) · ${rsMes==='todos'?'periodo completo':mtMesCorto(rsMes)+' '+rsMes.slice(0,4)}${pl.corte?` · corte ${fC(pl.corte)}`:''}</span>
+      <button onclick="document.getElementById('rs-modal').remove()" style="background:none;border:none;color:var(--text-muted);font-size:18px;cursor:pointer">✕</button></div>
+    ${lst.length?`<table class="mt-tabla"><thead><tr><th>Grupo</th><th>Código</th><th>Proyecto</th>
+      <th>Inicio</th><th>Fin Plan</th><th>Fin Real</th>
+      <th style="text-align:right">% Plan</th><th style="text-align:right">% Real</th>
+      <th style="text-align:right">BAC</th><th style="text-align:right">PV</th><th style="text-align:right">EV</th><th style="text-align:right">SPI</th></tr></thead><tbody>
+      ${lst.map(x=>`<tr><td style="color:var(--text-muted)">${x.grupo}</td>
+        <td><a class="jlink" href="${JIRA_BASE}${x.key}" target="_blank">${esc(x.codigo||x.key)}</a></td>
+        <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(x.nombre||'')}">${esc(x.nombre||'')}</td>
+        <td>${x.grupo==='Cerrado'?fC(x.inicio):'–'}</td><td>${x.grupo==='Cerrado'?fC(x.finPlan):'–'}</td><td>${x.grupo==='Cerrado'?fC(x.finReal):'–'}</td>
+        <td style="text-align:right">${x.grupo==='En curso'?n1(x.plan)+'%':'–'}</td>
+        <td style="text-align:right">${x.grupo==='En curso'?n1(x.real)+'%':'–'}</td>
+        <td style="text-align:right">${x.bac}</td><td style="text-align:right">${n2(x.pv)}</td><td style="text-align:right">${n2(x.ev)}</td>
+        <td style="text-align:right;font-weight:600;color:${colSpi(x.spi)}">${n2(x.spi)}</td></tr>`).join('')}
+      <tr style="border-top:2px solid var(--border);font-weight:700"><td colspan="9">Cartera (ΣEV ÷ ΣPV) · ${lst.length} proyectos</td>
+        <td style="text-align:right">${n2(pv)}</td><td style="text-align:right">${n2(ev)}</td>
+        <td style="text-align:right;color:${colSpi(pv>0?ev/pv:null)}">${n2(pv>0?ev/pv:null)}</td></tr>
+      </tbody></table>`:`<div class="mt-empty">Sin proyectos con plan para calcular el SPI.</div>`}
+    <div style="font-size:10px;color:var(--text-muted);margin-top:8px">SPI (PMI) = EV ÷ PV. BAC = entregables del proyecto.
+      En curso: PV = % plan × BAC, EV = % real × BAC, medidos a la fecha de corte (% plan y % real de las historias con Entregable = Sí).
+      Cerrados en el mes (Earned Schedule): SPI = (Fin Plan − Inicio) ÷ (Fin Real − Inicio) en días hábiles sin domingos; PV = BAC, EV = BAC × SPI.
+      Inicio: Fecha de inicio · Fin Plan: Fecha de vencimiento · Fin Real: Fecha de vencimiento replanificada (si está vacía, Fecha de vencimiento).
+      Cartera = ΣEV ÷ ΣPV. Verde ≥ 0,95 · ámbar ≥ 0,90 · rojo &lt; 0,90.</div></div>`;
+  m.addEventListener('click',e=>{ if(e.target===m) m.remove(); });
+  document.body.appendChild(m);
 }
 // Popup con el detalle de los proyectos terminados del mes elegido (o del periodo)
 function rsDetalleTerminados(){
