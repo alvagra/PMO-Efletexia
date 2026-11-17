@@ -254,7 +254,7 @@ function parseIssue(i){
     duedate:f.duedate||null,
     fechaInicio:f.customfield_10015||null,
     finPlanProd:f.customfield_11559||null,   // Fecha fin plan producción
-    vencReplan:f.customfield_11570||null,    // Fecha de vencimiento replanificada
+    vencReplan:f.customfield_11570||null,    // Fecha de vencimiento real
     finRealProdEp:f.customfield_11560||null, // Fecha fin real producción
     pais:f.customfield_10592?f.customfield_10592.value:null,
     area:f.customfield_10930?f.customfield_10930.value:null,
@@ -4457,7 +4457,7 @@ const RS_DESDE = '2026-03';
 const rsMesesDesde = () => { const h=new Date(), [y,m]=RS_DESDE.split('-').map(Number);
   return Math.max(1,(h.getFullYear()-y)*12+(h.getMonth()+1-m)+1); };
 const RS_PESOS = { plazo:25, entrega:20, calidad:20, capacidad:15, costos:15, gobierno:5 };
-const RS_NOMBRES = { plazo:'Plazo', entrega:'Entrega de desarrollo', calidad:'Calidad', capacidad:'Capacidad', costos:'Costos', gobierno:'Gobierno y datos' };
+const RS_NOMBRES = { plazo:'Plazo', entrega:'Avance de entregables', calidad:'Calidad', capacidad:'Capacidad', costos:'Costos', gobierno:'Gobierno y datos' };
 const RS_G='#3fb950', RS_A='#F5B800', RS_R='#ef4444', RS_B='#58a6ff';
 let rsDatos=null, rsHist=null, rsMes=null, rsCargando=false;
 
@@ -4534,7 +4534,7 @@ function rsEntregablesEn(d, fecha){
 }
 // EV y PV de un proyecto cerrado en el mes, solo con campos de la épica en Jira (Earned Schedule, PMI):
 //   SPI(t) = duración plan ÷ duración real = (Fin Plan − Inicio) ÷ (Fin Real − Inicio), en días hábiles sin domingos
-//   Inicio = Fecha de inicio · Fin Plan = Fecha de vencimiento · Fin Real = Fecha de vencimiento replanificada
+//   Inicio = Fecha de inicio · Fin Plan = Fecha de vencimiento · Fin Real = Fecha de vencimiento real
 //   (si está vacía, Fecha de vencimiento → SPI 1,00).
 //   BAC = entregables del proyecto; PV = BAC; EV = BAC × SPI(t)
 function rsEvPvCerrado(t){
@@ -4602,15 +4602,15 @@ function rsPlazoEn(fecha){
 
 // Proyectos terminados (pasaron a Producción): En plazo · Replanificado · Retraso
 // Retraso: producción más de 2 días hábiles después del término vigente.
-// Retraso: Fecha de vencimiento replanificada más de 2 días hábiles después de la Fecha de vencimiento.
-// Replanificado: con Fecha de vencimiento replanificada, dentro de la tolerancia (±2 días hábiles).
-// En plazo: sin Fecha de vencimiento replanificada.
+// Retraso: Fecha de vencimiento real más de 2 días hábiles después de la Fecha de vencimiento.
+// Replanificado: con Fecha de vencimiento real, dentro de la tolerancia (±2 días hábiles).
+// En plazo: sin Fecha de vencimiento real.
 const RS_TERM = { 'En plazo':'#3fb950', 'Replanificado':'#F5B800', 'Retraso':'#ef4444' };
 function rsClasificarTerminado(t){
   // Desvío = Fecha fin real producción − Fecha fin plan producción (días hábiles sin domingos).
   // Si la épica no tiene alguna de las dos fechas, no hay desvío ni clasificación.
   // Campos de la épica en Jira: Inicio = Fecha de inicio · Fin Plan = Fecha de vencimiento ·
-  // Fin Real = Fecha de vencimiento replanificada (customfield_11570); si está vacía, la épica
+  // Fin Real = Fecha de vencimiento real (customfield_11570); si está vacía, la épica
   // no se replanificó y Fin Real = Fecha de vencimiento (desvío 0)
   const ep=(typeof epics!=='undefined'&&Array.isArray(epics)?epics:[]).find(e=>e.key===t.key);
   const inicio = ep ? (ep.fechaInicio||null) : (t.inicio||null);
@@ -4620,7 +4620,7 @@ function rsClasificarTerminado(t){
   if(!real || !plan) return { ...t, inicio, finPlanProd:plan, finRealProd:real, clase:'Sin plan', dias:null };
   const dias = real>plan ? avHabiles(avSumar(plan,1), real)
              : real<plan ? -avHabiles(avSumar(real,1), plan) : 0;
-  // Replanificado: tiene Fecha de vencimiento replanificada distinta del vencimiento, dentro de la tolerancia
+  // Replanificado: tiene Fecha de vencimiento real distinta del vencimiento, dentro de la tolerancia
   const replan=!!(replanFecha && replanFecha!==plan);
   const clase = dias>2 ? 'Retraso' : (replan ? 'Replanificado' : 'En plazo');
   return { ...t, inicio, finPlanProd:plan, finRealProd:real, clase, dias };
@@ -4848,7 +4848,7 @@ function rsRender(){
 
   // 2. Entrega
   const e=r.entrega;
-  html+=rsCard('2. Entrega de desarrollo',esTodos?'Entregables con fin de desarrollo en el periodo':'Entregables con fin de desarrollo en el mes', r.score.entrega,
+  html+=rsCard('2. Avance de entregables',esTodos?'Entregables con fin de desarrollo en el periodo':'Entregables con fin de desarrollo en el mes', r.score.entrega,
     e ? `<div style="display:flex;align-items:center;gap:10px">${rsDonut([['A tiempo',e.aTiempo,RS_G],['Tarde',e.tarde,RS_R],['Pendientes',e.comp-e.entr,'#8b949e']],(e.pctTiempo===null?'–':Math.round(e.pctTiempo)+'%'),'a tiempo')}
       <div style="flex:1">${rsGauge(e.efic,100,rsColPts(rsPts(e.efic,90,75)),Math.round(e.efic)+'%','eficiencia de entrega',120)}</div></div>
       ${rsLeg([[`A tiempo ${e.aTiempo}`,RS_G],[`Tarde ${e.tarde}`,RS_R],[`Sin entregar ${e.comp-e.entr}`,'#8b949e']])}
@@ -4973,7 +4973,7 @@ function rsDetalleSpi(){
     <div style="font-size:10px;color:var(--text-muted);margin-top:8px">SPI (PMI) = EV ÷ PV. BAC = entregables del proyecto.
       En curso: PV = % plan × BAC, EV = % real × BAC, medidos a la fecha de corte (% plan y % real de las historias con Entregable = Sí).
       Cerrados en el mes (Earned Schedule): SPI = (Fin Plan − Inicio) ÷ (Fin Real − Inicio) en días hábiles sin domingos; PV = BAC, EV = BAC × SPI.
-      Inicio: Fecha de inicio · Fin Plan: Fecha de vencimiento · Fin Real: Fecha de vencimiento replanificada (si está vacía, Fecha de vencimiento).
+      Inicio: Fecha de inicio · Fin Plan: Fecha de vencimiento · Fin Real: Fecha de vencimiento real (si está vacía, Fecha de vencimiento).
       Cartera = ΣEV ÷ ΣPV. Verde ≥ 0,95 · ámbar ≥ 0,90 · rojo &lt; 0,90.</div></div>`;
   m.addEventListener('click',e=>{ if(e.target===m) m.remove(); });
   document.body.appendChild(m);
@@ -4996,11 +4996,11 @@ function rsDetalleTerminados(){
         <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(t.nombre)}">${esc(t.nombre)}</td>
         <td title="Fecha de inicio de la épica">${fC(t.inicio)}</td>
         <td title="Fecha de vencimiento de la épica">${t.finPlanProd?fC(t.finPlanProd):'<span style="color:var(--text-muted)">–</span>'}</td>
-        <td title="Fecha de vencimiento replanificada (o Fecha de vencimiento si no se replanificó)">${t.finRealProd?fC(t.finRealProd):'<span style="color:var(--text-muted)">–</span>'}</td>
+        <td title="Fecha de vencimiento real (o Fecha de vencimiento si no se replanificó)">${t.finRealProd?fC(t.finRealProd):'<span style="color:var(--text-muted)">–</span>'}</td>
         <td style="text-align:right;color:${t.dias===null?'var(--text-muted)':t.dias>2?RS_R:RS_G}">${t.dias===null?'–':(t.dias>0?'+':'')+t.dias+' d'}</td>
         <td style="color:${col(t.clase)};font-weight:600">${t.clase}</td></tr>`).join('')}
       </tbody></table>`:'<div class="mt-empty">No hay proyectos terminados en este periodo.</div>'}
-    <div style="font-size:10px;color:var(--text-muted);margin-top:8px">Campos de la épica en Jira. Inicio: Fecha de inicio. Fin Plan: Fecha de vencimiento. Fin Real: Fecha de vencimiento replanificada (si está vacía, Fecha de vencimiento). Desvío: Fin Real − Fin Plan, en días hábiles sin domingos; tolerancia de 2 días. Sin alguna de las dos fechas no se calcula el desvío (“Sin plan”). Replanificado: con Fecha de vencimiento replanificada dentro de la tolerancia.</div></div>`;
+    <div style="font-size:10px;color:var(--text-muted);margin-top:8px">Campos de la épica en Jira. Inicio: Fecha de inicio. Fin Plan: Fecha de vencimiento. Fin Real: Fecha de vencimiento real (si está vacía, Fecha de vencimiento). Desvío: Fin Real − Fin Plan, en días hábiles sin domingos; tolerancia de 2 días. Sin alguna de las dos fechas no se calcula el desvío (“Sin plan”). Replanificado: con Fecha de vencimiento real dentro de la tolerancia.</div></div>`;
   m.addEventListener('click',ev=>{ if(ev.target===m) m.remove(); });
   document.body.appendChild(m);
 }
