@@ -4352,7 +4352,12 @@ function avProyecto(hist, hoy, venceProyecto){
   const realSub=prom(conPlan.map(h=>h.real.pct));
   r.plan=planEn(hoy); r.realSub=realSub;
   r.desvio=realSub-r.plan;
-  r.indice=r.plan>0?realSub/r.plan:null;
+  // Valor ganado (PMI): BAC = entregables con plan del proyecto (unidad de trabajo planificado)
+  //   PV = % plan × BAC · EV = % real × BAC · SPI = EV ÷ PV
+  r.bac=conPlan.length;
+  r.pv=r.plan/100*r.bac;
+  r.ev=realSub/100*r.bac;
+  r.indice=r.pv>0?r.ev/r.pv:null;
   // Rangos de desviación: > 0% Adelantado · 0% a −5% En control (verde) ·
   // −5% a −10% Alerta (ámbar) · < −10% Crítico (rojo)
   r.semaforo = r.desvio>=-5 ? '#3fb950' : r.desvio>=-10 ? '#F5B800' : '#ef4444';
@@ -4499,6 +4504,7 @@ function rsPlazoActual(){
     alerta:lista.filter(x=>x.semaforo==='Alerta').length,
     critico:lista.filter(x=>x.semaforo==='Crítico').length,
     indices:conPlan.filter(x=>x.pr.indice!==null&&x.pr.indice!==undefined).map(x=>x.pr.indice),
+    evpv:conPlan.filter(x=>x.pr.pv>0).map(x=>({ ev:x.pr.ev, pv:x.pr.pv })),
     spi:prom(conPlan.filter(x=>x.pr.indice!==null&&x.pr.indice!==undefined).map(x=>x.pr.indice)),
     atraso:prom(conPlan.map(x=>x.pr.atraso||0)),
     vencidos:lista.filter(x=>x.vencido).length };
@@ -4523,16 +4529,17 @@ function rsEntregablesEn(d, fecha){
         return { ...st, estadoCat: ok?'done':'indeterminate', estado: ok?(st.estado||'Cerrado'):'En curso' }; }) };
   }).filter(Boolean);
 }
-// SPI de un proyecto cerrado en el mes: avance real en su Fin Plan (Fecha de vencimiento de la épica) ÷ 100%.
-// Cerró en plazo → 1,00; cerró con retraso → el avance que le faltaba en su Fin Plan baja el SPI.
-function rsSpiCerrado(key, finPlan){
+// EV y PV de un proyecto cerrado en el mes, medidos en su Fin Plan (Fecha de vencimiento de la épica).
+// Cerró en plazo → EV = PV (SPI 1,00); cerró con retraso → EV < PV en esa fecha (SPI < 1).
+function rsEvPvCerrado(key, finPlan){
   const d=infCache[key]; if(!d || !finPlan) return null;
   const ents=rsEntregablesEn(d, finPlan);
   if(!ents.length) return null;
   const pr=avResumenEpica({ ...d, entregables:ents }, finPlan, finPlan);
-  if(!pr || pr.real===null || pr.real===undefined) return null;
-  return Math.min(pr.real,100)/100;
+  if(!pr || !(pr.pv>0)) return null;
+  return { ev:Math.min(pr.ev,pr.bac), pv:pr.pv };
 }
+function rsSpiCerrado(key, finPlan){ const x=rsEvPvCerrado(key, finPlan); return x?x.ev/x.pv:null; }
 // Plazo a una fecha pasada: el mismo cálculo del Informe sobre los proyectos y entregables
 // tal como estaban ese día (estados del changelog y subtareas cerradas hasta esa fecha)
 function rsPlazoEn(fecha){
@@ -4575,6 +4582,7 @@ function rsPlazoEn(fecha){
     alerta:lista.filter(x=>x.semaforo==='Alerta').length,
     critico:lista.filter(x=>x.semaforo==='Crítico').length,
     indices:conPlan.filter(x=>x.pr.indice!==null&&x.pr.indice!==undefined).map(x=>x.pr.indice),
+    evpv:conPlan.filter(x=>x.pr.pv>0).map(x=>({ ev:x.pr.ev, pv:x.pr.pv })),
     spi:prom(conPlan.filter(x=>x.pr.indice!==null&&x.pr.indice!==undefined).map(x=>x.pr.indice)),
     atraso:prom(conPlan.map(x=>x.pr.atraso||0)),
     vencidos:lista.filter(x=>x.vencido).length, reconstruido:true };
@@ -4632,14 +4640,18 @@ function rsCalcular(mes){
     sinPlan:term.length-conPlanT.length,
     cumplimiento: conPlanT.length ? term.filter(t=>t.clase==='En plazo').length/conPlanT.length*100 : null };
   r.term.pt = rsPts(r.term.cumplimiento,85,70);
-  // SPI del mes = promedio de: proyectos en curso al corte (real ÷ plan) + proyectos cerrados en el mes
-  // (avance real en su Fin Plan ÷ 100%), para que un cierre con retraso baje el SPI
+  // SPI de la cartera (PMI): ΣEV ÷ ΣPV de los proyectos en curso al corte y de los cerrados en el mes
+  // (estos medidos en su Fin Plan), para que un cierre con retraso baje el SPI
   if(r.plazo){
-    const idxCerr=term.map(t=>rsSpiCerrado(t.key, t.finPlanProd)).filter(v=>v!==null);
-    const idx=[...(r.plazo.indices||[]), ...idxCerr];
-    r.plazo.spiEnCurso=r.plazo.spi;
-    r.plazo.spiCerrados=idxCerr.length?idxCerr.reduce((a,v)=>a+v,0)/idxCerr.length:null;
-    r.plazo.spi=idx.length?idx.reduce((a,v)=>a+v,0)/idx.length:null;
+    const cerr=term.map(t=>rsEvPvCerrado(t.key, t.finPlanProd)).filter(Boolean);
+    const curso=r.plazo.evpv||[];
+    const suma=(a,k)=>a.reduce((x,v)=>x+v[k],0);
+    const todos=[...curso, ...cerr];
+    r.plazo.ev=suma(todos,'ev'); r.plazo.pv=suma(todos,'pv');
+    r.plazo.spiEnCurso=suma(curso,'pv')>0?suma(curso,'ev')/suma(curso,'pv'):null;
+    r.plazo.spiCerrados=suma(cerr,'pv')>0?suma(cerr,'ev')/suma(cerr,'pv'):null;
+    r.plazo.nSpi=todos.length;
+    r.plazo.spi=r.plazo.pv>0?r.plazo.ev/r.plazo.pv:null;
     r.plazo.pts[0]=rsPts(r.plazo.spi,0.95,0.90);
   }
   // Barras de los proyectos cerrados en el mes (o periodo) con plan, solo con campos de Jira:
