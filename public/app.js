@@ -310,15 +310,15 @@ function updateKpis(data){
 
 // Nombres de grupo conocidos por prefijo de código. 'MTS' -> 'Master' (requerido).
 // Los prefijos sin nombre asignado aquí se muestran con el prefijo tal cual.
-const GRUPO_NOMBRES = { 'MTS': 'Master', 'CEFU': 'Cedis del Futuro', 'MUE': 'Asignación Automática de Muelles', 'QUBO': 'Qubo' };
+const GRUPO_NOMBRES = { 'MTS': 'Master', 'CEFU': 'Cedis del Futuro', 'MUE': 'Asignación Automática de Muelles', 'QUBO': 'Qubo', 'OPIA': 'Optimizando procesos con IA' };
 // Épicas asignadas a un grupo por su clave de Jira, aunque su código no tenga el prefijo del grupo
 const GRUPO_POR_KEY = { 'PTS-83': 'MTS' };   // Torre de Control - KPIs en tiempo real con agente → Master
 let gruposColapsados = new Set(); // prefijos actualmente colapsados
 
 function getGrupoPrefix(codigo){
   if(!codigo) return null;
-  const m = codigo.match(/^[A-Za-z]+/);
-  return m ? m[0] : null;
+  const m = codigo.trim().match(/^[A-Za-z]+/);
+  return m ? m[0].toUpperCase() : null;
 }
 
 function toggleGrupo(prefix){
