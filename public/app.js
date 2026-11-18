@@ -222,7 +222,7 @@ const JIRA_FIELDS = [
   "customfield_10829","customfield_10862","customfield_10969","customfield_11336",
   "customfield_10970","customfield_11003","customfield_11004",
   "customfield_11037","customfield_11070","customfield_11170","customfield_11269",
-  "customfield_11203","customfield_11335","customfield_11559","customfield_11570","customfield_11560"
+  "customfield_11203","customfield_11335"
 ];
 
 function parseIssue(i){
@@ -253,9 +253,6 @@ function parseIssue(i){
     labels:f.labels||[],
     duedate:f.duedate||null,
     fechaInicio:f.customfield_10015||null,
-    finPlanProd:f.customfield_11559||null,   // Fecha fin plan producción
-    vencReplan:f.customfield_11570||null,    // Fecha de vencimiento real
-    finRealProdEp:f.customfield_11560||null, // Fecha fin real producción
     pais:f.customfield_10592?f.customfield_10592.value:null,
     area:f.customfield_10930?f.customfield_10930.value:null,
     categoria:f.customfield_10659?f.customfield_10659.value:null,
@@ -328,6 +325,16 @@ function toggleGrupo(prefix){
   renderTable(sortedData(getFiltered()));
 }
 
+// Contraer o desplegar todos los proyectos de una vez (botón junto a "Mostrando N de M épicas").
+// gruposVisibles guarda las claves de los grupos que se pintaron en la última vista.
+let gruposVisibles = [];
+function toggleTodosGrupos(){
+  const todosColapsados = gruposVisibles.length && gruposVisibles.every(g=>gruposColapsados.has(g));
+  if(todosColapsados) gruposVisibles.forEach(g=>gruposColapsados.delete(g));
+  else gruposVisibles.forEach(g=>gruposColapsados.add(g));
+  renderTable(sortedData(getFiltered()));
+}
+
 function renderTable(data){
   const mainData = data.filter(e=>!SPECIAL_EPIC_KEYS.includes(e.key));
   updateKpis(mainData);
@@ -372,6 +379,11 @@ function renderTable(data){
     if(!gruposMap[gkey]){ gruposMap[gkey] = []; gruposOrden.push(gkey); }
     gruposMap[gkey].push(e);
   });
+
+  gruposVisibles = gruposOrden.slice();
+  const todosColapsados = gruposOrden.every(g=>gruposColapsados.has(g));
+  if(info) info.innerHTML += ` <button type="button" onclick="toggleTodosGrupos()" title="${todosColapsados?'Desplegar todos los proyectos':'Contraer todos los proyectos'}"
+      style="margin-left:12px;font-size:11px;padding:3px 10px;border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--text-primary);cursor:pointer">${todosColapsados?'⊞ Desplegar todo':'⊟ Contraer todo'}</button>`;
 
   tb.innerHTML = gruposOrden.map(gkey=>{
     const items = gruposMap[gkey];
@@ -4220,18 +4232,11 @@ const avSubCerrada = st => st.estadoCat==='done' || esEstadoCerrado(st.estado);
 function avFase(e){
   const s=ganttNorm(e.estado);
   if(s.includes('marcha blanca')||s.includes('produccion')||e.estadoCat==='done') return 5;
-  // Estados del flujo anterior de historias (antes de "EDP2 - Flujo Historias", set-2026),
-  // necesarios para reconstruir meses pasados con el historial de Jira:
-  // Done/Finalizada/Listo = desarrollo terminado (Análisis y Desarrollo al 100%; QA, UAT y Producción
-  // según sus mediciones) · Cerrado = terminada · In Progress/En curso/Review = en desarrollo
-  if(/^(cerrado|cerrada|closed|resolved|resuelta)$/.test(s)) return 5;
-  if(/^(done|finalizada|finalizado|listo)$/.test(s)) return 3;
   if(s.includes('blocked')||s.includes('bloque')) return -1;
   if(s.includes('uat')) return 4;
   if(s.includes('qa')||s.includes('prueba')) return 3;
   if(s.includes('desarrollo')) return 2;
   if(s.includes('analisis')) return 1;
-  if(/^(in progress|en curso|en progreso|en proceso|review|in review|en revision)$/.test(s)) return 2;
   return 0;
 }
 
@@ -4352,12 +4357,7 @@ function avProyecto(hist, hoy, venceProyecto){
   const realSub=prom(conPlan.map(h=>h.real.pct));
   r.plan=planEn(hoy); r.realSub=realSub;
   r.desvio=realSub-r.plan;
-  // Valor ganado (PMI): BAC = entregables con plan del proyecto (unidad de trabajo planificado)
-  //   PV = % plan × BAC · EV = % real × BAC · SPI = EV ÷ PV
-  r.bac=conPlan.length;
-  r.pv=r.plan/100*r.bac;
-  r.ev=realSub/100*r.bac;
-  r.indice=r.pv>0?r.ev/r.pv:null;
+  r.indice=r.plan>0?realSub/r.plan:null;
   // Rangos de desviación: > 0% Adelantado · 0% a −5% En control (verde) ·
   // −5% a −10% Alerta (ámbar) · < −10% Crítico (rojo)
   r.semaforo = r.desvio>=-5 ? '#3fb950' : r.desvio>=-10 ? '#F5B800' : '#ef4444';
@@ -4391,12 +4391,11 @@ function avProyecto(hist, hoy, venceProyecto){
 
 // ── Avance de cada proyecto en Portafolio = mismo cálculo que el Informe ──
 // Resumen de una épica a partir de la respuesta del informe (avance por fases)
-function avResumenEpica(d, hoy, venceOverride){
+function avResumenEpica(d, hoy){
   const epPort = Array.isArray(typeof epics!=='undefined'?epics:null) ? epics.find(x=>x.key===d.epica?.key) : null;
   const ref = { vence: d.epica?.vence || epPort?.duedate || null, inicio: d.epica?.inicio || epPort?.fechaInicio || null };
   const hist=(d.entregables||[]).map(e=>({ ...e, real:avReal(e), vent:avVentanas(e, ref) }));
-  // venceOverride: fecha fin a usar para vencido/atraso (Resumen › Plazo usa Fecha fin plan producción)
-  return avProyecto(hist, hoy, venceOverride || ref.vence);
+  return avProyecto(hist, hoy, ref.vence);
 }
 let portAvanceEnCurso=false;
 async function portAvanceCalcular(){
@@ -4457,7 +4456,7 @@ const RS_DESDE = '2026-03';
 const rsMesesDesde = () => { const h=new Date(), [y,m]=RS_DESDE.split('-').map(Number);
   return Math.max(1,(h.getFullYear()-y)*12+(h.getMonth()+1-m)+1); };
 const RS_PESOS = { plazo:25, entrega:20, calidad:20, capacidad:15, costos:15, gobierno:5 };
-const RS_NOMBRES = { plazo:'Plazo', entrega:'Avance de entregables', calidad:'Calidad', capacidad:'Capacidad', costos:'Costos', gobierno:'Gobierno y datos' };
+const RS_NOMBRES = { plazo:'Plazo', entrega:'Entrega de desarrollo', calidad:'Calidad', capacidad:'Capacidad', costos:'Costos', gobierno:'Gobierno y datos' };
 const RS_G='#3fb950', RS_A='#F5B800', RS_R='#ef4444', RS_B='#58a6ff';
 let rsDatos=null, rsHist=null, rsMes=null, rsCargando=false;
 
@@ -4482,20 +4481,8 @@ function rsMeses(){
 }
 
 // Plazo del mes en curso: mismo cálculo del Informe sobre los proyectos en curso
-// Fecha fin de una épica para vencidos y atraso en Resumen › Plazo:
-// Fecha fin plan producción; si está vacía, la Fecha de vencimiento de la épica
-function rsFinPlanEpica(key){
-  const ep=(typeof epics!=='undefined'&&Array.isArray(epics)?epics:[]).find(e=>e.key===key)||{};
-  return ep.finPlanProd || ep.duedate || infCache[key]?.epica?.vence || null;
-}
 function rsPlazoActual(){
-  const hoy=new Date().toISOString().slice(0,10);
-  const lista=(typeof mtProyDatos==='function'?(mtProyDatos()||[]):[]).filter(x=>x.fase!=='Producción')
-    .map(x=>{
-      const fin=rsFinPlanEpica(x.key);
-      const pr=(infCache[x.key] && avResumenEpica(infCache[x.key],hoy,fin)) || x.pr;
-      return { ...x, pr, vencido: !!(fin && fin<hoy && pr.real<99.95) };
-    });
+  const lista=(typeof mtProyDatos==='function'?(mtProyDatos()||[]):[]).filter(x=>x.fase!=='Producción');
   if(!lista.length) return null;
   const conPlan=lista.filter(x=>x.pr.plan!==null);
   const prom=a=>a.length?a.reduce((s,v)=>s+v,0)/a.length:null;
@@ -4503,12 +4490,7 @@ function rsPlazoActual(){
     control:lista.filter(x=>x.semaforo==='En control').length,
     alerta:lista.filter(x=>x.semaforo==='Alerta').length,
     critico:lista.filter(x=>x.semaforo==='Crítico').length,
-    indices:conPlan.filter(x=>x.pr.indice!==null&&x.pr.indice!==undefined).map(x=>x.pr.indice),
-    evpv:conPlan.filter(x=>x.pr.pv>0).map(x=>({ ev:x.pr.ev, pv:x.pr.pv })),
-    detalle:conPlan.filter(x=>x.pr.pv>0).map(x=>{ const eg=(typeof epics!=='undefined'&&Array.isArray(epics)?epics:[]).find(e=>e.key===x.key)||{};
-      return { grupo:'En curso', key:x.key, codigo:x.codigo||eg.codigo||x.key, nombre:x.nombre||eg.summary||'',
-        plan:x.pr.plan, real:x.pr.realSub, bac:x.pr.bac, pv:x.pr.pv, ev:x.pr.ev, spi:x.pr.ev/x.pr.pv }; }),
-    spi:prom(conPlan.filter(x=>x.pr.indice!==null&&x.pr.indice!==undefined).map(x=>x.pr.indice)),
+    spi:prom(conPlan.filter(x=>x.pr.indice).map(x=>x.pr.indice)),
     atraso:prom(conPlan.map(x=>x.pr.atraso||0)),
     vencidos:lista.filter(x=>x.vencido).length };
 }
@@ -4522,32 +4504,6 @@ function rsEstadoEn(actual, estados, creado, fecha){
   for(const h of estados){ if(h.fecha<=fecha) est=h.a; else break; }
   return est;
 }
-// Entregables de una épica tal como estaban a una fecha (estado según historial, subtareas cerradas a esa fecha)
-function rsEntregablesEn(d, fecha){
-  return (d.entregables||[]).map(e=>{
-    const est=rsEstadoEn(e.estado, e.estados, e.creado, fecha);
-    if(est===null) return null;
-    return { ...e, estado:est, estadoCat:'',
-      subtareas:(e.subtareas||[]).map(st=>{ const ok=!!(st.cierre && st.cierre<=fecha);
-        return { ...st, estadoCat: ok?'done':'indeterminate', estado: ok?(st.estado||'Cerrado'):'En curso' }; }) };
-  }).filter(Boolean);
-}
-// EV y PV de un proyecto cerrado en el mes, solo con campos de la épica en Jira (Earned Schedule, PMI):
-//   SPI(t) = duración plan ÷ duración real = (Fin Plan − Inicio) ÷ (Fin Real − Inicio), en días hábiles sin domingos
-//   Inicio = Fecha de inicio · Fin Plan = Fecha de vencimiento · Fin Real = Fecha de vencimiento real
-//   (si está vacía, Fecha de vencimiento → SPI 1,00).
-//   BAC = entregables del proyecto; PV = BAC; EV = BAC × SPI(t)
-function rsEvPvCerrado(t){
-  const ini=t.inicio, plan=t.finPlanProd, real=t.finRealProd;
-  if(!ini || !plan || !real || plan<ini) return null;
-  const durPlan=avHabiles(ini, plan), durReal=avHabiles(ini, real);
-  if(!(durPlan>0) || !(durReal>0)) return null;
-  const d=infCache[t.key];
-  const bac=Math.max(1, (d?.entregables||[]).length);
-  const spi=durPlan/durReal;
-  return { ev:bac*spi, pv:bac, spi };
-}
-function rsSpiCerrado(t){ const x=rsEvPvCerrado(t); return x?x.spi:null; }
 // Plazo a una fecha pasada: el mismo cálculo del Informe sobre los proyectos y entregables
 // tal como estaban ese día (estados del changelog y subtareas cerradas hasta esa fecha)
 function rsPlazoEn(fecha){
@@ -4556,18 +4512,8 @@ function rsPlazoEn(fecha){
   infProyectos.forEach(p=>{
     const d=infCache[p.key]; if(!d) return;
     const ep=d.epica||{};
-    // ¿En curso a esa fecha? Por campos de la épica en Jira (no por el historial de estados):
-    //  · Estado actual válido (Pendiente, Análisis, Desarrollo, Pruebas o Producción; no Stand by/Desestimado)
-    //  · Fecha de inicio ≤ fecha de corte
-    //  · Sin Fecha fin real producción, o posterior a la fecha de corte
-    const epG=(typeof epics!=='undefined'&&Array.isArray(epics)?epics:[]).find(e=>e.key===p.key)||{};
-    const faseHoy=mtEstadoEpica(epG.status||ep.estado||'');
-    if(!faseHoy) return;
-    const inicioEp=epG.fechaInicio||ep.inicio||null;
-    const finRealEp=epG.finRealProdEp||null;
-    if(!inicioEp || inicioEp>fecha) return;            // aún no iniciaba
-    if(finRealEp && finRealEp<=fecha) return;          // ya estaba en producción
-    if(faseHoy==='Producción' && !finRealEp) return;   // en producción sin fecha real: no se puede ubicar
+    const fase=mtEstadoEpica(rsEstadoEn(ep.estado, ep.estados, ep.creado, fecha)||'');
+    if(!fase || fase==='Producción') return;           // solo proyectos en curso a esa fecha
     const ents=(d.entregables||[]).map(e=>{
       const est=rsEstadoEn(e.estado, e.estados, e.creado, fecha);
       if(est===null) return null;
@@ -4576,11 +4522,10 @@ function rsPlazoEn(fecha){
           return { ...st, estadoCat: ok?'done':'indeterminate', estado: ok?(st.estado||'Cerrado'):'En curso' }; }) };
     }).filter(Boolean);
     if(!ents.length) return;
-    const vence=rsFinPlanEpica(p.key) || ep.vence || null;   // Fecha fin plan producción (o vencimiento)
-    const pr=avResumenEpica({ ...d, entregables:ents }, fecha, vence);
+    const pr=avResumenEpica({ ...d, entregables:ents }, fecha);
     if(!pr) return;
-    lista.push({ key:p.key, codigo:ep.codigo||epG.codigo||p.key, nombre:p.summary||epG.summary||'',
-      pr, semaforo: pr.plan===null?'Sin plan':pr.desvio>=-5?'En control':pr.desvio>=-10?'Alerta':'Crítico',
+    const vence=ep.vence||null;
+    lista.push({ pr, semaforo: pr.plan===null?'Sin plan':pr.desvio>=-5?'En control':pr.desvio>=-10?'Alerta':'Crítico',
       vencido: !!(vence && vence<fecha && pr.real<99.95) });
   });
   if(!lista.length) return null;
@@ -4590,40 +4535,28 @@ function rsPlazoEn(fecha){
     control:lista.filter(x=>x.semaforo==='En control').length,
     alerta:lista.filter(x=>x.semaforo==='Alerta').length,
     critico:lista.filter(x=>x.semaforo==='Crítico').length,
-    indices:conPlan.filter(x=>x.pr.indice!==null&&x.pr.indice!==undefined).map(x=>x.pr.indice),
-    evpv:conPlan.filter(x=>x.pr.pv>0).map(x=>({ ev:x.pr.ev, pv:x.pr.pv })),
-    detalle:conPlan.filter(x=>x.pr.pv>0).map(x=>{ const eg=(typeof epics!=='undefined'&&Array.isArray(epics)?epics:[]).find(e=>e.key===x.key)||{};
-      return { grupo:'En curso', key:x.key, codigo:x.codigo||eg.codigo||x.key, nombre:x.nombre||eg.summary||'',
-        plan:x.pr.plan, real:x.pr.realSub, bac:x.pr.bac, pv:x.pr.pv, ev:x.pr.ev, spi:x.pr.ev/x.pr.pv }; }),
-    spi:prom(conPlan.filter(x=>x.pr.indice!==null&&x.pr.indice!==undefined).map(x=>x.pr.indice)),
+    spi:prom(conPlan.filter(x=>x.pr.indice).map(x=>x.pr.indice)),
     atraso:prom(conPlan.map(x=>x.pr.atraso||0)),
     vencidos:lista.filter(x=>x.vencido).length, reconstruido:true };
 }
 
 // Proyectos terminados (pasaron a Producción): En plazo · Replanificado · Retraso
 // Retraso: producción más de 2 días hábiles después del término vigente.
-// Retraso: Fecha de vencimiento real más de 2 días hábiles después de la Fecha de vencimiento.
-// Replanificado: con Fecha de vencimiento real, dentro de la tolerancia (±2 días hábiles).
-// En plazo: sin Fecha de vencimiento real.
+// Replanificado: en término, pero la Fecha de vencimiento cambió al menos una vez.
+// En plazo: en o antes del término (±2 días hábiles) y sin cambios de fecha.
 const RS_TERM = { 'En plazo':'#3fb950', 'Replanificado':'#F5B800', 'Retraso':'#ef4444' };
 function rsClasificarTerminado(t){
   // Desvío = Fecha fin real producción − Fecha fin plan producción (días hábiles sin domingos).
   // Si la épica no tiene alguna de las dos fechas, no hay desvío ni clasificación.
-  // Campos de la épica en Jira: Inicio = Fecha de inicio · Fin Plan = Fecha de vencimiento ·
-  // Fin Real = Fecha de vencimiento real (customfield_11570); si está vacía, la épica
-  // no se replanificó y Fin Real = Fecha de vencimiento (desvío 0)
-  const ep=(typeof epics!=='undefined'&&Array.isArray(epics)?epics:[]).find(e=>e.key===t.key);
-  const inicio = ep ? (ep.fechaInicio||null) : (t.inicio||null);
-  const plan = ep ? (ep.duedate||null) : (t.vence||null);
-  const replanFecha = ep ? (ep.vencReplan||null) : null;
-  const real = replanFecha || plan;
-  if(!real || !plan) return { ...t, inicio, finPlanProd:plan, finRealProd:real, clase:'Sin plan', dias:null };
+  const real = t.finRealProd!==undefined ? t.finRealProd : t.produccion;
+  const plan = t.finPlanProd!==undefined ? t.finPlanProd : t.termino;
+  if(!real || !plan) return { ...t, clase:'Sin plan', dias:null };
   const dias = real>plan ? avHabiles(avSumar(plan,1), real)
              : real<plan ? -avHabiles(avSumar(real,1), plan) : 0;
-  // Replanificado: tiene Fecha de vencimiento real distinta del vencimiento, dentro de la tolerancia
-  const replan=!!(replanFecha && replanFecha!==plan);
-  const clase = dias>2 ? 'Retraso' : (replan ? 'Replanificado' : 'En plazo');
-  return { ...t, inicio, finPlanProd:plan, finRealProd:real, clase, dias };
+  const clase = dias>2 ? 'Retraso' : (t.replanificaciones>0 ? 'Replanificado' : 'En plazo');
+  const diasOriginal = t.original && t.original!==plan
+    ? (real>t.original ? avHabiles(avSumar(t.original,1), real) : -avHabiles(avSumar(real,1), t.original)) : dias;
+  return { ...t, clase, dias, diasOriginal };
 }
 
 // Indicadores de un mes
@@ -4640,7 +4573,8 @@ function rsCalcular(mes){
   // ── Plazo: en vivo para el mes actual (y para "Todos": estado actual de la cartera);
   //    reconstruido con el historial de Jira para meses anteriores
   const pl = (todos || mes===hoyIso.slice(0,7)) ? rsPlazoActual() : rsPlazoEn(fin);
-  r.plazo = pl ? { ...pl, pts:[ rsPts(pl.spi,0.95,0.90), rsPts(pl.total?pl.critico/pl.total*100:null,10,25,-1) ] } : null;
+  r.plazo = pl ? { ...pl, pts:[ rsPts(pl.spi,0.95,0.90), rsPts(pl.total?pl.critico/pl.total*100:null,10,25,-1),
+    rsPts(pl.vencidos,0,2,-1), rsPts(pl.atraso,5,15,-1) ] } : null;
 
   // ── Proyectos terminados en el mes (o en el periodo, con "Todos")
   const term=(d.terminados||[]).map(rsClasificarTerminado).filter(t=>enMes(t.produccion));
@@ -4652,34 +4586,6 @@ function rsCalcular(mes){
     sinPlan:term.length-conPlanT.length,
     cumplimiento: conPlanT.length ? term.filter(t=>t.clase==='En plazo').length/conPlanT.length*100 : null };
   r.term.pt = rsPts(r.term.cumplimiento,85,70);
-  // SPI de la cartera (PMI): ΣEV ÷ ΣPV de los proyectos en curso al corte y de los cerrados en el mes
-  // (estos medidos en su Fin Plan), para que un cierre con retraso baje el SPI
-  if(r.plazo){
-    const cerrDet=term.map(t=>{ const x=rsEvPvCerrado(t); return x?{ grupo:'Cerrado', key:t.key, codigo:t.codigo, nombre:t.nombre,
-      inicio:t.inicio, finPlan:t.finPlanProd, finReal:t.finRealProd, bac:x.pv, pv:x.pv, ev:x.ev, spi:x.spi }:null; }).filter(Boolean);
-    const cerr=cerrDet;
-    r.plazo.detalleSpi=[...(r.plazo.detalle||[]), ...cerrDet];
-    r.plazo.corte=corte;
-    const curso=r.plazo.evpv||[];
-    const suma=(a,k)=>a.reduce((x,v)=>x+v[k],0);
-    const todos=[...curso, ...cerr];
-    r.plazo.ev=suma(todos,'ev'); r.plazo.pv=suma(todos,'pv');
-    r.plazo.spiEnCurso=suma(curso,'pv')>0?suma(curso,'ev')/suma(curso,'pv'):null;
-    r.plazo.spiCerrados=suma(cerr,'pv')>0?suma(cerr,'ev')/suma(cerr,'pv'):null;
-    r.plazo.nSpi=todos.length;
-    r.plazo.spi=r.plazo.pv>0?r.plazo.ev/r.plazo.pv:null;
-    r.plazo.pts[0]=rsPts(r.plazo.spi,0.95,0.90);
-  }
-  // Barras de los proyectos cerrados en el mes (o periodo) con plan, solo con campos de Jira:
-  // Desvío = Fecha fin real producción − Fecha fin plan producción (días hábiles sin domingos).
-  // Con retraso = desvío > 2 días (tolerancia); desvío promedio = promedio de todos (adelantos restan).
-  const conRetraso=conPlanT.filter(t=>t.dias>2);
-  r.term.conPlan=conPlanT.length;
-  r.term.fueraOrig=conRetraso.length;
-  r.term.pctFueraOrig = conPlanT.length ? conRetraso.length/conPlanT.length*100 : null;
-  r.term.desvioOrig = conPlanT.length ? conPlanT.reduce((a,t)=>a+t.dias,0)/conPlanT.length : null;
-  r.term.ptVenc   = rsPts(r.term.pctFueraOrig,15,30,-1);   // ≤15% verde · ≤30% ámbar · >30% rojo
-  r.term.ptAtraso = rsPts(r.term.desvioOrig,2,5,-1);       // ≤2 d verde · ≤5 d ámbar · >5 d rojo
 
   // ── Entrega: entregables con fin plan desarrollo en el mes
   const comp=(d.entregables||[]).filter(e=>enMes(e.plan));
@@ -4747,7 +4653,7 @@ function rsCalcular(mes){
   r.score={};
   Object.keys(RS_PESOS).forEach(k=>{ r.score[k]= r[k] ? rsProm(r[k].pts) : null; });
   // Plazo también considera el cumplimiento de término de los proyectos terminados
-  r.score.plazo = rsProm([ ...(r.plazo?.pts||[]), r.term.pt, r.term.ptVenc, r.term.ptAtraso ]);
+  r.score.plazo = rsProm([ ...(r.plazo?.pts||[]), r.term.pt ]);
   let sp=0, sw=0;
   Object.entries(RS_PESOS).forEach(([k,w])=>{ if(r.score[k]!==null){ sp+=r.score[k]*w; sw+=w; } });
   r.salud = sw ? Math.round(sp/sw) : null;
@@ -4841,14 +4747,14 @@ function rsRender(){
       <div style="flex:1">${p?rsGauge(p.spi,1.1,rsColPts(rsPts(p.spi,0.95,0.90)),rsFmt(p.spi,2),'cumplimiento (SPI)',120):`<div class="mt-empty" style="padding:10px 0">${infProyectos?'Sin proyectos en curso':'Calculando el SPI…'}</div>`}</div></div>
      ${rsLeg([[`En plazo ${t.enPlazo}`,RS_TERM['En plazo']],[`Replanificado ${t.replan}`,RS_TERM['Replanificado']],[`Retraso ${t.retraso}`,RS_TERM['Retraso']]].concat(t.sinPlan?[[`Sin plan ${t.sinPlan}`,'#8b949e']]:[]))}
      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Cumplimiento de término (en plazo ÷ terminados con plan): <b style="color:${rsColPts(t.pt)}">${t.cumplimiento===null?'–':Math.round(t.cumplimiento)+'%'}</b></div>
-     ${t.conPlan?`${rsBar(`Cerrados con retraso (desvío > 2 días)`,t.fueraOrig,t.conPlan,rsColPts(t.ptVenc),`${t.fueraOrig} de ${t.conPlan}`)}
-     ${rsBar(`Desvío promedio (cerrados)`,t.desvioOrig===null?null:Math.abs(t.desvioOrig),20,rsColPts(t.ptAtraso),`${t.desvioOrig>0?'+':''}${rsFmt(t.desvioOrig,1)} días`)}`:''}`,
+     ${p?`${rsBar('Proyectos vencidos (en curso)',p.vencidos,Math.max(p.total,1),rsColPts(rsPts(p.vencidos,0,2,-1)),`${p.vencidos} de ${p.total}`)}
+     ${rsBar('Atraso promedio (en curso)',p.atraso,60,rsColPts(rsPts(p.atraso,5,15,-1)),`${rsFmt(p.atraso)} días`)}`:''}`,
     '', sp(x=>x.plazo?.spi??null,v=>rsColPts(rsPts(v,0.95,0.90)),v=>rsFmt(v,2),'SPI',
-      `<a href="#" onclick="event.preventDefault();rsDetalleSpi()" style="font-size:11px;color:var(--accent,#58a6ff)">Detalle</a>`));
+      `<a href="#" onclick="event.preventDefault();rsDetalleTerminados()" style="font-size:11px;color:var(--accent,#58a6ff)">Detalle</a>`));
 
   // 2. Entrega
   const e=r.entrega;
-  html+=rsCard('2. Avance de entregables',esTodos?'Entregables con fin de desarrollo en el periodo':'Entregables con fin de desarrollo en el mes', r.score.entrega,
+  html+=rsCard('2. Entrega de desarrollo',esTodos?'Entregables con fin de desarrollo en el periodo':'Entregables con fin de desarrollo en el mes', r.score.entrega,
     e ? `<div style="display:flex;align-items:center;gap:10px">${rsDonut([['A tiempo',e.aTiempo,RS_G],['Tarde',e.tarde,RS_R],['Pendientes',e.comp-e.entr,'#8b949e']],(e.pctTiempo===null?'–':Math.round(e.pctTiempo)+'%'),'a tiempo')}
       <div style="flex:1">${rsGauge(e.efic,100,rsColPts(rsPts(e.efic,90,75)),Math.round(e.efic)+'%','eficiencia de entrega',120)}</div></div>
       ${rsLeg([[`A tiempo ${e.aTiempo}`,RS_G],[`Tarde ${e.tarde}`,RS_R],[`Sin entregar ${e.comp-e.entr}`,'#8b949e']])}
@@ -4938,46 +4844,6 @@ function rsTermBloque(all,meses,sel,r){
       <span style="margin-left:auto">Cumplimiento <b style="color:${rsColPts(t.pt)}">${t.cumplimiento===null?'–':Math.round(t.cumplimiento)+'%'}</b></span></div>
     <svg viewBox="0 0 ${W} ${h+14}" width="100%">${svg}</svg></div>`;
 }
-// Popup con el detalle del SPI (PMI) del mes elegido: EV, PV y SPI por proyecto y de la cartera
-function rsDetalleSpi(){
-  const r=rsCalcular(rsMes||'todos'), pl=r.plazo||{};
-  const lst=(pl.detalleSpi||[]).slice().sort((a,b)=>a.grupo.localeCompare(b.grupo)||a.spi-b.spi);
-  const fC=v=>{ if(!v) return '–'; const [y,m,d]=v.split('-'); return `${d}-${['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][+m-1]}`; };
-  const n1=v=>v===null||v===undefined?'–':rsFmt(v,1), n2=v=>v===null||v===undefined?'–':rsFmt(v,2);
-  const colSpi=v=>rsColPts(rsPts(v,0.95,0.90));
-  const sum=(a,k)=>a.reduce((x,v)=>x+(v[k]||0),0);
-  const ev=sum(lst,'ev'), pv=sum(lst,'pv');
-  document.getElementById('rs-modal')?.remove();
-  const m=document.createElement('div'); m.id='rs-modal';
-  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
-  m.innerHTML=`<div style="background:var(--bg-surface,#161b22);border:1px solid var(--border);border-radius:12px;max-width:1100px;width:100%;max-height:85vh;overflow:auto;padding:16px 18px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-      <span style="font-size:14px;font-weight:700;color:var(--text-primary)">Cumplimiento (SPI) · ${rsMes==='todos'?'periodo completo':mtMesCorto(rsMes)+' '+rsMes.slice(0,4)}${pl.corte?` · corte ${fC(pl.corte)}`:''}</span>
-      <button onclick="document.getElementById('rs-modal').remove()" style="background:none;border:none;color:var(--text-muted);font-size:18px;cursor:pointer">✕</button></div>
-    ${lst.length?`<table class="mt-tabla"><thead><tr><th>Grupo</th><th>Código</th><th>Proyecto</th>
-      <th>Inicio</th><th>Fin Plan</th><th>Fin Real</th>
-      <th style="text-align:right">% Plan</th><th style="text-align:right">% Real</th>
-      <th style="text-align:right">BAC</th><th style="text-align:right">PV</th><th style="text-align:right">EV</th><th style="text-align:right">SPI</th></tr></thead><tbody>
-      ${lst.map(x=>`<tr><td style="color:var(--text-muted)">${x.grupo}</td>
-        <td><a class="jlink" href="${JIRA_BASE}${x.key}" target="_blank">${esc(x.codigo||x.key)}</a></td>
-        <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(x.nombre||'')}">${esc(x.nombre||'')}</td>
-        <td>${x.grupo==='Cerrado'?fC(x.inicio):'–'}</td><td>${x.grupo==='Cerrado'?fC(x.finPlan):'–'}</td><td>${x.grupo==='Cerrado'?fC(x.finReal):'–'}</td>
-        <td style="text-align:right">${x.grupo==='En curso'?n1(x.plan)+'%':'–'}</td>
-        <td style="text-align:right">${x.grupo==='En curso'?n1(x.real)+'%':'–'}</td>
-        <td style="text-align:right">${x.bac}</td><td style="text-align:right">${n2(x.pv)}</td><td style="text-align:right">${n2(x.ev)}</td>
-        <td style="text-align:right;font-weight:600;color:${colSpi(x.spi)}">${n2(x.spi)}</td></tr>`).join('')}
-      <tr style="border-top:2px solid var(--border);font-weight:700"><td colspan="9">Cartera (ΣEV ÷ ΣPV) · ${lst.length} proyectos</td>
-        <td style="text-align:right">${n2(pv)}</td><td style="text-align:right">${n2(ev)}</td>
-        <td style="text-align:right;color:${colSpi(pv>0?ev/pv:null)}">${n2(pv>0?ev/pv:null)}</td></tr>
-      </tbody></table>`:`<div class="mt-empty">Sin proyectos con plan para calcular el SPI.</div>`}
-    <div style="font-size:10px;color:var(--text-muted);margin-top:8px">SPI (PMI) = EV ÷ PV. BAC = entregables del proyecto.
-      En curso: PV = % plan × BAC, EV = % real × BAC, medidos a la fecha de corte (% plan y % real de las historias con Entregable = Sí).
-      Cerrados en el mes (Earned Schedule): SPI = (Fin Plan − Inicio) ÷ (Fin Real − Inicio) en días hábiles sin domingos; PV = BAC, EV = BAC × SPI.
-      Inicio: Fecha de inicio · Fin Plan: Fecha de vencimiento · Fin Real: Fecha de vencimiento real (si está vacía, Fecha de vencimiento).
-      Cartera = ΣEV ÷ ΣPV. Verde ≥ 0,95 · ámbar ≥ 0,90 · rojo &lt; 0,90.</div></div>`;
-  m.addEventListener('click',e=>{ if(e.target===m) m.remove(); });
-  document.body.appendChild(m);
-}
 // Popup con el detalle de los proyectos terminados del mes elegido (o del periodo)
 function rsDetalleTerminados(){
   const r=rsCalcular(rsMes||'todos'), lst=r.term.lista.slice().sort((a,b)=>(a.produccion||'').localeCompare(b.produccion||''));
@@ -4990,17 +4856,17 @@ function rsDetalleTerminados(){
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
       <span style="font-size:14px;font-weight:700;color:var(--text-primary)">Proyectos terminados · ${rsMes==='todos'?'periodo completo':mtMesCorto(rsMes)+' '+rsMes.slice(0,4)}</span>
       <button onclick="document.getElementById('rs-modal').remove()" style="background:none;border:none;color:var(--text-muted);font-size:18px;cursor:pointer">✕</button></div>
-    ${lst.length?`<table class="mt-tabla"><thead><tr><th>Código</th><th>Proyecto</th><th>Inicio</th><th>Fin Plan</th><th>Fin Real</th>
+    ${lst.length?`<table class="mt-tabla"><thead><tr><th>Código</th><th>Proyecto</th><th>Inicio</th><th>Fin</th><th>Producción</th>
       <th style="text-align:right">Desvío</th><th>Clasificación</th></tr></thead><tbody>
       ${lst.map(t=>`<tr><td><a class="jlink" href="${JIRA_BASE}${t.key}" target="_blank">${esc(t.codigo)}</a></td>
         <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(t.nombre)}">${esc(t.nombre)}</td>
         <td title="Fecha de inicio de la épica">${fC(t.inicio)}</td>
-        <td title="Fecha de vencimiento de la épica">${t.finPlanProd?fC(t.finPlanProd):'<span style="color:var(--text-muted)">–</span>'}</td>
-        <td title="Fecha de vencimiento real (o Fecha de vencimiento si no se replanificó)">${t.finRealProd?fC(t.finRealProd):'<span style="color:var(--text-muted)">–</span>'}</td>
+        <td title="Fecha fin plan producción">${t.finPlanProd?fC(t.finPlanProd):'<span style="color:var(--text-muted)">–</span>'}</td>
+        <td title="Fecha fin real producción">${t.finRealProd?fC(t.finRealProd):`<span style="color:var(--text-muted)" title="Sin Fecha fin real producción · pasó a Producción el ${fC(t.produccion)}">–</span>`}</td>
         <td style="text-align:right;color:${t.dias===null?'var(--text-muted)':t.dias>2?RS_R:RS_G}">${t.dias===null?'–':(t.dias>0?'+':'')+t.dias+' d'}</td>
-        <td style="color:${col(t.clase)};font-weight:600">${t.clase}</td></tr>`).join('')}
+        <td style="color:${col(t.clase)};font-weight:600">${t.clase}${t.clase==='Replanificado'&&t.diasOriginal>0?` · +${t.diasOriginal} d sobre el original`:''}</td></tr>`).join('')}
       </tbody></table>`:'<div class="mt-empty">No hay proyectos terminados en este periodo.</div>'}
-    <div style="font-size:10px;color:var(--text-muted);margin-top:8px">Campos de la épica en Jira. Inicio: Fecha de inicio. Fin Plan: Fecha de vencimiento. Fin Real: Fecha de vencimiento real (si está vacía, Fecha de vencimiento). Desvío: Fin Real − Fin Plan, en días hábiles sin domingos; tolerancia de 2 días. Sin alguna de las dos fechas no se calcula el desvío (“Sin plan”). Replanificado: con Fecha de vencimiento real dentro de la tolerancia.</div></div>`;
+    <div style="font-size:10px;color:var(--text-muted);margin-top:8px">Fechas de la épica. Inicio: Fecha de inicio. Fin: Fecha fin plan producción. Producción: Fecha fin real producción. Desvío: Fecha fin real producción − Fecha fin plan producción, en días hábiles sin domingos; tolerancia de 2 días. Sin alguna de las dos fechas no se calcula el desvío (“Sin plan”). Replanificado: la fecha Fin cambió en el historial de Jira.</div></div>`;
   m.addEventListener('click',ev=>{ if(ev.target===m) m.remove(); });
   document.body.appendChild(m);
 }
