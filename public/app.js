@@ -4293,11 +4293,27 @@ function avVentanas(e, ref){
   if(!fin) return null;
   const finEpica = false;
   const dev=avSubDev(e).filter(st=>st.vence && st.vence<=fin);
+  // Fecha inicio QA registrada en Jira: marca el inicio real del tramo de pruebas en el plan
+  const iniQA=(e.fechasFases?.qa||[])[0]||null;
   if(!dev.length){
     // Sin fechas en las subtareas: las fases se reparten entre el inicio y la fecha fin
     // según sus pesos (Análisis 15, Desarrollo 45, QA 20, UAT 15); producción en la fecha fin
     const ini = e.inicio || null;
     if(!ini || ini>fin) return null;
+    if(iniQA && iniQA>ini && iniQA<=fin){
+      // Con Fecha inicio QA: Análisis y Desarrollo (15:45) van del inicio al día anterior a QA,
+      // y QA y UAT del inicio de QA al vencimiento (Fecha fin plan QA o reparto 20:15)
+      const finDev=avSumar(iniQA,-1), totA=Math.max(1,avHabiles(ini,finDev));
+      const nAn=Math.max(1,Math.round(totA*AV_PESOS.analisis/(AV_PESOS.analisis+AV_PESOS.desarrollo)));
+      let finAn=avSumarHabiles(avSumar(ini,-1),nAn); if(finAn>finDev) finAn=finDev;
+      const an=[ini,finAn], devWin=[finAn<finDev?avSumar(finAn,1):finDev, finDev];
+      let qa, uat;
+      if(e.finQA && e.finQA>=iniQA && e.finQA<=fin){ qa=[iniQA,e.finQA]; uat=[avSumar(e.finQA,1),fin]; }
+      else { const t=avHabiles(iniQA,fin), nQA=Math.max(1,Math.round(t*AV_PESOS.qa/(AV_PESOS.qa+AV_PESOS.uat)));
+        const fQA=t>1?avSumarHabiles(avSumar(iniQA,-1),nQA):fin; qa=[iniQA,fQA]; uat=[avSumar(fQA,1),fin]; }
+      if(uat[0]>uat[1]) uat=[uat[1],uat[1]];
+      return { an, devWin, devIni:devWin[0], vences:null, qa, uat, fin, estimado:!e.finQA, repartido:true, finEpica };
+    }
     const tot=Math.max(1,avHabiles(ini,fin));
     const pesos=[AV_PESOS.analisis,AV_PESOS.desarrollo,AV_PESOS.qa,AV_PESOS.uat];
     const sum=pesos.reduce((a,b)=>a+b,0);
@@ -4313,7 +4329,8 @@ function avVentanas(e, ref){
   const devIni=dev.map(st=>st.inicio||st.vence).sort()[0];
   const devFin=dev.map(st=>st.vence).sort().slice(-1)[0];
   const an = e.inicio && e.inicio<devIni ? [e.inicio, avSumar(devIni,-1)] : null;
-  const pruIni=avSumar(devFin,1);
+  // Las pruebas empiezan en la Fecha inicio QA si está registrada; si no, el día después de la última subtarea
+  const pruIni=(iniQA && iniQA<=fin) ? iniQA : avSumar(devFin,1);
   let qa, uat, estimado=false;
   if(e.finQA && e.finQA>=pruIni && e.finQA<=fin){
     qa=[pruIni, e.finQA]; uat=[avSumar(e.finQA,1), fin];
