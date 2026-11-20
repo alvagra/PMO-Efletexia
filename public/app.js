@@ -5419,8 +5419,15 @@ function infCronogramaHtml(filas, hoy, proy={}){
   const verHoy=!datos.every(d=>d.entrega);
   const D0=Math.min(...(verHoy?[corte]:[]),...todas.map(b=>b.a))-3*DIA;
   const D1=Math.max(...(verHoy?[corte+DIA]:[]),...todas.map(b=>b.b),...(pFin?[pFin+DIA]:[]))+4*DIA;
-  const x=t=>+((t-D0)/(D1-D0)*100).toFixed(3);
-  const dias=Math.round((D1-D0)/DIA), paso=dias<=50?7:dias<=130?14:28;
+  // Escala solo de días hábiles: sábados y domingos no ocupan espacio en el gráfico.
+  // Cada fecha se ubica según los días de lunes a viernes que hay entre el inicio de la escala y ella;
+  // una fecha en fin de semana cae en el borde del lunes siguiente.
+  const habilAntes={}; let nH=0;
+  for(let t=D0; t<=D1+DIA; t+=DIA){ habilAntes[t]=nH; const w=new Date(t).getDay(); if(w!==0&&w!==6) nH++; }
+  const NH=Math.max(1,habilAntes[D1]);
+  const posH=t=>{ if(t<=D0) return 0; if(t>=D1) return NH; const d=new Date(t); d.setHours(0,0,0,0); return habilAntes[d.getTime()] ?? NH; };
+  const x=t=>+(posH(t)/NH*100).toFixed(3);
+  const dias=NH, paso=dias<=40?5:dias<=100?10:20;
 
   // ── Mensaje ejecutivo ──
   const n=datos.length, nEnt=datos.filter(d=>d.entrega).length, nAtr=datos.filter(d=>!d.entrega&&d.atraso).length;
@@ -5448,16 +5455,17 @@ function infCronogramaHtml(filas, hoy, proy={}){
     if(b>a) meses+=`<div style="position:absolute;left:${x(a)}%;width:${x(b)-x(a)}%;top:0;height:20px;border-left:1px solid var(--border);box-sizing:border-box;padding-left:8px;font-size:10.5px;font-weight:700;letter-spacing:.08em;line-height:20px;white-space:nowrap;overflow:hidden;color:var(--text-muted);text-transform:uppercase">${MESES_L[d.getMonth()]} ${d.getFullYear()}</div>`;
     m=sig;
   }
-  // Días del calendario: un número por día (cada 2 días en proyectos largos); sábados y
-  // domingos en tono más tenue y sombreados; líneas guía al inicio de cada semana (lunes)
-  const pasoDia=dias<=75?1:dias<=150?2:7;
-  const anchoDia=x(D0+DIA)-x(D0);
+  // Días del calendario: solo de lunes a viernes, un número por día (cada 2 días en proyectos
+  // largos, uno por semana en los muy largos); línea guía al inicio de cada semana (lunes)
+  const pasoDia=dias<=55?1:dias<=110?2:5;
+  const anchoDia=100/NH;
   let ix=0;
-  for(let t=D0; t<D1; t+=DIA, ix++){
+  for(let t=D0; t<D1; t+=DIA){
     const d=new Date(t), w=d.getDay(), finDe=w===0||w===6, esHoy=verHoy&&t===corte;
-    if(finDe && pasoDia===1) guias+=`<div style="position:absolute;left:${x(t)}%;width:${anchoDia}%;top:0;bottom:0;background:rgba(139,148,158,.06)"></div>`;
+    if(finDe) continue;
+    ix++;
     if(w===1) guias+=`<div style="position:absolute;left:${x(t)}%;top:0;bottom:0;border-left:1px dotted var(--border)"></div>`;
-    if(ix%pasoDia===0 || esHoy)
+    if((ix-1)%pasoDia===0 || esHoy)
       semanas+=`<div style="position:absolute;left:${x(t)}%;width:${anchoDia*Math.max(pasoDia===7?1:pasoDia,1)}%;top:24px;text-align:center;font-size:${dias<=40?10.5:9.5}px;line-height:16px;${esHoy?`color:#fff;font-weight:700;background:${ROJO};border-radius:8px;`:`color:${finDe?'#6e7681':'var(--text-muted)'};`}white-space:nowrap">${d.getDate()}</div>`;
   }
   const marcaHoy=!verHoy?'':`<div style="position:absolute;left:${x(corte)+anchoDia/2}%;top:44px;transform:translateX(-50%);white-space:nowrap;font-size:10.5px;font-weight:700;color:${ROJO};border:1px solid ${ROJO};border-radius:10px;padding:0 8px;background:var(--bg-card,#161b22)">Hoy ${fmt(corte)}</div>`;
