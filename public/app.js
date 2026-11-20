@@ -5404,19 +5404,21 @@ function infCronogramaHtml(filas, hoy, proy={}){
     const ord=[...barras].sort((p,q)=>p.a-q.a || (p.b-p.a)-(q.b-q.a));
     ord.forEach((bb,ix)=>{ const sig=ord[ix+1]; if(!sig || sig.a>=bb.b) return;
       if(sig.a>bb.a) bb.b=sig.a; else if(sig.b>bb.b) sig.a=bb.b; });
-    // Pase real (entregado): Fecha fin real producción; si no hay, fin plan de producción o vencimiento.
-    // Pase planificado (aún no entregado): Fecha fin plan producción.
+    // El rombo de Producción solo se dibuja con fechas de producción registradas en Jira:
+    // entregado → Fecha fin real producción (o, si falta, Fecha fin plan producción);
+    // no entregado → Fecha fin plan producción. Sin esas fechas no hay rombo (no se usa el vencimiento).
     let entrega=null, pasePlan=null;
-    if(fase===5){ const fe=f.finRealProduccion || (ff.produccion||[])[1] || f.vence || null; if(fe) entrega=ms(fe); }
+    const entregado=fase===5;
+    if(entregado){ const fe=f.finRealProduccion || (ff.produccion||[])[1] || null; if(fe) entrega=ms(fe); }
     else if((ff.produccion||[])[1]) pasePlan=ms(ff.produccion[1]);
     const paseVencido=!!pasePlan && pasePlan<corte;
-    return {f,barras,entrega,pasePlan,fase,atraso:barras.some(b=>b.venc)||paseVencido};
+    return {f,barras,entrega,entregado,pasePlan,fase,atraso:barras.some(b=>b.venc)||paseVencido};
   });
   const todas=datos.flatMap(x=>x.barras.map(b=>({a:b.a,b:b.b})).concat(x.entrega?[{a:x.entrega,b:x.entrega+DIA}]:[],x.pasePlan?[{a:x.pasePlan,b:x.pasePlan+DIA}]:[]));
   if(!todas.length) return '<div class="mt-empty" style="padding:18px 0">Ningún entregable tiene fechas por fase registradas en Jira.</div>';
   const pFin=proy.vence?ms(proy.vence):null;
   // Proyecto con todos sus entregables en producción: sin línea "Hoy" y la escala termina en lo entregado
-  const verHoy=!datos.every(d=>d.entrega);
+  const verHoy=!datos.every(d=>d.entregado);
   const D0=Math.min(...(verHoy?[corte]:[]),...todas.map(b=>b.a))-3*DIA;
   const D1=Math.max(...(verHoy?[corte+DIA]:[]),...todas.map(b=>b.b),...(pFin?[pFin+DIA]:[]))+4*DIA;
   // Escala solo de días hábiles: sábados y domingos no ocupan espacio en el gráfico.
@@ -5430,11 +5432,11 @@ function infCronogramaHtml(filas, hoy, proy={}){
   const dias=NH, paso=dias<=40?5:dias<=100?10:20;
 
   // ── Mensaje ejecutivo ──
-  const n=datos.length, nEnt=datos.filter(d=>d.entrega).length, nAtr=datos.filter(d=>!d.entrega&&d.atraso).length;
+  const n=datos.length, nEnt=datos.filter(d=>d.entregado).length, nAtr=datos.filter(d=>!d.entregado&&d.atraso).length;
   const conFechas=d=>d.barras.length||d.pasePlan;
-  const nCurso=datos.filter(d=>!d.entrega&&!d.atraso&&conFechas(d)&&d.fase>=1).length;
-  const nIni=datos.filter(d=>!d.entrega&&!d.atraso&&conFechas(d)&&d.fase<1).length;
-  const nSin=datos.filter(d=>!d.entrega&&!conFechas(d)).length;
+  const nCurso=datos.filter(d=>!d.entregado&&!d.atraso&&conFechas(d)&&d.fase>=1).length;
+  const nIni=datos.filter(d=>!d.entregado&&!d.atraso&&conFechas(d)&&d.fase<1).length;
+  const nSin=datos.filter(d=>!d.entregado&&!conFechas(d)).length;
   const pill=(t,c)=>`<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border:1px solid ${c}66;border-radius:14px;font-size:11.5px;color:${c};white-space:nowrap"><span style="width:7px;height:7px;border-radius:50%;background:${c}"></span>${t}</span>`;
   const ultimo=nEnt?Math.max(...datos.filter(d=>d.entrega).map(d=>d.entrega)):null;
   const resta=pFin?Math.round((pFin-corte)/DIA):null;
@@ -5492,7 +5494,7 @@ function infCronogramaHtml(filas, hoy, proy={}){
   const hitoPlan=(t,venc)=>`<div title="Producción · pase planificado: ${fmt(t)}${venc?' (vencido)':''}" style="position:absolute;top:50%;left:${x(t)+(x(t+DIA)-x(t))/2}%;width:12px;height:12px;margin:-7px 0 0 -7px;border:2px dashed ${venc?ROJO:PROD};background:var(--bg-card,#161b22);transform:rotate(45deg)"></div>`;
 
   const estado=d=>{
-    if(d.entrega) return `<span style="color:${PROD}">✓ En producción · ${fmt(d.entrega)}</span>`;
+    if(d.entregado) return `<span style="color:${PROD}">✓ En producción${d.entrega?` · ${fmt(d.entrega)}`:''}</span>`;
     if(!d.barras.length&&!d.pasePlan) return `<span style="color:#6e7681">Sin fechas en Jira</span>`;
     if(d.atraso) return `<span style="color:${ROJO}">● Atrasado</span>`;
     if(d.fase>=1){ const fa=INF_FASES_CRONO[Math.min(d.fase-1,4)]; return `<span style="color:${fa[2]}">● ${fa[1]}</span>`; }
