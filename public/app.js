@@ -4161,6 +4161,8 @@ function infEspecificacion(e, bugsProyecto){
   const s=ganttNorm(e.estado);
   if(s.includes('marcha blanca')) return { lbl:'Soporte y seguimiento, medición en operación', c:'#3fb950', resp:null };
   if(s.includes('produccion')) return { lbl:'En producción', c:'#3fb950', resp:'respProduccion' };
+  // Historia en estado Cerrado: entregable finalizado
+  if(s.startsWith('cerrad')) return { lbl:'Finalizado', c:'#3fb950', resp:null };
   const enQA=s.includes('qa'), enUAT=s.includes('uat');
   if(enQA||enUAT){
     const noCerrados=(bugsProyecto||[]).filter(infBugAbierto);
