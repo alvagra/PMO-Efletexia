@@ -5493,13 +5493,10 @@ function infCronogramaHtml(filas, hoy, proy={}){
   const hito=t=>`<div title="Producción · pase realizado: ${fmt(t)}" style="position:absolute;top:50%;left:${x(t)+(x(t+DIA)-x(t))/2}%;width:12px;height:12px;margin:-7px 0 0 -7px;border:2px solid ${PROD};background:var(--bg-card,#161b22);transform:rotate(45deg)"></div>`;
   const hitoPlan=(t,venc)=>`<div title="Producción · pase planificado: ${fmt(t)}${venc?' (vencido)':''}" style="position:absolute;top:50%;left:${x(t)+(x(t+DIA)-x(t))/2}%;width:12px;height:12px;margin:-7px 0 0 -7px;border:2px dashed ${venc?ROJO:PROD};background:var(--bg-card,#161b22);transform:rotate(45deg)"></div>`;
 
+  // Estado: el mismo de la tabla de la sección 1, tomado del estado de la historia en Jira
   const estado=d=>{
-    if(d.entregado) return `<span style="color:${PROD}">✓ En producción${d.entrega?` · ${fmt(d.entrega)}`:''}</span>`;
-    if(!d.barras.length&&!d.pasePlan) return `<span style="color:#6e7681">Sin fechas en Jira</span>`;
-    if(d.atraso) return `<span style="color:${ROJO}">● Atrasado</span>`;
-    if(d.fase>=1){ const fa=INF_FASES_CRONO[Math.min(d.fase-1,4)]; return `<span style="color:${fa[2]}">● ${fa[1]}</span>`; }
-    if(!d.barras.length) return `<span style="color:${GRIS}">○ Pase ${fmt(d.pasePlan)}</span>`;
-    const ini=Math.min(...d.barras.map(b=>b.fa)); return `<span style="color:${GRIS}">○ Inicia ${fmt(ini)}</span>`;
+    const est=d.f.est||infEstadoJira(d.f);
+    return `<span style="color:${est.c}">● ${esc(est.lbl)}</span>`;
   };
   const COLS='minmax(180px,250px) minmax(0,1fr) 170px';
   const filasHtml=datos.map((d,ix)=>{
