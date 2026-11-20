@@ -4355,8 +4355,10 @@ function avProyecto(hist, hoy, venceProyecto){
     enProduccion:vivas.filter(h=>h.real.fase===5).length,
     sinPlan:vivas.length-conPlan.length, plan:null };
   if(!conPlan.length) return r;
-  const planEn=f=>prom(conPlan.map(h=>avPlanEn(h.vent,f)));
-  const realSub=prom(conPlan.map(h=>h.real.pct));
+  // Todas las historias cuentan en el plan y en el desvío (nov-2026). Una historia sin fechas
+  // estimadas aporta 0% al plan (aún no se le exige avance) y su avance real.
+  const planEn=f=>prom(vivas.map(h=>h.vent?avPlanEn(h.vent,f):0));
+  const realSub=real;
   r.plan=planEn(hoy); r.realSub=realSub;
   r.desvio=realSub-r.plan;
   r.indice=r.plan>0?realSub/r.plan:null;
@@ -5189,11 +5191,8 @@ function infHtml(d){
   const kpiAv=(l,v,c,sub)=>`<div class="mt-kpi"><div class="mt-kpi-lbl">${l}</div>
     <div class="mt-kpi-val" style="color:${c||'var(--text-primary)'}">${v}</div>${sub?`<div class="mt-kpi-sub">${sub}</div>`:''}</div>`;
   const bloqueProy = pr ? `<div class="mt-kpis" style="margin-bottom:12px">
-      ${kpiAv('AVANCE PLAN',pctTxt(pr.plan),null,pr.sinPlan?`${pr.sinPlan} sin fechas, excluido${pr.sinPlan===1?'':'s'}`:'a la fecha de corte')}
-      ${(pr.sinPlan && pr.plan!==null)
-        // Misma base que el Avance plan: solo las historias con fechas estimadas
-        ? kpiAv('AVANCE REAL',pctTxt(pr.realSub),null,`${pr.n-pr.sinPlan} con plan · ${pr.sinPlan} sin fechas, excluido${pr.sinPlan===1?'':'s'}`)
-        : kpiAv('AVANCE REAL',pctTxt(pr.real),null,`${pr.n} entregable${pr.n===1?'':'s'}`)}
+      ${kpiAv('AVANCE PLAN',pctTxt(pr.plan),null,pr.sinPlan?`${pr.sinPlan} sin fechas, cuenta${pr.sinPlan===1?'':'n'} con 0%`:'a la fecha de corte')}
+      ${kpiAv('AVANCE REAL',pctTxt(pr.real),null,`${pr.n} entregable${pr.n===1?'':'s'}`)}
       ${kpiAv('DESVÍO',pr.plan===null?'–':`${pr.desvio>=0?'+':'−'}${pctTxt(Math.abs(pr.desvio))}`,pr.semaforo,
         pr.plan===null?'':`${pr.estadoDesvio}${pr.indice?` · cumplimiento ${(Math.round(pr.indice*100)/100).toFixed(2).replace('.',',')}`:''}`)}
       ${kpiAv('ATRASO',pr.plan===null?'–':pr.atraso?`${pr.atraso} día${pr.atraso===1?'':'s'}`:'Al día',pr.atrasoDesdeVence?'#ef4444':pr.atraso?pr.semaforo:'#3fb950',
@@ -5218,7 +5217,7 @@ function infHtml(d){
   const avisos=[];
   filas.forEach(f=>{
     f.real.avisos.forEach(a=>avisos.push(`<b>${esc(f.key)}</b>: ${esc(a)}`));
-    if(!f.vent) avisos.push(`<b>${esc(f.key)}</b>: sin fechas estimadas (Fecha de inicio y Fecha de vencimiento): queda fuera del plan y del desvío`);
+    if(!f.vent) avisos.push(`<b>${esc(f.key)}</b>: sin fechas estimadas (Fecha de inicio y Fecha de vencimiento): cuenta con 0% en el plan`);
     else {
       if(f.vent.finEpica) avisos.push(`<b>${esc(f.key)}</b>: sin fecha de vencimiento, el plan usa el Término estimado de la épica`);
       if(f.vent.repartido && f.real.fase<5) avisos.push(`<b>${esc(f.key)}</b>: subtareas sin fechas, plan repartido entre inicio y fin según los pesos de cada fase`);
