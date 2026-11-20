@@ -4376,7 +4376,9 @@ function avProyecto(hist, hoy, venceProyecto){
   // estimadas aporta 0% al plan (aún no se le exige avance) y su avance real.
   const planEn=f=>prom(vivas.map(h=>h.vent?avPlanEn(h.vent,f):0));
   const realSub=real;
-  r.plan=planEn(hoy); r.realSub=realSub;
+  // El día de corte aún está en curso: el plan exige lo que debía estar hecho al cierre del día anterior
+  const corteEf=avSumar(hoy,-1);
+  r.plan=planEn(corteEf); r.realSub=realSub;
   r.desvio=realSub-r.plan;
   r.indice=r.plan>0?realSub/r.plan:null;
   // Rangos de desviación: > 0% Adelantado · 0% a −5% En control (verde) ·
@@ -4386,9 +4388,9 @@ function avProyecto(hist, hoy, venceProyecto){
   // Atraso en días: hoy − fecha en que el plan alcanzaba el % real actual
   r.atraso=0;
   if(realSub<r.plan-0.05){
-    let f=hoy;
+    let f=corteEf;
     for(let i=0;i<500;i++){ f=avSumar(f,-1); if(planEn(f)<=realSub+0.05) break; }
-    r.atraso=avHabiles(avSumar(f,1),hoy);
+    r.atraso=avHabiles(avSumar(f,1),corteEf);
     r.fechaEquivalente=f;
   }
   // Proyecto vencido (pasó el Término estimado = Fecha de vencimiento de la épica, sin llegar al 100%):
@@ -5147,7 +5149,7 @@ function infHtml(d){
     const resp=(esp.resp ? (e[esp.resp]||[])
       : (e.respDesarrollo&&e.respDesarrollo.length?e.respDesarrollo:(e.asignado?[e.asignado]:[])))
       .map(n=>resolveNombreDesdeJira(n)?.nombre||n);
-    const plan=avPlanEn(vent,hoy);
+    const plan=avPlanEn(vent,avSumar(hoy,-1));   // el día de corte aún no termina
     // En Análisis, Vence = "Fecha fin plan análisis" de Jira (la Desviación se mide contra ella)
     const enAnalisis=esp.resp==='respAnalisis';
     return { ...e, vence:enAnalisis?(e.finPlanAnalisis||null):e.vence, abiertos:ab.length, totalBugs:bugs.filter(b=>b.entregable===e.key).length,
