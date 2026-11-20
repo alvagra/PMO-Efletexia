@@ -1463,8 +1463,21 @@ module.exports = async function handler(req, res) {
         'customfield_10970','customfield_11003','customfield_11004',
         'customfield_11037','customfield_11070','customfield_11170','customfield_11269'
       ];
-      const issues = await fetchAllPages(auth, JIRA_CLOUD, jqlStr, EPIC_FIELDS);
-      return res.status(200).json({ issues, total: issues.length, isLast: true });
+      // Subportafolio de la épica (lista de selección en Jira). Se resuelve por
+      // nombre, sin id fijo en el código: un subportafolio nuevo solo requiere
+      // agregar la opción en Jira. Si el campo aún no existe, queda en null y el
+      // frontend sigue agrupando por prefijo de código.
+      const CF_SUB = await idCampoPorNombre(auth, JIRA_CLOUD, 'Subportafolio');
+      const camposEpica = [...EPIC_FIELDS];
+      if (CF_SUB && !camposEpica.includes(CF_SUB)) camposEpica.push(CF_SUB);
+      const issues = await fetchAllPages(auth, JIRA_CLOUD, jqlStr, camposEpica);
+      issues.forEach(iss => {
+        const v = CF_SUB ? iss.fields?.[CF_SUB] : null;
+        const t = (v && typeof v === 'object') ? (v.value ?? v.name ?? '') : (v ?? '');
+        iss.fields._subportafolio = String(t).trim() || null;
+      });
+      return res.status(200).json({ issues, total: issues.length, isLast: true,
+        campoSubportafolio: CF_SUB || null });
     }
 
   } catch (err) {
