@@ -4496,11 +4496,15 @@ async function portAvanceCalcular(){
             ep.avanceRevisado=true;   // ya se calculó con el Informe (tenga o no entregables)
             // Responsables del proyecto: los mismos de la columna Responsable del Informe
             // (uno por entregable, sin repetir)
-            const d=infCache[k], nombres=[];
+            // Prioridad: entregables en curso (Análisis a UAT); si no hay, los pendientes;
+            // si todos están terminados, los de los entregables terminados
+            const d=infCache[k], grupos={curso:[],pend:[],fin:[]};
             (d.entregables||[]).forEach(en=>{ try{
-              infEspYResponsable(en,d.bugs||[]).resp.forEach(n=>{ if(n && !nombres.includes(n)) nombres.push(n); });
+              const real=avReal(en), f=real.fase||0;
+              const g=f>=5?'fin':f>=1?'curso':'pend';
+              infEspYResponsable(en,d.bugs||[],real).resp.forEach(n=>{ if(n && !grupos[g].includes(n)) grupos[g].push(n); });
             }catch(_){} });
-            ep.respInforme=nombres;
+            ep.respInforme=grupos.curso.length?grupos.curso:grupos.pend.length?grupos.pend:grupos.fin;
           }
           if(!ep || !pr) continue;
           // Mismos valores que las tarjetas del Informe (en fracción, como los campos de Jira)
@@ -6053,7 +6057,7 @@ function renderDetalleProyectos(){
       <thead><tr>${th('CÓDIGO','codigo')}${th('PROYECTO','proyecto')}${th('INICIO','inicio')}${th('FIN','fin')}${th('ESTADO','estado')}${th('% PLAN','plan','right')}${th('% REAL','real','right')}${th('DESVÍO','desv','right')}${th('RESPONSABLE','resp')}${th('PENDIENTES','pend')}${th('PRÓXIMOS PASOS','prox')}</tr></thead>
       <tbody>${cuerpo||'<tr><td colspan="11" class="mt-empty">Sin resultados para el filtro.</td></tr>'}</tbody>
     </table></div></div>
-    <div style="font-size:10.5px;color:var(--text-dim);margin-top:8px">Inicio y Fin = Fecha de inicio y Fecha de vencimiento de la épica. % Plan, % Real y Desvío: mismo cálculo de la pestaña Informe ("—" si el proyecto no tiene entregables en el Informe). Pendientes = campo "Estatus de proyecto" de la épica; Próximos pasos = campo "Próximos pasos"; Responsable = el mismo de la pestaña Informe (los responsables de los entregables del proyecto). Clic en el nombre para abrir el proyecto.</div>`;
+    <div style="font-size:10.5px;color:var(--text-dim);margin-top:8px">Inicio y Fin = Fecha de inicio y Fecha de vencimiento de la épica. % Plan, % Real y Desvío: mismo cálculo de la pestaña Informe ("—" si el proyecto no tiene entregables en el Informe). Pendientes = campo "Estatus de proyecto" de la épica; Próximos pasos = campo "Próximos pasos"; Responsable = el de la pestaña Informe para los entregables en curso (si no hay, los pendientes; si todo está terminado, los terminados). Clic en el nombre para abrir el proyecto.</div>`;
   const q=document.getElementById('dp-q');
   q.addEventListener('input',()=>{ dpQ=q.value; const pos=q.selectionStart; renderDetalleProyectos(); const n=document.getElementById('dp-q'); n.focus(); n.setSelectionRange(pos,pos); });
   document.querySelectorAll('.dp-est-cb').forEach(cb=>cb.addEventListener('change',()=>{
