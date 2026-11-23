@@ -5983,7 +5983,7 @@ function renderDetalleProyectos(){
                   :'<span style="color:var(--text-dim)">—</span>';
   const cuerpo=filas.map(r=>`<tr>
       <td style="white-space:nowrap;vertical-align:top"><a class="jlink" href="${JIRA_BASE}${r.e.key}" target="_blank">${esc(r.codigo)}</a></td>
-      <td style="width:220px;min-width:160px;max-width:240px;white-space:normal;word-break:break-word;line-height:1.35;vertical-align:top;cursor:pointer" title="Abrir el proyecto" onclick="openModal('${r.e.key}')">${esc(r.proyecto)}</td>
+      <td style="width:380px;min-width:300px;max-width:420px;white-space:normal;word-break:break-word;line-height:1.35;vertical-align:top;cursor:pointer" title="Abrir el proyecto" onclick="openModal('${r.e.key}')">${esc(r.proyecto)}</td>
       <td style="white-space:nowrap;vertical-align:top;color:var(--text-muted)">${r.inicio?fmtD(r.inicio):'—'}</td>
       <td style="white-space:nowrap;vertical-align:top;color:var(--text-muted)">${r.fin?fmtD(r.fin):'—'}</td>
       <td style="white-space:nowrap;vertical-align:top"><span class="badge badge-${sbClass(r.estado)}">${esc(r.estado)}</span></td>
