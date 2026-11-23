@@ -1448,6 +1448,28 @@ function openModal(key){
   });
 }
 
+// Pestaña "Detalle" de la ventana de cada proyecto (Estatus de proyecto, Contexto del desarrollo y
+// Próximos pasos). Se asegura aquí para no depender de la versión de index.html.
+(function asegurarPestanaDetalle(){
+  const body=document.getElementById('modal-body');
+  if(!body || document.querySelector('.modal-tab[data-mtab="detail"]')) return;
+  const estilo='cursor:pointer;padding:8px 14px;font-size:12px;font-weight:600;color:var(--text-muted);border-bottom:2px solid transparent;user-select:none';
+  const crear=(mtab,txt)=>{ const t=document.createElement('div'); t.className='modal-tab'; t.dataset.mtab=mtab; t.textContent=txt; t.style.cssText=estilo; return t; };
+  let barra=document.querySelector('.modal-tab')?.parentElement;
+  if(!barra){
+    barra=document.createElement('div');
+    barra.className='modal-tabs';
+    barra.style.cssText='display:flex;gap:4px;border-bottom:1px solid var(--border);padding:0 16px';
+    barra.appendChild(crear('gantt','Cronograma'));
+    body.parentNode.insertBefore(barra, body);
+  }
+  barra.appendChild(crear('detail','Detalle'));
+  // Pestaña activa resaltada (para las pestañas creadas aquí)
+  const css=document.createElement('style');
+  css.textContent='.modal-tab.active{color:var(--blue)!important;border-bottom-color:var(--blue)!important}';
+  document.head.appendChild(css);
+})();
+
 document.querySelectorAll('.modal-tab').forEach(t=>{
   t.addEventListener('click',()=>{
     activeTab=t.dataset.mtab;
