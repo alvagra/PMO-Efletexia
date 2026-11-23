@@ -5054,10 +5054,17 @@ async function renderInforme(){
     if(ult && infProyectos.some(p=>p.key===ult)) infSel=ult;
   }
   const codigoDe=k=>(epics||[]).find(e=>e.key===k)?.codigo||'';
-  const opciones=infProyectos.map(p=>{
-    const cod=codigoDe(p.key);
-    return `<option value="${esc(p.key)}"${p.key===infSel?' selected':''}>${esc((cod?cod+' · ':'')+p.summary)} (${p.entregables} entregable${p.entregables===1?'':'s'})</option>`;
-  }).join('');
+  // Lista ordenada por nombre del proyecto (ascendente)
+  const listaOrd=infProyectos.slice().sort((a,b)=>(a.summary||'').localeCompare(b.summary||'','es',{sensitivity:'base',numeric:true}));
+  const opcionesDe=filtro=>{
+    const f=(filtro||'').trim().toLowerCase();
+    return listaOrd.filter(p=>!f || codigoDe(p.key).toLowerCase().includes(f) || p.key.toLowerCase().includes(f))
+      .map(p=>{
+        const cod=codigoDe(p.key);
+        return `<option value="${esc(p.key)}"${p.key===infSel?' selected':''}>${esc((cod?cod+' · ':'')+p.summary)} (${p.entregables} entregable${p.entregables===1?'':'s'})</option>`;
+      }).join('');
+  };
+  const opciones=opcionesDe('');
 
   cont.innerHTML=`
     <div class="inf-barra" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -5068,9 +5075,26 @@ async function renderInforme(){
       <button type="button" id="inf-copiar" style="margin-left:auto;padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg-elevated,#21262d);color:var(--text-primary);font-size:12px;cursor:pointer;white-space:nowrap" title="Copia el informe como imagen para pegarlo en un correo">📋 Copiar para correo</button>
       <button type="button" id="inf-png" style="margin-left:8px;padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg-elevated,#21262d);color:var(--text-primary);font-size:12px;cursor:pointer;white-space:nowrap" title="Descarga el informe como imagen PNG">⬇ Descargar imagen</button>
     </div>
+    <div class="inf-barra" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px">
+      <label class="inf-barra-l" for="inf-buscar-cod">CÓDIGO</label>
+      <input id="inf-buscar-cod" type="text" class="filter-input" placeholder="Buscar por código de proyecto (ej. EFLEBI-009)" autocomplete="off" style="min-width:300px"/>
+      <span id="inf-buscar-res" style="font-size:11px;color:var(--text-muted)"></span>
+    </div>
     <div id="inf-cuerpo"></div>`;
   document.getElementById('inf-copiar').addEventListener('click',()=>infExportar('copiar'));
   document.getElementById('inf-png').addEventListener('click',()=>infExportar('descargar'));
+  // Búsqueda por código: filtra la lista; con una sola coincidencia, abre ese proyecto
+  document.getElementById('inf-buscar-cod').addEventListener('input',ev=>{
+    const q=ev.target.value;
+    const sel=document.getElementById('inf-proy');
+    sel.innerHTML=`<option value=""${infSel?'':' selected'}>Selecciona un proyecto</option>`+opcionesDe(q);
+    const n=sel.options.length-1;
+    const res=document.getElementById('inf-buscar-res');
+    res.textContent=q.trim()?(n?`${n} proyecto${n===1?'':'s'}`:'Sin coincidencias'):'';
+    if(q.trim() && n===1 && sel.options[1].value!==infSel){
+      sel.selectedIndex=1; infSel=sel.value; infGuardarUltimo(infSel); infCargar(infSel);
+    }
+  });
   document.getElementById('inf-proy').addEventListener('change',ev=>{
     infSel=ev.target.value||null;
     if(infSel){ infGuardarUltimo(infSel); infCargar(infSel); }
