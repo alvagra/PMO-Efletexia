@@ -5971,18 +5971,19 @@ function renderDetalleProyectos(){
   const th=(l,c,al)=>`<th style="cursor:pointer;white-space:nowrap;${al?'text-align:'+al:''}" onclick="dpOrdenar('${c}')">${l}<span style="font-size:9px;margin-left:3px;color:${dpSort===c?'var(--blue)':'var(--text-dim)'}">${dpSort===c?(dpDir===1?'▲':'▼'):'⇅'}</span></th>`;
   const pct=v=>v==null?'<span style="color:var(--text-dim)">—</span>':v+'%';
   const colDesv=d=>d==null?'var(--text-dim)':d>=-5?'#3fb950':d>=-10?'#F5B800':'#ef4444';
-  const texto=t=>t?`<div style="white-space:pre-line;max-height:96px;overflow:auto;line-height:1.45;font-size:11.5px">${esc(t)}</div>`
+  // Texto completo, sin barra de desplazamiento
+  const texto=t=>t?`<div style="white-space:pre-line;line-height:1.45;font-size:11.5px">${esc(t)}</div>`
                   :'<span style="color:var(--text-dim)">—</span>';
   const cuerpo=filas.map(r=>`<tr>
       <td style="white-space:nowrap;vertical-align:top"><a class="jlink" href="${JIRA_BASE}${r.e.key}" target="_blank">${esc(r.codigo)}</a></td>
-      <td style="min-width:200px;vertical-align:top;cursor:pointer" title="Abrir el proyecto" onclick="openModal('${r.e.key}')">${esc(r.proyecto)}</td>
+      <td style="width:220px;min-width:160px;max-width:240px;white-space:normal;word-break:break-word;line-height:1.35;vertical-align:top;cursor:pointer" title="Abrir el proyecto" onclick="openModal('${r.e.key}')">${esc(r.proyecto)}</td>
       <td style="white-space:nowrap;vertical-align:top"><span class="badge badge-${sbClass(r.estado)}">${esc(r.estado)}</span></td>
       <td style="text-align:right;vertical-align:top">${pct(r.plan)}</td>
       <td style="text-align:right;vertical-align:top;font-weight:600">${pct(r.real)}</td>
       <td style="text-align:right;vertical-align:top;color:${colDesv(r.desv)}">${r.desv==null?'—':(r.desv>0?'+':'')+r.desv+'%'}</td>
       <td style="white-space:nowrap;vertical-align:top">${r.resp?esc(r.resp):'<span style="color:var(--text-dim)">Sin asignar</span>'}</td>
-      <td style="min-width:240px;vertical-align:top">${texto(r.pend)}</td>
-      <td style="min-width:240px;vertical-align:top">${texto(r.prox)}</td>
+      <td style="min-width:300px;vertical-align:top">${texto(r.pend)}</td>
+      <td style="min-width:300px;vertical-align:top">${texto(r.prox)}</td>
     </tr>`).join('');
   const calculando=(epics||[]).some(e=>!SPECIAL_EPIC_KEYS.includes(e.key)&&!e.avanceInforme);
   cont.innerHTML=`
