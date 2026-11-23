@@ -5963,7 +5963,7 @@ function exportSeguimientoCSV(){
 //  % Plan y % Real: los mismos del Portafolio y del Informe. Pendientes = "Estatus de proyecto",
 //  Próximos pasos = "Próximos pasos" y Responsable = "Responsable" de la épica en Jira.
 // ═══════════════════════════════════════════════════════════
-let dpEstados=new Set(), dpQ='', dpSort='codigo', dpDir=1;
+let dpEstados=new Set(), dpQ='', dpSort='inicio', dpDir=1;   // por defecto: fecha de inicio, la más antigua primero
 let dpActualizado=null, dpCargando=false;
 // Al abrir la pestaña se vuelven a leer las épicas desde Jira, para que Estado, Responsable,
 // Estatus de proyecto (pendientes) y Próximos pasos muestren lo último registrado.
