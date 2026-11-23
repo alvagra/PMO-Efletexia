@@ -5999,19 +5999,20 @@ function renderDetalleProyectos(){
     <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px">
       <input id="dp-q" type="text" placeholder="Buscar código, proyecto, responsable o texto…" value="${esc(dpQ)}" style="min-width:280px"/>
       <button class="btn-limpiar" id="dp-limpiar" type="button">Limpiar</button>
-      <button class="btn-export" id="dp-act" type="button"${dpCargando?' disabled':''}>${dpCargando?'Actualizando…':'↻ Actualizar desde Jira'}</button>
       <button class="btn-export" id="dp-csv" type="button">CSV</button>
-      <span style="font-size:11px;color:var(--text-muted);margin-left:auto">${filas.length} proyecto${filas.length===1?'':'s'}${calculando?' · calculando avance…':''}${dpActualizado?' · Jira '+dpActualizado.toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'}):''}</span>
+      <span style="font-size:11px;color:var(--text-muted);margin-left:auto">${filas.length} proyecto${filas.length===1?'':'s'}${calculando?' · calculando avance…':''}${dpCargando?' · actualizando desde Jira…':dpActualizado?' · Jira '+dpActualizado.toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'}):''}</span>
+      <button type="button" id="dp-copiar" style="padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg-elevated,#21262d);color:var(--text-primary);font-size:12px;cursor:pointer;white-space:nowrap" title="Copia la tabla como imagen para pegarla en un correo">📋 Copiar para correo</button>
+      <button type="button" id="dp-png" style="padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg-elevated,#21262d);color:var(--text-primary);font-size:12px;cursor:pointer;white-space:nowrap" title="Descarga la tabla como imagen PNG">⬇ Descargar imagen</button>
     </div>
     <div style="margin-bottom:12px">
       <div style="font-size:10px;letter-spacing:.06em;color:var(--text-muted);margin-bottom:6px">ESTADO</div>
       <div id="dp-estados" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,max-content));gap:4px 18px">${
         estados.map(x=>`<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);cursor:pointer"><input type="checkbox" class="dp-est-cb" value="${esc(x)}"${dpEstados.has(x)?' checked':''}>${esc(x)}</label>`).join('')}</div>
     </div>
-    <div style="overflow-x:auto"><table class="sg-tabla">
+    <div id="dp-cuerpo"><div style="overflow-x:auto"><table class="sg-tabla">
       <thead><tr>${th('CÓDIGO','codigo')}${th('PROYECTO','proyecto')}${th('INICIO','inicio')}${th('FIN','fin')}${th('ESTADO','estado')}${th('% PLAN','plan','right')}${th('% REAL','real','right')}${th('DESVÍO','desv','right')}${th('RESPONSABLE','resp')}${th('PENDIENTES','pend')}${th('PRÓXIMOS PASOS','prox')}</tr></thead>
       <tbody>${cuerpo||'<tr><td colspan="11" class="mt-empty">Sin resultados para el filtro.</td></tr>'}</tbody>
-    </table></div>
+    </table></div></div>
     <div style="font-size:10.5px;color:var(--text-dim);margin-top:8px">Inicio y Fin = Fecha de inicio y Fecha de vencimiento de la épica. % Plan, % Real y Desvío: mismo cálculo de la pestaña Informe ("—" si el proyecto no tiene entregables en el Informe). Pendientes = campo "Estatus de proyecto" de la épica; Próximos pasos = campo "Próximos pasos"; Responsable = campo "Responsable" de la épica (o la persona asignada). Clic en el nombre para abrir el proyecto.</div>`;
   const q=document.getElementById('dp-q');
   q.addEventListener('input',()=>{ dpQ=q.value; const pos=q.selectionStart; renderDetalleProyectos(); const n=document.getElementById('dp-q'); n.focus(); n.setSelectionRange(pos,pos); });
@@ -6020,7 +6021,8 @@ function renderDetalleProyectos(){
     renderDetalleProyectos();
   }));
   document.getElementById('dp-limpiar').addEventListener('click',()=>{ dpEstados.clear(); dpQ=''; renderDetalleProyectos(); });
-  document.getElementById('dp-act').addEventListener('click',dpRefrescarDesdeJira);
+  document.getElementById('dp-copiar').addEventListener('click',()=>dpExportar('copiar'));
+  document.getElementById('dp-png').addEventListener('click',()=>dpExportar('descargar'));
   document.getElementById('dp-csv').addEventListener('click',()=>{
     const c=v=>`"${String(v??'').replace(/"/g,'""')}"`;
     const num1=v=>String(Math.round(v*10)/10);
@@ -6030,4 +6032,56 @@ function renderDetalleProyectos(){
     a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'}));
     a.download=`detalle_proyectos_${new Date().toISOString().slice(0,10)}.csv`; a.click();
   });
+}
+
+// Copiar para correo / Descargar imagen de la pestaña Detalle (igual que en el Informe):
+// la tabla filtrada se dibuja como imagen, con título y fecha, sin los íconos de orden.
+const DP_ANCHO_IMAGEN = 1400;
+async function dpExportar(modo){
+  const cuerpo=document.getElementById('dp-cuerpo');
+  const btn=document.getElementById(modo==='copiar'?'dp-copiar':'dp-png');
+  if(!cuerpo || !btn) return;
+  const txt=btn.textContent; btn.disabled=true; btn.textContent='Generando…';
+  try{
+    const h2c=await infCargarHtml2canvas();
+    let fondo=getComputedStyle(cuerpo).backgroundColor;
+    if(!fondo || fondo==='rgba(0, 0, 0, 0)' || fondo==='transparent') fondo=getComputedStyle(document.body).backgroundColor;
+    const caja=document.createElement('div');
+    caja.className='dp-correo';
+    caja.style.cssText=`position:absolute;left:-20000px;top:0;width:${DP_ANCHO_IMAGEN}px;background:${fondo};padding:14px;box-sizing:border-box`;
+    const hoy=new Date().toLocaleDateString('es-PE',{day:'2-digit',month:'short',year:'numeric'});
+    const filtro=dpEstados.size?` · Estados: ${[...dpEstados].join(', ')}`:'';
+    caja.innerHTML=`<style>
+        .dp-correo table{width:100%!important}
+        .dp-correo td,.dp-correo th{white-space:normal!important}
+        .dp-correo th span{display:none}
+      </style>
+      <div style="font-size:16px;font-weight:700;color:var(--text-primary);margin-bottom:2px">Detalle de proyectos</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px">Corte ${hoy}${esc(filtro)}</div>`;
+    const copia=cuerpo.cloneNode(true);
+    copia.removeAttribute('id'); copia.querySelectorAll('[id]').forEach(el=>el.removeAttribute('id'));
+    copia.querySelectorAll('[style*="overflow"]').forEach(el=>{ el.style.overflow='visible'; });
+    caja.appendChild(copia);
+    cuerpo.parentNode.appendChild(caja);
+    let canvas;
+    try{
+      canvas=await h2c(caja,{ backgroundColor:fondo, scale: modo==='copiar'?1:2, useCORS:true, logging:false,
+        width:DP_ANCHO_IMAGEN, windowWidth:DP_ANCHO_IMAGEN });
+    } finally { caja.remove(); }
+    const blob=await new Promise(r=>canvas.toBlob(r,'image/png'));
+    const nombre=`Detalle_proyectos_${new Date().toISOString().slice(0,10)}.png`;
+    let copiado=false;
+    if(modo==='copiar' && navigator.clipboard && window.ClipboardItem){
+      try{ await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]); copiado=true; }catch(_){}
+    }
+    if(copiado){ btn.textContent='✓ Copiado: pégalo en el correo (Ctrl+V)'; }
+    else {
+      const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=nombre;
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+      btn.textContent = modo==='copiar' ? 'Descargado (el navegador no permite copiar imágenes)' : '✓ Descargado';
+    }
+    setTimeout(()=>{ const b=document.getElementById(modo==='copiar'?'dp-copiar':'dp-png'); if(b) b.textContent=txt; },3500);
+  }catch(e){
+    btn.textContent=txt; alert('No se pudo generar la imagen: '+e.message);
+  }finally{ btn.disabled=false; }
 }
