@@ -5987,9 +5987,12 @@ async function dpRefrescarDesdeJira(){
   }catch(err){ console.warn('Detalle: no se pudo actualizar desde Jira', err); }
   finally{ dpCargando=false; renderDetalleProyectos(); }
 }
+// Proyectos que no se muestran en la pestaña Detalle (por código)
+const DP_EXCLUIR_CODIGOS = ['MGLAT1','MGPT','SIESAT2'];
+const dpExcluido = e => DP_EXCLUIR_CODIGOS.includes(String(e.codigo||'').trim().toUpperCase());
 function dpFilas(){
   const q=dpQ.toLowerCase();
-  return (epics||[]).filter(e=>!SPECIAL_EPIC_KEYS.includes(e.key))
+  return (epics||[]).filter(e=>!SPECIAL_EPIC_KEYS.includes(e.key) && !dpExcluido(e))
     .filter(e=>!dpEstados.size || dpEstados.has(e.status))
     .filter(e=>!q || [e.codigo,e.key,e.summary,e.asignado,e.assignee,e.estadoProyecto,e.proximosPasos]
       .some(v=>String(v||'').toLowerCase().includes(q)))
@@ -6016,7 +6019,7 @@ function renderDetalleProyectos(){
   const cont=document.getElementById('dp-contenido'); if(!cont) return;
   if(!Array.isArray(epics)||!epics.length){ cont.innerHTML='<div class="mt-empty">Cargando proyectos…</div>'; return; }
   const filas=dpFilas();
-  const estados=[...new Set((epics||[]).filter(e=>!SPECIAL_EPIC_KEYS.includes(e.key)).map(e=>e.status).filter(Boolean))].sort();
+  const estados=[...new Set((epics||[]).filter(e=>!SPECIAL_EPIC_KEYS.includes(e.key) && !dpExcluido(e)).map(e=>e.status).filter(Boolean))].sort();
   const th=(l,c,al)=>`<th style="cursor:pointer;white-space:nowrap;${al?'text-align:'+al:''}" onclick="dpOrdenar('${c}')">${l}<span style="font-size:9px;margin-left:3px;color:${dpSort===c?'var(--blue)':'var(--text-dim)'}">${dpSort===c?(dpDir===1?'▲':'▼'):'⇅'}</span></th>`;
   // Mismo formato del Informe: un decimal con coma
   const num=v=>`${Math.round(v*10)/10}`.replace('.',',');
