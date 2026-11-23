@@ -4492,7 +4492,16 @@ async function portAvanceCalcular(){
           }
           const pr=avResumenEpica(infCache[k],hoy);
           const ep=epics.find(e=>e.key===k);
-          if(ep) ep.avanceRevisado=true;   // ya se calculó con el Informe (tenga o no entregables)
+          if(ep){
+            ep.avanceRevisado=true;   // ya se calculó con el Informe (tenga o no entregables)
+            // Responsables del proyecto: los mismos de la columna Responsable del Informe
+            // (uno por entregable, sin repetir)
+            const d=infCache[k], nombres=[];
+            (d.entregables||[]).forEach(en=>{ try{
+              infEspYResponsable(en,d.bugs||[]).resp.forEach(n=>{ if(n && !nombres.includes(n)) nombres.push(n); });
+            }catch(_){} });
+            ep.respInforme=nombres;
+          }
           if(!ep || !pr) continue;
           // Mismos valores que las tarjetas del Informe (en fracción, como los campos de Jira)
           ep.planPct    = pr.plan===null ? null : pr.plan/100;
@@ -5173,6 +5182,21 @@ async function infCargar(epicKey){
   cuerpo.innerHTML=infHtml(infCache[epicKey]);
 }
 
+// Especificación y Responsable de un entregable (los usa la tabla del Informe y la pestaña Detalle)
+function infEspYResponsable(e,bugs,real){
+  let esp=infEspecificacion(e,bugs);
+  // En Pruebas UAT con UAT al 100% (casos conformes o Conformidad = Sí) y sin observaciones
+  // pendientes: listo para el pase a producción
+  if(esp.lbl==='Validación de usuario' && (real||avReal(e)).fases.uat>=99.95)
+    esp={ lbl:'Listo para producción', c:'#3fb950', resp:'respProduccion' };
+  // Responsable: el campo de Jira que corresponde a la especificación;
+  // en etapas sin campo (Pendiente, Bloqueado, Marcha blanca) se mantiene Resp. Desarrollo o el asignado
+  const resp=(esp.resp ? (e[esp.resp]||[])
+    : (e.respDesarrollo&&e.respDesarrollo.length?e.respDesarrollo:(e.asignado?[e.asignado]:[])))
+    .map(n=>resolveNombreDesdeJira(n)?.nombre||n);
+  return { esp, resp };
+}
+
 function infHtml(d){
   const hoy=new Date().toISOString().slice(0,10);
   const bugs=d.bugs||[];
@@ -5189,16 +5213,7 @@ function infHtml(d){
   const filas=(d.entregables||[]).map(e=>{
     const ab=abiertosDe(e.key);
     const real=avReal(e), vent=avVentanas(e, refEpica);
-    let esp=infEspecificacion(e,bugs);
-    // En Pruebas UAT con UAT al 100% (casos conformes o Conformidad = Sí) y sin observaciones
-    // pendientes: listo para el pase a producción
-    if(esp.lbl==='Validación de usuario' && real.fases.uat>=99.95)
-      esp={ lbl:'Listo para producción', c:'#3fb950', resp:'respProduccion' };
-    // Responsable: el campo de Jira que corresponde a la especificación;
-    // en etapas sin campo (Pendiente, Bloqueado, Marcha blanca) se mantiene Resp. Desarrollo o el asignado
-    const resp=(esp.resp ? (e[esp.resp]||[])
-      : (e.respDesarrollo&&e.respDesarrollo.length?e.respDesarrollo:(e.asignado?[e.asignado]:[])))
-      .map(n=>resolveNombreDesdeJira(n)?.nombre||n);
+    const { esp, resp }=infEspYResponsable(e,bugs,real);
     const plan=avPlanEn(vent,avSumar(hoy,-1));   // el día de corte aún no termina
     // En Análisis, Vence = "Fecha fin plan análisis" de Jira (la Desviación se mide contra ella)
     const enAnalisis=esp.resp==='respAnalisis';
@@ -5954,7 +5969,8 @@ function dpFilas(){
     .map(e=>({ e, codigo:e.codigo||e.key, proyecto:e.summary||'', estado:e.status||'',
       inicio:e.fechaInicio||'', fin:e.duedate||'',
       plan:e.avInf?e.avInf.plan:null, real:e.avInf?e.avInf.real:null, desvInf:e.avInf?e.avInf.desvio:null,
-      resp:dpNombres(e.asignado)||e.assignee||'', pend:e.estadoProyecto||'', prox:e.proximosPasos||'' }))
+      // Responsable: el de la columna Responsable del Informe (todos los de sus entregables)
+      resp:Array.isArray(e.respInforme)?e.respInforme.join(', '):'', respPend:!Array.isArray(e.respInforme), pend:e.estadoProyecto||'', prox:e.proximosPasos||'' }))
     .map(r=>({ ...r, desv:r.desvInf }))
     .sort((a,b)=>{
       const va=a[dpSort], vb=b[dpSort];
@@ -5990,7 +6006,7 @@ function renderDetalleProyectos(){
       <td style="text-align:right;vertical-align:top">${pct(r.plan)}</td>
       <td style="text-align:right;vertical-align:top;font-weight:600">${pct(r.real)}</td>
       <td style="text-align:right;vertical-align:top;color:${colDesv(r.desv)}">${r.desv==null?'—':(r.desv>0?'+':'')+num(r.desv)+'%'}</td>
-      <td style="white-space:nowrap;vertical-align:top">${r.resp?esc(r.resp):'<span style="color:var(--text-dim)">Sin asignar</span>'}</td>
+      <td style="white-space:nowrap;vertical-align:top">${r.resp?esc(r.resp):`<span style="color:var(--text-dim)">${r.respPend?'—':'Sin asignar'}</span>`}</td>
       <td style="min-width:300px;vertical-align:top">${texto(r.pend)}</td>
       <td style="min-width:300px;vertical-align:top">${texto(r.prox)}</td>
     </tr>`).join('');
@@ -6013,7 +6029,7 @@ function renderDetalleProyectos(){
       <thead><tr>${th('CÓDIGO','codigo')}${th('PROYECTO','proyecto')}${th('INICIO','inicio')}${th('FIN','fin')}${th('ESTADO','estado')}${th('% PLAN','plan','right')}${th('% REAL','real','right')}${th('DESVÍO','desv','right')}${th('RESPONSABLE','resp')}${th('PENDIENTES','pend')}${th('PRÓXIMOS PASOS','prox')}</tr></thead>
       <tbody>${cuerpo||'<tr><td colspan="11" class="mt-empty">Sin resultados para el filtro.</td></tr>'}</tbody>
     </table></div></div>
-    <div style="font-size:10.5px;color:var(--text-dim);margin-top:8px">Inicio y Fin = Fecha de inicio y Fecha de vencimiento de la épica. % Plan, % Real y Desvío: mismo cálculo de la pestaña Informe ("—" si el proyecto no tiene entregables en el Informe). Pendientes = campo "Estatus de proyecto" de la épica; Próximos pasos = campo "Próximos pasos"; Responsable = campo "Responsable" de la épica (o la persona asignada). Clic en el nombre para abrir el proyecto.</div>`;
+    <div style="font-size:10.5px;color:var(--text-dim);margin-top:8px">Inicio y Fin = Fecha de inicio y Fecha de vencimiento de la épica. % Plan, % Real y Desvío: mismo cálculo de la pestaña Informe ("—" si el proyecto no tiene entregables en el Informe). Pendientes = campo "Estatus de proyecto" de la épica; Próximos pasos = campo "Próximos pasos"; Responsable = el mismo de la pestaña Informe (los responsables de los entregables del proyecto). Clic en el nombre para abrir el proyecto.</div>`;
   const q=document.getElementById('dp-q');
   q.addEventListener('input',()=>{ dpQ=q.value; const pos=q.selectionStart; renderDetalleProyectos(); const n=document.getElementById('dp-q'); n.focus(); n.setSelectionRange(pos,pos); });
   document.querySelectorAll('.dp-est-cb').forEach(cb=>cb.addEventListener('change',()=>{
