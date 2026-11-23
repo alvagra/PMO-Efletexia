@@ -196,6 +196,27 @@ let recursosLoaded = false;
   }).catch(()=>{});
 })();
 
+// Pestaña "Detalle": tabla de todos los proyectos con % Plan, % Real, Responsable,
+// Pendientes (Estatus de proyecto) y Próximos pasos. Se crea aquí, junto a Portafolio.
+(function crearPestanaDetalle(){
+  const nav=document.querySelector('.tabs');
+  const tPort=nav?.querySelector('[data-tab="portafolio"]');
+  if(!nav || !tPort || nav.querySelector('[data-tab="detalle"]')) return;
+  const tab=document.createElement('div');
+  tab.className='tab'; tab.dataset.tab='detalle';
+  if(tPort.dataset.permiso) tab.dataset.permiso=tPort.dataset.permiso;   // mismo permiso que Portafolio
+  tab.innerHTML='<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M2 6h12M6 6v7.5"/></svg>Detalle';
+  tPort.after(tab);
+  const ref=document.getElementById('panel-portafolio');
+  if(ref && !document.getElementById('panel-detalle')){
+    const panel=document.createElement('div');
+    panel.className='tab-panel'; panel.id='panel-detalle';
+    if(ref.dataset.permiso) panel.dataset.permiso=ref.dataset.permiso;
+    panel.innerHTML='<div class="mt-wrap" id="dp-contenido"></div>';
+    ref.after(panel);
+  }
+})();
+
 document.querySelectorAll('.tabs .tab').forEach(tab => {
   tab.addEventListener('click', () => {
     document.querySelectorAll('.tabs .tab').forEach(t => t.classList.remove('active'));
@@ -208,6 +229,7 @@ document.querySelectorAll('.tabs .tab').forEach(tab => {
     if(tab.dataset.tab==='entregables') renderEntregables();
     if(tab.dataset.tab==='informe') renderInforme();
     if(tab.dataset.tab==='resumen') renderResumen();
+    if(tab.dataset.tab==='detalle') renderDetalleProyectos();
   });
 });
 
@@ -4484,6 +4506,7 @@ async function portAvanceCalcular(){
     await Promise.all([1,2,3,4].map(trabajar));   // 4 consultas en paralelo
     renderTable(sortedData(getFiltered()));   // también actualiza los KPIs
     mtRefrescarProyectos();                   // sección Proyectos de Métricas
+    if(document.getElementById('panel-detalle')?.classList.contains('active')) renderDetalleProyectos();
     if(typeof rsDatos!=='undefined' && rsDatos) rsRender();   // pestaña Resumen (plazo en vivo)
   }catch(e){ console.warn('Avance de portafolio:', e.message); }
   finally{ portAvanceEnCurso=false; }
@@ -5890,4 +5913,75 @@ function exportSeguimientoCSV(){
   a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'}));
   a.download=`seguimiento_entregables_${new Date().toISOString().slice(0,10)}.csv`;
   a.click();
+}
+
+
+// ═══════════════════════════════════════════════════════════
+//  PESTAÑA DETALLE — una fila por proyecto (épica)
+//  % Plan y % Real: los mismos del Portafolio y del Informe. Pendientes = "Estatus de proyecto",
+//  Próximos pasos = "Próximos pasos" y Responsable = "Responsable" de la épica en Jira.
+// ═══════════════════════════════════════════════════════════
+let dpEstado='', dpQ='', dpSort='codigo', dpDir=1;
+function dpFilas(){
+  const q=dpQ.toLowerCase();
+  return (epics||[]).filter(e=>!SPECIAL_EPIC_KEYS.includes(e.key))
+    .filter(e=>!dpEstado || e.status===dpEstado)
+    .filter(e=>!q || [e.codigo,e.key,e.summary,e.asignado,e.assignee,e.estadoProyecto,e.proximosPasos]
+      .some(v=>String(v||'').toLowerCase().includes(q)))
+    .map(e=>({ e, codigo:e.codigo||e.key, proyecto:e.summary||'', estado:e.status||'',
+      plan:e.planPct!=null?Math.round(e.planPct*100):null, real:e.realPct!=null?Math.round(e.realPct*100):null,
+      resp:e.asignado||e.assignee||'', pend:e.estadoProyecto||'', prox:e.proximosPasos||'' }))
+    .map(r=>({ ...r, desv:(r.plan!=null&&r.real!=null)?r.real-r.plan:null }))
+    .sort((a,b)=>{
+      const va=a[dpSort], vb=b[dpSort];
+      if(va==null||va==='') return 1; if(vb==null||vb==='') return -1;
+      return (typeof va==='number'?va-vb:String(va).localeCompare(String(vb),'es',{numeric:true}))*dpDir;
+    });
+}
+function dpOrdenar(c){ if(dpSort===c) dpDir=-dpDir; else { dpSort=c; dpDir=1; } renderDetalleProyectos(); }
+function renderDetalleProyectos(){
+  const cont=document.getElementById('dp-contenido'); if(!cont) return;
+  if(!Array.isArray(epics)||!epics.length){ cont.innerHTML='<div class="mt-empty">Cargando proyectos…</div>'; return; }
+  const filas=dpFilas();
+  const estados=[...new Set((epics||[]).filter(e=>!SPECIAL_EPIC_KEYS.includes(e.key)).map(e=>e.status).filter(Boolean))].sort();
+  const th=(l,c,al)=>`<th style="cursor:pointer;white-space:nowrap;${al?'text-align:'+al:''}" onclick="dpOrdenar('${c}')">${l}<span style="font-size:9px;margin-left:3px;color:${dpSort===c?'var(--blue)':'var(--text-dim)'}">${dpSort===c?(dpDir===1?'▲':'▼'):'⇅'}</span></th>`;
+  const pct=v=>v==null?'<span style="color:var(--text-dim)">—</span>':v+'%';
+  const colDesv=d=>d==null?'var(--text-dim)':d>=-5?'#3fb950':d>=-10?'#F5B800':'#ef4444';
+  const texto=t=>t?`<div style="white-space:pre-line;max-height:96px;overflow:auto;line-height:1.45;font-size:11.5px">${esc(t)}</div>`
+                  :'<span style="color:var(--text-dim)">—</span>';
+  const cuerpo=filas.map(r=>`<tr>
+      <td style="white-space:nowrap;vertical-align:top"><a class="jlink" href="${JIRA_BASE}${r.e.key}" target="_blank">${esc(r.codigo)}</a></td>
+      <td style="min-width:200px;vertical-align:top;cursor:pointer" title="Abrir el proyecto" onclick="openModal('${r.e.key}')">${esc(r.proyecto)}</td>
+      <td style="white-space:nowrap;vertical-align:top"><span class="badge badge-${sbClass(r.estado)}">${esc(r.estado)}</span></td>
+      <td style="text-align:right;vertical-align:top">${pct(r.plan)}</td>
+      <td style="text-align:right;vertical-align:top;font-weight:600">${pct(r.real)}</td>
+      <td style="text-align:right;vertical-align:top;color:${colDesv(r.desv)}">${r.desv==null?'—':(r.desv>0?'+':'')+r.desv+'%'}</td>
+      <td style="white-space:nowrap;vertical-align:top">${r.resp?esc(r.resp):'<span style="color:var(--text-dim)">Sin asignar</span>'}</td>
+      <td style="min-width:240px;vertical-align:top">${texto(r.pend)}</td>
+      <td style="min-width:240px;vertical-align:top">${texto(r.prox)}</td>
+    </tr>`).join('');
+  const calculando=(epics||[]).some(e=>!SPECIAL_EPIC_KEYS.includes(e.key)&&!e.avanceInforme);
+  cont.innerHTML=`
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px">
+      <input id="dp-q" type="text" placeholder="Buscar código, proyecto, responsable o texto…" value="${esc(dpQ)}" style="min-width:280px"/>
+      <select id="dp-est"><option value="">Todos los estados</option>${estados.map(x=>`<option${x===dpEstado?' selected':''}>${esc(x)}</option>`).join('')}</select>
+      <button class="btn-export" id="dp-csv" type="button">CSV</button>
+      <span style="font-size:11px;color:var(--text-muted);margin-left:auto">${filas.length} proyecto${filas.length===1?'':'s'}${calculando?' · calculando avance…':''}</span>
+    </div>
+    <div style="overflow-x:auto"><table class="sg-tabla">
+      <thead><tr>${th('CÓDIGO','codigo')}${th('PROYECTO','proyecto')}${th('ESTADO','estado')}${th('% PLAN','plan','right')}${th('% REAL','real','right')}${th('DESVÍO','desv','right')}${th('RESPONSABLE','resp')}${th('PENDIENTES','pend')}${th('PRÓXIMOS PASOS','prox')}</tr></thead>
+      <tbody>${cuerpo||'<tr><td colspan="9" class="mt-empty">Sin resultados para el filtro.</td></tr>'}</tbody>
+    </table></div>
+    <div style="font-size:10.5px;color:var(--text-dim);margin-top:8px">% Plan y % Real: mismo cálculo del Informe. Pendientes = campo "Estatus de proyecto" de la épica; Próximos pasos = campo "Próximos pasos"; Responsable = campo "Responsable" de la épica (o la persona asignada). Clic en el nombre para abrir el proyecto.</div>`;
+  const q=document.getElementById('dp-q');
+  q.addEventListener('input',()=>{ dpQ=q.value; const pos=q.selectionStart; renderDetalleProyectos(); const n=document.getElementById('dp-q'); n.focus(); n.setSelectionRange(pos,pos); });
+  document.getElementById('dp-est').addEventListener('change',ev=>{ dpEstado=ev.target.value; renderDetalleProyectos(); });
+  document.getElementById('dp-csv').addEventListener('click',()=>{
+    const c=v=>`"${String(v??'').replace(/"/g,'""')}"`;
+    const csv=[['Codigo','Proyecto','Estado','% Plan','% Real','Desvio','Responsable','Pendientes','Proximos pasos'].join(',')]
+      .concat(filas.map(r=>[r.codigo,r.proyecto,r.estado,r.plan??'',r.real??'',r.desv??'',r.resp,r.pend,r.prox].map(c).join(','))).join('\n');
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'}));
+    a.download=`detalle_proyectos_${new Date().toISOString().slice(0,10)}.csv`; a.click();
+  });
 }
