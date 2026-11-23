@@ -229,7 +229,7 @@ document.querySelectorAll('.tabs .tab').forEach(tab => {
     if(tab.dataset.tab==='entregables') renderEntregables();
     if(tab.dataset.tab==='informe') renderInforme();
     if(tab.dataset.tab==='resumen') renderResumen();
-    if(tab.dataset.tab==='detalle') renderDetalleProyectos();
+    if(tab.dataset.tab==='detalle'){ renderDetalleProyectos(); dpRefrescarDesdeJira(); }
   });
 });
 
@@ -5921,22 +5921,46 @@ function exportSeguimientoCSV(){
 //  % Plan y % Real: los mismos del Portafolio y del Informe. Pendientes = "Estatus de proyecto",
 //  Próximos pasos = "Próximos pasos" y Responsable = "Responsable" de la épica en Jira.
 // ═══════════════════════════════════════════════════════════
-let dpEstado='', dpQ='', dpSort='codigo', dpDir=1;
+let dpEstados=new Set(), dpQ='', dpSort='codigo', dpDir=1;
+let dpActualizado=null, dpCargando=false;
+// Al abrir la pestaña se vuelven a leer las épicas desde Jira, para que Estado, Responsable,
+// Estatus de proyecto (pendientes) y Próximos pasos muestren lo último registrado.
+async function dpRefrescarDesdeJira(){
+  if(dpCargando) return;
+  dpCargando=true; renderDetalleProyectos();
+  try{
+    const data=await fetchAllEpics();
+    const nuevas=(data.issues||[]).map(parseIssue);
+    const porKey=Object.fromEntries(nuevas.map(n=>[n.key,n]));
+    // Se actualizan los campos de texto; % Plan y % Real siguen siendo los calculados (Informe)
+    epics.forEach(e=>{ const n=porKey[e.key]; if(!n) return;
+      ['codigo','summary','status','assignee','asignado','estadoProyecto','proximosPasos','contextoDesarrollo'].forEach(k=>{ e[k]=n[k]; });
+    });
+    nuevas.filter(n=>!epics.some(e=>e.key===n.key)).forEach(n=>epics.push(n));
+    dpActualizado=new Date();
+  }catch(err){ console.warn('Detalle: no se pudo actualizar desde Jira', err); }
+  finally{ dpCargando=false; renderDetalleProyectos(); }
+}
 function dpFilas(){
   const q=dpQ.toLowerCase();
   return (epics||[]).filter(e=>!SPECIAL_EPIC_KEYS.includes(e.key))
-    .filter(e=>!dpEstado || e.status===dpEstado)
+    .filter(e=>!dpEstados.size || dpEstados.has(e.status))
     .filter(e=>!q || [e.codigo,e.key,e.summary,e.asignado,e.assignee,e.estadoProyecto,e.proximosPasos]
       .some(v=>String(v||'').toLowerCase().includes(q)))
     .map(e=>({ e, codigo:e.codigo||e.key, proyecto:e.summary||'', estado:e.status||'',
       plan:e.planPct!=null?Math.round(e.planPct*100):null, real:e.realPct!=null?Math.round(e.realPct*100):null,
-      resp:e.asignado||e.assignee||'', pend:e.estadoProyecto||'', prox:e.proximosPasos||'' }))
+      resp:dpNombres(e.asignado)||e.assignee||'', pend:e.estadoProyecto||'', prox:e.proximosPasos||'' }))
     .map(r=>({ ...r, desv:(r.plan!=null&&r.real!=null)?r.real-r.plan:null }))
     .sort((a,b)=>{
       const va=a[dpSort], vb=b[dpSort];
       if(va==null||va==='') return 1; if(vb==null||vb==='') return -1;
       return (typeof va==='number'?va-vb:String(va).localeCompare(String(vb),'es',{numeric:true}))*dpDir;
     });
+}
+// Responsable de la épica: el campo puede venir como texto, persona, opción o lista
+function dpNombres(v){
+  const arr=Array.isArray(v)?v:(v?[v]:[]);
+  return arr.map(o=>typeof o==='string'?o:(o&&(o.displayName||o.value||o.name))||'').filter(Boolean).join(', ');
 }
 function dpOrdenar(c){ if(dpSort===c) dpDir=-dpDir; else { dpSort=c; dpDir=1; } renderDetalleProyectos(); }
 function renderDetalleProyectos(){
@@ -5964,9 +5988,15 @@ function renderDetalleProyectos(){
   cont.innerHTML=`
     <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px">
       <input id="dp-q" type="text" placeholder="Buscar código, proyecto, responsable o texto…" value="${esc(dpQ)}" style="min-width:280px"/>
-      <select id="dp-est"><option value="">Todos los estados</option>${estados.map(x=>`<option${x===dpEstado?' selected':''}>${esc(x)}</option>`).join('')}</select>
+      <button class="btn-limpiar" id="dp-limpiar" type="button">Limpiar</button>
+      <button class="btn-export" id="dp-act" type="button"${dpCargando?' disabled':''}>${dpCargando?'Actualizando…':'↻ Actualizar desde Jira'}</button>
       <button class="btn-export" id="dp-csv" type="button">CSV</button>
-      <span style="font-size:11px;color:var(--text-muted);margin-left:auto">${filas.length} proyecto${filas.length===1?'':'s'}${calculando?' · calculando avance…':''}</span>
+      <span style="font-size:11px;color:var(--text-muted);margin-left:auto">${filas.length} proyecto${filas.length===1?'':'s'}${calculando?' · calculando avance…':''}${dpActualizado?' · Jira '+dpActualizado.toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'}):''}</span>
+    </div>
+    <div style="margin-bottom:12px">
+      <div style="font-size:10px;letter-spacing:.06em;color:var(--text-muted);margin-bottom:6px">ESTADO</div>
+      <div id="dp-estados" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,max-content));gap:4px 18px">${
+        estados.map(x=>`<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);cursor:pointer"><input type="checkbox" class="dp-est-cb" value="${esc(x)}"${dpEstados.has(x)?' checked':''}>${esc(x)}</label>`).join('')}</div>
     </div>
     <div style="overflow-x:auto"><table class="sg-tabla">
       <thead><tr>${th('CÓDIGO','codigo')}${th('PROYECTO','proyecto')}${th('ESTADO','estado')}${th('% PLAN','plan','right')}${th('% REAL','real','right')}${th('DESVÍO','desv','right')}${th('RESPONSABLE','resp')}${th('PENDIENTES','pend')}${th('PRÓXIMOS PASOS','prox')}</tr></thead>
@@ -5975,7 +6005,12 @@ function renderDetalleProyectos(){
     <div style="font-size:10.5px;color:var(--text-dim);margin-top:8px">% Plan y % Real: mismo cálculo del Informe. Pendientes = campo "Estatus de proyecto" de la épica; Próximos pasos = campo "Próximos pasos"; Responsable = campo "Responsable" de la épica (o la persona asignada). Clic en el nombre para abrir el proyecto.</div>`;
   const q=document.getElementById('dp-q');
   q.addEventListener('input',()=>{ dpQ=q.value; const pos=q.selectionStart; renderDetalleProyectos(); const n=document.getElementById('dp-q'); n.focus(); n.setSelectionRange(pos,pos); });
-  document.getElementById('dp-est').addEventListener('change',ev=>{ dpEstado=ev.target.value; renderDetalleProyectos(); });
+  document.querySelectorAll('.dp-est-cb').forEach(cb=>cb.addEventListener('change',()=>{
+    if(cb.checked) dpEstados.add(cb.value); else dpEstados.delete(cb.value);
+    renderDetalleProyectos();
+  }));
+  document.getElementById('dp-limpiar').addEventListener('click',()=>{ dpEstados.clear(); dpQ=''; renderDetalleProyectos(); });
+  document.getElementById('dp-act').addEventListener('click',dpRefrescarDesdeJira);
   document.getElementById('dp-csv').addEventListener('click',()=>{
     const c=v=>`"${String(v??'').replace(/"/g,'""')}"`;
     const csv=[['Codigo','Proyecto','Estado','% Plan','% Real','Desvio','Responsable','Pendientes','Proximos pasos'].join(',')]
