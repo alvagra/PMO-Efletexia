@@ -4492,6 +4492,7 @@ async function portAvanceCalcular(){
           }
           const pr=avResumenEpica(infCache[k],hoy);
           const ep=epics.find(e=>e.key===k);
+          if(ep) ep.avanceRevisado=true;   // ya se calculó con el Informe (tenga o no entregables)
           if(!ep || !pr) continue;
           // Mismos valores que las tarjetas del Informe (en fracción, como los campos de Jira)
           ep.planPct    = pr.plan===null ? null : pr.plan/100;
@@ -4500,6 +4501,8 @@ async function portAvanceCalcular(){
           ep.pctDesarrollo = pr.fases.desarrollo/100;
           ep.pctPruebas    = pr.pruebas/100;
           ep.avanceInforme = true;
+          // Valores del Informe en %, sin redondear (pestaña Detalle)
+          ep.avInf = { plan:pr.plan, real:pr.real, desvio:pr.plan===null?null:pr.desvio };
         }catch(_){}
       }
     };
@@ -5947,10 +5950,12 @@ function dpFilas(){
     .filter(e=>!dpEstados.size || dpEstados.has(e.status))
     .filter(e=>!q || [e.codigo,e.key,e.summary,e.asignado,e.assignee,e.estadoProyecto,e.proximosPasos]
       .some(v=>String(v||'').toLowerCase().includes(q)))
+    // % Plan, % Real y Desvío: solo los del cálculo del Informe (no los campos % de la épica)
     .map(e=>({ e, codigo:e.codigo||e.key, proyecto:e.summary||'', estado:e.status||'',
-      plan:e.planPct!=null?Math.round(e.planPct*100):null, real:e.realPct!=null?Math.round(e.realPct*100):null,
+      inicio:e.fechaInicio||'', fin:e.duedate||'',
+      plan:e.avInf?e.avInf.plan:null, real:e.avInf?e.avInf.real:null, desvInf:e.avInf?e.avInf.desvio:null,
       resp:dpNombres(e.asignado)||e.assignee||'', pend:e.estadoProyecto||'', prox:e.proximosPasos||'' }))
-    .map(r=>({ ...r, desv:(r.plan!=null&&r.real!=null)?r.real-r.plan:null }))
+    .map(r=>({ ...r, desv:r.desvInf }))
     .sort((a,b)=>{
       const va=a[dpSort], vb=b[dpSort];
       if(va==null||va==='') return 1; if(vb==null||vb==='') return -1;
@@ -5969,7 +5974,9 @@ function renderDetalleProyectos(){
   const filas=dpFilas();
   const estados=[...new Set((epics||[]).filter(e=>!SPECIAL_EPIC_KEYS.includes(e.key)).map(e=>e.status).filter(Boolean))].sort();
   const th=(l,c,al)=>`<th style="cursor:pointer;white-space:nowrap;${al?'text-align:'+al:''}" onclick="dpOrdenar('${c}')">${l}<span style="font-size:9px;margin-left:3px;color:${dpSort===c?'var(--blue)':'var(--text-dim)'}">${dpSort===c?(dpDir===1?'▲':'▼'):'⇅'}</span></th>`;
-  const pct=v=>v==null?'<span style="color:var(--text-dim)">—</span>':v+'%';
+  // Mismo formato del Informe: un decimal con coma
+  const num=v=>`${Math.round(v*10)/10}`.replace('.',',');
+  const pct=v=>v==null?'<span style="color:var(--text-dim)">—</span>':num(v)+'%';
   const colDesv=d=>d==null?'var(--text-dim)':d>=-5?'#3fb950':d>=-10?'#F5B800':'#ef4444';
   // Texto completo, sin barra de desplazamiento
   const texto=t=>t?`<div style="white-space:pre-line;line-height:1.45;font-size:11.5px">${esc(t)}</div>`
@@ -5977,15 +5984,17 @@ function renderDetalleProyectos(){
   const cuerpo=filas.map(r=>`<tr>
       <td style="white-space:nowrap;vertical-align:top"><a class="jlink" href="${JIRA_BASE}${r.e.key}" target="_blank">${esc(r.codigo)}</a></td>
       <td style="width:220px;min-width:160px;max-width:240px;white-space:normal;word-break:break-word;line-height:1.35;vertical-align:top;cursor:pointer" title="Abrir el proyecto" onclick="openModal('${r.e.key}')">${esc(r.proyecto)}</td>
+      <td style="white-space:nowrap;vertical-align:top;color:var(--text-muted)">${r.inicio?fmtD(r.inicio):'—'}</td>
+      <td style="white-space:nowrap;vertical-align:top;color:var(--text-muted)">${r.fin?fmtD(r.fin):'—'}</td>
       <td style="white-space:nowrap;vertical-align:top"><span class="badge badge-${sbClass(r.estado)}">${esc(r.estado)}</span></td>
       <td style="text-align:right;vertical-align:top">${pct(r.plan)}</td>
       <td style="text-align:right;vertical-align:top;font-weight:600">${pct(r.real)}</td>
-      <td style="text-align:right;vertical-align:top;color:${colDesv(r.desv)}">${r.desv==null?'—':(r.desv>0?'+':'')+r.desv+'%'}</td>
+      <td style="text-align:right;vertical-align:top;color:${colDesv(r.desv)}">${r.desv==null?'—':(r.desv>0?'+':'')+num(r.desv)+'%'}</td>
       <td style="white-space:nowrap;vertical-align:top">${r.resp?esc(r.resp):'<span style="color:var(--text-dim)">Sin asignar</span>'}</td>
       <td style="min-width:300px;vertical-align:top">${texto(r.pend)}</td>
       <td style="min-width:300px;vertical-align:top">${texto(r.prox)}</td>
     </tr>`).join('');
-  const calculando=(epics||[]).some(e=>!SPECIAL_EPIC_KEYS.includes(e.key)&&!e.avanceInforme);
+  const calculando=(typeof portAvanceEnCurso!=='undefined'&&portAvanceEnCurso);
   cont.innerHTML=`
     <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px">
       <input id="dp-q" type="text" placeholder="Buscar código, proyecto, responsable o texto…" value="${esc(dpQ)}" style="min-width:280px"/>
@@ -6000,10 +6009,10 @@ function renderDetalleProyectos(){
         estados.map(x=>`<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);cursor:pointer"><input type="checkbox" class="dp-est-cb" value="${esc(x)}"${dpEstados.has(x)?' checked':''}>${esc(x)}</label>`).join('')}</div>
     </div>
     <div style="overflow-x:auto"><table class="sg-tabla">
-      <thead><tr>${th('CÓDIGO','codigo')}${th('PROYECTO','proyecto')}${th('ESTADO','estado')}${th('% PLAN','plan','right')}${th('% REAL','real','right')}${th('DESVÍO','desv','right')}${th('RESPONSABLE','resp')}${th('PENDIENTES','pend')}${th('PRÓXIMOS PASOS','prox')}</tr></thead>
-      <tbody>${cuerpo||'<tr><td colspan="9" class="mt-empty">Sin resultados para el filtro.</td></tr>'}</tbody>
+      <thead><tr>${th('CÓDIGO','codigo')}${th('PROYECTO','proyecto')}${th('INICIO','inicio')}${th('FIN','fin')}${th('ESTADO','estado')}${th('% PLAN','plan','right')}${th('% REAL','real','right')}${th('DESVÍO','desv','right')}${th('RESPONSABLE','resp')}${th('PENDIENTES','pend')}${th('PRÓXIMOS PASOS','prox')}</tr></thead>
+      <tbody>${cuerpo||'<tr><td colspan="11" class="mt-empty">Sin resultados para el filtro.</td></tr>'}</tbody>
     </table></div>
-    <div style="font-size:10.5px;color:var(--text-dim);margin-top:8px">% Plan y % Real: mismo cálculo del Informe. Pendientes = campo "Estatus de proyecto" de la épica; Próximos pasos = campo "Próximos pasos"; Responsable = campo "Responsable" de la épica (o la persona asignada). Clic en el nombre para abrir el proyecto.</div>`;
+    <div style="font-size:10.5px;color:var(--text-dim);margin-top:8px">Inicio y Fin = Fecha de inicio y Fecha de vencimiento de la épica. % Plan, % Real y Desvío: mismo cálculo de la pestaña Informe ("—" si el proyecto no tiene entregables en el Informe). Pendientes = campo "Estatus de proyecto" de la épica; Próximos pasos = campo "Próximos pasos"; Responsable = campo "Responsable" de la épica (o la persona asignada). Clic en el nombre para abrir el proyecto.</div>`;
   const q=document.getElementById('dp-q');
   q.addEventListener('input',()=>{ dpQ=q.value; const pos=q.selectionStart; renderDetalleProyectos(); const n=document.getElementById('dp-q'); n.focus(); n.setSelectionRange(pos,pos); });
   document.querySelectorAll('.dp-est-cb').forEach(cb=>cb.addEventListener('change',()=>{
@@ -6014,8 +6023,9 @@ function renderDetalleProyectos(){
   document.getElementById('dp-act').addEventListener('click',dpRefrescarDesdeJira);
   document.getElementById('dp-csv').addEventListener('click',()=>{
     const c=v=>`"${String(v??'').replace(/"/g,'""')}"`;
-    const csv=[['Codigo','Proyecto','Estado','% Plan','% Real','Desvio','Responsable','Pendientes','Proximos pasos'].join(',')]
-      .concat(filas.map(r=>[r.codigo,r.proyecto,r.estado,r.plan??'',r.real??'',r.desv??'',r.resp,r.pend,r.prox].map(c).join(','))).join('\n');
+    const num1=v=>String(Math.round(v*10)/10);
+    const csv=[['Codigo','Proyecto','Inicio','Fin','Estado','% Plan','% Real','Desvio','Responsable','Pendientes','Proximos pasos'].join(',')]
+      .concat(filas.map(r=>[r.codigo,r.proyecto,r.inicio,r.fin,r.estado,r.plan!=null?num1(r.plan):'',r.real!=null?num1(r.real):'',r.desv!=null?num1(r.desv):'',r.resp,r.pend,r.prox].map(c).join(','))).join('\n');
     const a=document.createElement('a');
     a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'}));
     a.download=`detalle_proyectos_${new Date().toISOString().slice(0,10)}.csv`; a.click();
