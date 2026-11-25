@@ -4466,6 +4466,24 @@ function avResumenEpica(d, hoy){
   const hist=(d.entregables||[]).map(e=>({ ...e, real:avReal(e), vent:avVentanas(e, ref) }));
   return avProyecto(hist, hoy, ref.vence);
 }
+// Regla (nov-2026): una épica en Producción, Marcha blanca o Cerrado que no tiene entregables
+// en el Informe se considera terminada: Plan 100%, Real 100%, Desvío 0% y Des/Pru 100%/100%.
+// Aplica en Portafolio, Detalle y Resumen (todos leen estos mismos valores de la épica).
+function portEpicaTerminada(e){
+  const s=(e.status||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  return s.includes('produccion') || s.includes('marcha blanca') || s.startsWith('cerrad');
+}
+function portAvanceTerminadosSinEntregables(){
+  (epics||[]).forEach(ep=>{
+    if(SPECIAL_EPIC_KEYS.includes(ep.key) || ep.avanceInforme || !portEpicaTerminada(ep)) return;
+    const d=infCache[ep.key];
+    if(d && (d.entregables||[]).length) return;   // tiene entregables: manda el cálculo del Informe
+    ep.planPct=1; ep.realPct=1; ep.desvioPct=0;
+    ep.pctDesarrollo=1; ep.pctPruebas=1;
+    ep.avanceInforme=true; ep.avanceRevisado=true; ep.avanceSinEntregables=true;
+    ep.avInf={ plan:100, real:100, desvio:0 };
+  });
+}
 let portAvanceEnCurso=false;
 async function portAvanceCalcular(){
   if(portAvanceEnCurso) return;
@@ -4520,6 +4538,7 @@ async function portAvanceCalcular(){
       }
     };
     await Promise.all([1,2,3,4].map(trabajar));   // 4 consultas en paralelo
+    portAvanceTerminadosSinEntregables();
     renderTable(sortedData(getFiltered()));   // también actualiza los KPIs
     mtRefrescarProyectos();                   // sección Proyectos de Métricas
     if(document.getElementById('panel-detalle')?.classList.contains('active')) renderDetalleProyectos();
@@ -6049,6 +6068,7 @@ function renderDetalleProyectos(){
       <button class="btn-export" id="dp-csv" type="button">CSV</button>
       <span style="font-size:11px;color:var(--text-muted);margin-left:auto">${filas.length} proyecto${filas.length===1?'':'s'}${calculando?' · calculando avance…':''}${dpCargando?' · actualizando desde Jira…':dpActualizado?' · Jira '+dpActualizado.toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'}):''}</span>
       <button type="button" id="dp-copiar" style="padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg-elevated,#21262d);color:var(--text-primary);font-size:12px;cursor:pointer;white-space:nowrap" title="Copia la tabla como imagen para pegarla en un correo">📋 Copiar para correo</button>
+      <button type="button" id="dp-html" style="padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg-elevated,#21262d);color:var(--text-primary);font-size:12px;cursor:pointer;white-space:nowrap" title="Descarga la tabla (con los filtros aplicados) como página HTML">⬇ HTML</button>
       <button type="button" id="dp-png" style="padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg-elevated,#21262d);color:var(--text-primary);font-size:12px;cursor:pointer;white-space:nowrap" title="Descarga la tabla como imagen PNG">⬇ Descargar imagen</button>
     </div>
     <div style="margin-bottom:12px">
@@ -6070,6 +6090,7 @@ function renderDetalleProyectos(){
   document.getElementById('dp-limpiar').addEventListener('click',()=>{ dpEstados.clear(); dpQ=''; renderDetalleProyectos(); });
   document.getElementById('dp-copiar').addEventListener('click',()=>dpExportar('copiar'));
   document.getElementById('dp-png').addEventListener('click',()=>dpExportar('descargar'));
+  document.getElementById('dp-html').addEventListener('click',()=>dpExportarHtml(filas));
   document.getElementById('dp-csv').addEventListener('click',()=>{
     const c=v=>`"${String(v??'').replace(/"/g,'""')}"`;
     const num1=v=>String(Math.round(v*10)/10);
@@ -6131,4 +6152,80 @@ async function dpExportar(modo){
   }catch(e){
     btn.textContent=txt; alert('No se pudo generar la imagen: '+e.message);
   }finally{ btn.disabled=false; }
+}
+
+// Descargar HTML de la pestaña Detalle: página independiente desde el encabezado de la tabla,
+// con los proyectos que muestran los filtros actuales (por ejemplo, Análisis, Desarrollo y Pruebas).
+function dpExportarHtml(filas){
+  const e=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const num=v=>`${Math.round(v*10)/10}`.replace('.',',');
+  const pct=v=>v==null?'—':num(v)+'%';
+  const colDesv=d=>d==null?'#8b949e':d>=-5?'#3fb950':d>=-10?'#d29922':'#f85149';
+  const fecha=v=>v?fmtD(v):'—';
+  const txt=t=>t?`<div class="t">${e(t)}</div>`:'<span class="dim">—</span>';
+  const hoy=new Date().toLocaleDateString('es-PE',{day:'2-digit',month:'short',year:'numeric'});
+  const filtro=dpEstados.size?`Estados: ${[...dpEstados].join(', ')}`:'Todos los estados';
+  const cuerpo=filas.map(r=>`<tr>
+    <td class="nw c-cod" data-label="Código"><a href="${JIRA_BASE}${e(r.e.key)}" target="_blank">${e(r.codigo)}</a></td>
+    <td class="proy c-proy" data-label="Proyecto">${e(r.proyecto)}</td>
+    <td class="nw dim c-ini" data-label="Inicio">${fecha(r.inicio)}</td>
+    <td class="nw dim c-fin" data-label="Fin">${fecha(r.fin)}</td>
+    <td class="nw c-est" data-label="Estado"><span class="est">${e(r.estado)}</span></td>
+    <td class="num c-pl" data-label="% Plan">${pct(r.plan)}</td>
+    <td class="num b c-re" data-label="% Real">${pct(r.real)}</td>
+    <td class="num c-de" data-label="Desvío" style="color:${colDesv(r.desv)}">${r.desv==null?'—':(r.desv>0?'+':'')+num(r.desv)+'%'}</td>
+    <td class="nw c-resp" data-label="Responsable">${r.resp?e(r.resp):'<span class="dim">Sin asignar</span>'}</td>
+    <td class="txt c-st" data-label="Estatus">${txt(r.pend)}</td>
+    <td class="txt c-px" data-label="Próximos pasos">${txt(r.prox)}</td></tr>`).join('');
+  const html=`<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Detalle de proyectos · ${e(hoy)}</title>
+<style>
+  :root{color-scheme:dark}
+  body{margin:0;padding:24px;background:#0d1117;color:#e6edf3;font:13px/1.45 "Segoe UI",system-ui,-apple-system,Arial,sans-serif}
+  h1{font-size:18px;margin:0 0 2px}
+  .sub{color:#8b949e;font-size:12px;margin-bottom:14px}
+  .wrap{overflow-x:auto;border:1px solid #30363d;border-radius:8px}
+  table{border-collapse:collapse;width:100%;min-width:1400px}
+  th{position:sticky;top:0;background:#161b22;color:#8b949e;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;text-align:left;padding:9px 10px;border-bottom:1px solid #30363d;white-space:nowrap}
+  td{padding:9px 10px;border-bottom:1px solid #21262d;vertical-align:top}
+  tr:nth-child(even) td{background:rgba(255,255,255,.015)}
+  a{color:#58a6ff;text-decoration:none;font-family:ui-monospace,Consolas,monospace;font-size:11.5px}
+  .nw{white-space:nowrap}.num{text-align:right;white-space:nowrap}.b{font-weight:700}
+  .dim{color:#8b949e}.proy{min-width:300px;max-width:420px}
+  .txt{min-width:300px}.t{white-space:pre-line;font-size:12px}
+  .est{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:2px 8px;border-radius:4px;background:rgba(210,153,34,.15);color:#d29922}
+  .nota{color:#6e7681;font-size:11px;margin-top:10px}
+  /* Responsive: en pantallas angostas cada proyecto se muestra como tarjeta */
+  @media (max-width:820px){
+    body{padding:12px}
+    .wrap{border:none;overflow:visible}
+    table,thead,tbody,tr,td{display:block;min-width:0}
+    table{min-width:0}
+    thead{display:none}
+    tbody tr{box-sizing:border-box;background:#161b22;border:1px solid #30363d;border-radius:10px;padding:10px 12px;margin-bottom:10px;
+      display:grid;grid-template-columns:1fr 1fr 1fr;column-gap:10px;
+      grid-template-areas:"cod cod est" "proy proy proy" "ini fin fin" "pl re de" "resp resp resp" "st st st" "px px px"}
+    tr:nth-child(even) td{background:transparent}
+    td{box-sizing:border-box;border:none;padding:4px 0;min-width:0;max-width:none;text-align:left!important;white-space:normal}
+    td::before{content:attr(data-label);display:block;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:#8b949e;margin-bottom:2px}
+    td.c-cod::before,td.c-est::before,td.c-proy::before{display:none}
+    .c-cod{grid-area:cod}.c-est{grid-area:est;text-align:right!important}.c-proy{grid-area:proy;font-size:14px;font-weight:600}
+    .c-ini{grid-area:ini}.c-fin{grid-area:fin}.c-pl{grid-area:pl}.c-re{grid-area:re}.c-de{grid-area:de}.c-resp{grid-area:resp}
+    .c-st{grid-area:st}.c-px{grid-area:px}
+    td.txt{border-top:1px solid #30363d;padding-top:8px;margin-top:4px}
+  }
+</style></head><body>
+<h1>Detalle de proyectos</h1>
+<div class="sub">Corte ${e(hoy)} · ${e(filtro)} · ${filas.length} proyecto${filas.length===1?'':'s'}</div>
+<div class="wrap"><table>
+<thead><tr><th>Código</th><th>Proyecto</th><th>Inicio</th><th>Fin</th><th>Estado</th><th>% Plan</th><th>% Real</th><th>Desvío</th><th>Responsable</th><th>Estatus</th><th>Próximos pasos</th></tr></thead>
+<tbody>${cuerpo||'<tr><td colspan="11" class="dim">Sin proyectos para el filtro.</td></tr>'}</tbody>
+</table></div>
+<div class="nota">Inicio y Fin = Fecha de inicio y Fecha de vencimiento de la épica. % Plan, % Real y Desvío: cálculo de la pestaña Informe. Estatus = "Estatus de proyecto"; Próximos pasos = "Próximos pasos"; Responsable = el de la pestaña Informe. Fuente: PMO Dashboard — Efletexia (Jira PTS).</div>
+</body></html>`;
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([html],{type:'text/html;charset=utf-8'}));
+  a.download=`Detalle_proyectos_${new Date().toISOString().slice(0,10)}.html`;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),2000);
 }
