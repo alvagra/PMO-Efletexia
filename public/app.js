@@ -2071,7 +2071,7 @@ const NOMENCLATURA = {
   'FF':  { nombre: 'Farah Fidel',        pais: 'Mexico',    area: 'Comercial' },
   'JM':  { nombre: 'Juan Menco',         pais: 'Colombia',  area: 'Comercial' },
   'CC':  { nombre: 'Cesar Castañeda',    pais: 'Peru',      area: 'TC' },
-  'DC':  { nombre: 'Diego Correa',       pais: 'Colombia',  area: 'TC', alias: ['diego.corredor','diego corredor'] },
+  'DC':  { nombre: 'Diego Corredor',     pais: 'Colombia',  area: 'TC', alias: ['diego.corredor','diego correa'] },   // nombre como en Jira
   'EN':  { nombre: 'Edgar Noriega',      pais: 'Colombia',  area: 'TC' },
   'JC2': { nombre: 'Jose Carlos Cautle', pais: 'Mexico',    area: 'TC' },
   'MA':  { nombre: 'Maria Aguilar',      pais: 'Guatemala', area: 'TC' },
@@ -4410,7 +4410,10 @@ function avProyecto(hist, hoy, venceProyecto){
   const fases={}; AV_FASES.forEach(k=>fases[k]=prom(vivas.map(h=>h.real.fases[k])));
   const real=prom(vivas.map(h=>h.real.pct));
   const pruebas=(AV_PESOS.qa*fases.qa+AV_PESOS.uat*fases.uat)/(AV_PESOS.qa+AV_PESOS.uat);
-  const conPlan=vivas.filter(h=>h.vent);
+  // Un entregable ya entregado (Producción, Marcha blanca o Cerrado) sin fechas válidas
+  // (faltan o están invertidas) cuenta con plan 100%: ya no se le exige un plan por fechas
+  const entregado=h=>h.real.fase===5;
+  const conPlan=vivas.filter(h=>h.vent || entregado(h));
   const r={ n:vivas.length, real, fases, pruebas,
     devTerminado:vivas.filter(h=>h.real.fase>=3).length,
     qaTerminado:vivas.filter(h=>h.real.fase>=4).length,
@@ -4420,7 +4423,7 @@ function avProyecto(hist, hoy, venceProyecto){
   if(!conPlan.length) return r;
   // Todas las historias cuentan en el plan y en el desvío (nov-2026). Una historia sin fechas
   // estimadas aporta 0% al plan (aún no se le exige avance) y su avance real.
-  const planEn=f=>prom(vivas.map(h=>h.vent?avPlanEn(h.vent,f):0));
+  const planEn=f=>prom(vivas.map(h=>h.vent?avPlanEn(h.vent,f):(entregado(h)?100:0)));
   const realSub=real;
   // El día de corte aún está en curso: el plan exige lo que debía estar hecho al cierre del día anterior
   const corteEf=avSumar(hoy,-1);
@@ -5261,7 +5264,8 @@ function infHtml(d){
     const ab=abiertosDe(e.key);
     const real=avReal(e), vent=avVentanas(e, refEpica);
     const { esp, resp }=infEspYResponsable(e,bugs,real);
-    const plan=avPlanEn(vent,avSumar(hoy,-1));   // el día de corte aún no termina
+    const plan=vent ? avPlanEn(vent,avSumar(hoy,-1))   // el día de corte aún no termina
+                    : (real.fase===5 ? 100 : null);      // entregado sin fechas válidas: plan 100%
     // En Análisis, Vence = "Fecha fin plan análisis" de Jira (la Desviación se mide contra ella)
     const enAnalisis=esp.resp==='respAnalisis';
     return { ...e, vence:enAnalisis?(e.finPlanAnalisis||null):e.vence, abiertos:ab.length, totalBugs:bugs.filter(b=>b.entregable===e.key).length,
@@ -5348,7 +5352,9 @@ function infHtml(d){
   const avisos=[];
   filas.forEach(f=>{
     f.real.avisos.forEach(a=>avisos.push(`<b>${esc(f.key)}</b>: ${esc(a)}`));
-    if(!f.vent) avisos.push(`<b>${esc(f.key)}</b>: sin fechas estimadas (Fecha de inicio y Fecha de vencimiento): cuenta con 0% en el plan`);
+    if(!f.vent) avisos.push(f.real?.fase===5
+      ? `<b>${esc(f.key)}</b>: Fecha de inicio y Fecha de vencimiento faltan o están invertidas; como ya está entregado, cuenta con 100% en el plan (conviene corregir las fechas en Jira)`
+      : `<b>${esc(f.key)}</b>: sin fechas estimadas (Fecha de inicio y Fecha de vencimiento): cuenta con 0% en el plan`);
     else {
       if(f.vent.finEpica) avisos.push(`<b>${esc(f.key)}</b>: sin fecha de vencimiento, el plan usa el Término estimado de la épica`);
       if(f.vent.repartido && f.real.fase<5) avisos.push(`<b>${esc(f.key)}</b>: subtareas sin fechas, plan repartido entre inicio y fin según los pesos de cada fase`);
